@@ -10,8 +10,8 @@ Noqlen Meta Plugin - universal multi-provider metadata enrichment for beets.
 
 ## Context level
 
-`standard` for Block 009 because it introduces a safety boundary between resolution and any future
-metadata application while integrating that boundary into the beets import lifecycle.
+`standard` for Block 010 because it introduces a target-representation safety boundary after
+`ChangePlan` and integrates that boundary into the beets import preview.
 
 ## Tool Mode
 
@@ -20,11 +20,11 @@ shell commands.
 
 ## Active block
 
-Block 009 - Read-Only ChangePlan.
+Block 010 - Read-Only Beets Target Mapping.
 
 ## Active spec
 
-`docs/specs/009-change-plan/`
+`docs/specs/010-beets-target-mapping/`
 
 ## Active ADRs
 
@@ -33,22 +33,24 @@ Block 009 - Read-Only ChangePlan.
 - `docs/adr/0003-field-authority-resolution.md`
 - `docs/adr/0004-provider-capabilities-orchestration.md`
 - `docs/adr/0005-change-plan-boundary.md`
+- `docs/adr/0006-beets-target-mapping.md`
 
 ## Allowed files
 
-One dependency-light ChangePlan module, minimal plugin/integration changes, focused tests, README,
-ADR 0005, Block 009 specs, and context/handoff documents.
+One dependency-light beets mapping module, minimal plugin/integration changes, focused tests, README,
+ADR 0006, Block 010 specs, and context/handoff documents.
 
 ## Forbidden files
 
-Candidate application, beets/file/database mutation, target-field mapping, serialization policy, CLI,
-semantic field merging, persistence, provider/resolver redesign, network behavior changes, additional
-providers, configuration changes, and beets core.
+Candidate application, beets/file/database mutation, lossy serialization policy, CLI, semantic field
+merging, persistence, provider/resolver redesign, network behavior changes, additional providers,
+configuration changes, and beets core.
 
 ## Behavior budget
 
-Existing provider orchestration and one resolver pass remain unchanged. Resolved decisions are
-translated into a deterministic immutable ChangePlan and rendered as a read-only plan preview.
+Existing provider orchestration, one resolver pass, and ChangePlan translation remain unchanged.
+Planned changes are mapped deterministically only when they fit current `AlbumInfo` targets without
+information loss, then rendered in a read-only target preview.
 
 ## Validation
 
@@ -62,11 +64,11 @@ git status --short
 
 ## Done when
 
-PROPOSE/REVIEW/KEEP/SKIP translate correctly, provenance and structured values remain intact,
-inconsistent decisions fail visibly, the real preview consumes the plan, import state remains
+Lossless mappings and target blockers are explicit, malformed shapes fail visibly, provenance and
+structured genres remain intact, the real preview consumes `BeetsTargetPlan`, import state remains
 unchanged, and baseline validation is green.
 
 ## Stop condition
 
-Stop after Block 009. Do not define beets application mapping, apply decisions, or add metadata
-writes, providers, configuration, CLI, lyrics, or artwork.
+Stop after Block 010. Do not define application policy, mutate `AlbumInfo`, or add metadata writes,
+providers, mapping configuration, CLI, lyrics, or artwork.

@@ -17,11 +17,21 @@ FieldDecision
     ↓
 ChangePlan
     ↓
-preview
+BeetsTargetPlan
+    ↓
+read-only target preview
 ```
 
 `ChangePlan` describes what Noqlen would change and what still requires review. It does not write
-metadata.
+metadata. `BeetsTargetPlan` then determines whether each canonical change can be represented by the
+current beets `AlbumInfo` model without information loss. Noqlen maps canonical values to beets only
+when the mapping is lossless. Multi-value metadata is not silently collapsed into singular beets
+fields.
+
+```text
+genres = [Rock, Metal]          -> genres (lossless)
+labels = [Label A, Label B]     -> mapping blocker
+```
 
 The first providers are expected to include MusicBrainz, Discogs, and AcoustID, followed by additional catalog, community, lyrics, and fallback sources where they add clear value.
 
@@ -108,19 +118,23 @@ number, or barcode metadata.
 The pre-release `noqlenmeta.discogs` configuration from Block 004 has been replaced rather than
 retained as a parallel schema. Move its values under `noqlenmeta.providers.discogs`.
 
-The plan preview is read-only and normal beets metadata application continues unchanged:
+The target-plan preview is read-only and normal beets metadata application continues unchanged:
 
 ```text
-Noqlen Meta / change plan:
+Noqlen Meta / beets target plan:
 
   planned changes: 1
-  review required: 0
+  losslessly mapped: 1
+  mapping blockers: 0
+  resolution review: 0
   unchanged: 0
   skipped: 0
-  conflict-free: yes
+  mapping complete: yes
 
   genres
     PROPOSE
+    target: genres
+    target shape: string-list
     proposed: Electronic, Rock
     source: Discogs
     confidence: 0.92
@@ -130,8 +144,8 @@ Noqlen Meta / change plan:
 ## Current status
 
 The plugin resolves Discogs and iTunes candidates against selected-release metadata, translates
-`KEEP`/`PROPOSE`/`REVIEW`/`SKIP` decisions into an immutable `ChangePlan`, and previews the plan
-during import. The flow remains read-only; target mapping, application, and persistence are not
-implemented.
+`KEEP`/`PROPOSE`/`REVIEW`/`SKIP` decisions into an immutable `ChangePlan`, maps planned changes into
+an immutable `BeetsTargetPlan`, and previews target fields or mapping blockers during import. The
+flow remains read-only; application and persistence are not implemented.
 
 See `docs/context/current.md` and `docs/context/handoff.md` before starting a development block.

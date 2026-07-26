@@ -11,6 +11,7 @@ from beets.importer.tasks import ImportTask
 
 import beetsplug.noqlenmeta as plugin_module
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
+from beetsplug.noqlenmeta.beets_mapping import BeetsMappingError
 from beetsplug.noqlenmeta.changeplan import ChangePlanError
 from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
 from beetsplug.noqlenmeta.integration import (
@@ -398,12 +399,16 @@ def test_discogs_is_not_loaded_or_invoked_for_cover_only_configuration(
 def test_both_providers_feed_one_resolver_pass_and_discogs_authority_wins(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from beetsplug.noqlenmeta.beets_mapping import (
+        map_change_plan_to_beets as real_map_change_plan_to_beets,
+    )
     from beetsplug.noqlenmeta.changeplan import build_change_plan as real_build_change_plan
     from beetsplug.noqlenmeta.resolver import resolve_metadata as real_resolve_metadata
 
     provider_calls: list[tuple[str, str | None]] = []
     resolution_calls: list[tuple[MetadataCandidate, ...]] = []
     plan_calls: list[object] = []
+    mapping_calls: list[object] = []
     rendered: list[object] = []
 
     def discogs_candidates(
@@ -432,12 +437,17 @@ def test_both_providers_feed_one_resolver_pass_and_discogs_authority_wins(
         plan_calls.append(decisions)
         return real_build_change_plan(decisions)  # type: ignore[arg-type]
 
+    def record_mapping(plan: object) -> object:
+        mapping_calls.append(plan)
+        return real_map_change_plan_to_beets(plan)  # type: ignore[arg-type]
+
     monkeypatch.setattr(NoqlenMetaPlugin, "_discogs_candidates", discogs_candidates)
     monkeypatch.setattr(NoqlenMetaPlugin, "_itunes_candidates", itunes_candidates)
     monkeypatch.setattr("beetsplug.noqlenmeta.resolve_metadata", record_resolution)
     monkeypatch.setattr("beetsplug.noqlenmeta.build_change_plan", record_plan)
+    monkeypatch.setattr("beetsplug.noqlenmeta.map_change_plan_to_beets", record_mapping)
     monkeypatch.setattr(
-        "beetsplug.noqlenmeta.render_change_plan",
+        "beetsplug.noqlenmeta.render_beets_target_plan",
         lambda plan: rendered.append(plan),
     )
     plugin = NoqlenMetaPlugin()
@@ -459,8 +469,12 @@ def test_both_providers_feed_one_resolver_pass_and_discogs_authority_wins(
     decision = decisions[0]  # type: ignore[index]
     assert decision.selected.provider == "discogs"
     assert [item.provider for item in decision.alternatives] == ["itunes"]
-    plan = rendered[0]
-    assert plan.changes[0].source is decision.selected  # type: ignore[attr-defined]
+    assert len(mapping_calls) == 1
+    assert mapping_calls[0].changes[0].source is decision.selected  # type: ignore[attr-defined]
+    target_plan = rendered[0]
+    assert target_plan.source is mapping_calls[0]  # type: ignore[attr-defined]
+    assert target_plan.mapped_changes[0].source.source is decision.selected  # type: ignore[attr-defined]
+    assert target_plan.mapped_changes[0].target_field == "genres"  # type: ignore[attr-defined]
     assert dict(info) == info_snapshot
     assert task.choice_flag is choice_snapshot
     assert task.match is match_snapshot
@@ -584,6 +598,23 @@ def test_change_plan_error_is_not_swallowed(monkeypatch: pytest.MonkeyPatch) -> 
         plugin._import_task_choice(None, import_task(album_info()))
 
 
+def test_beets_mapping_error_is_not_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (candidate(),),
+    )
+    monkeypatch.setattr(
+        "beetsplug.noqlenmeta.map_change_plan_to_beets",
+        lambda plan: (_ for _ in ()).throw(BeetsMappingError("broken mapping contract")),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin)
+
+    with pytest.raises(BeetsMappingError, match="broken mapping contract"):
+        plugin._import_task_choice(None, import_task(album_info()))
+
+
 @pytest.mark.parametrize(
     ("choice", "is_album"),
     [
@@ -692,13 +723,17 @@ def test_preview_is_visible_and_selected_info_remains_unchanged(
     assert task.match is match_snapshot
     assert task.items == items_snapshot
     assert len(output) == 1
-    assert "Noqlen Meta / change plan:" in output[0]
+    assert "Noqlen Meta / beets target plan:" in output[0]
     assert "planned changes: 1" in output[0]
-    assert "review required: 1" in output[0]
+    assert "losslessly mapped: 1" in output[0]
+    assert "mapping blockers: 0" in output[0]
+    assert "resolution review: 1" in output[0]
     assert "unchanged: 0" in output[0]
     assert "skipped: 0" in output[0]
-    assert "conflict-free: no" in output[0]
+    assert "mapping complete: yes" in output[0]
     assert "genres\n    PROPOSE" in output[0]
+    assert "target: genres" in output[0]
+    assert "target shape: string-list" in output[0]
     assert "proposed: Electronic, Rock" in output[0]
     assert "source: Discogs" in output[0]
     assert "confidence: 0.98" in output[0]
@@ -707,6 +742,63 @@ def test_preview_is_visible_and_selected_info_remains_unchanged(
     assert "candidate: Listenable Records" in output[0]
     assert "existing conflicting value is preserved" in output[0]
     assert TOKEN not in output[0]
+
+
+def test_multi_label_proposal_is_previewed_as_mapping_blocker_without_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output: list[str] = []
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (
+            candidate("labels", ("Roadrunner Records", "Listenable Records")),
+        ),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin)
+    info = album_info()
+    info_snapshot = copy.deepcopy(dict(info))
+    task = import_task(info)
+    choice_snapshot = task.choice_flag
+    match_snapshot = task.match
+    items_snapshot = list(task.items)
+
+    plugin._import_task_choice(None, task)
+
+    assert "planned changes: 1" in output[0]
+    assert "losslessly mapped: 0" in output[0]
+    assert "mapping blockers: 1" in output[0]
+    assert "mapping complete: no" in output[0]
+    assert "labels\n    BLOCKED" in output[0]
+    assert "target: label" in output[0]
+    assert "proposed: Roadrunner Records, Listenable Records" in output[0]
+    assert "multiple canonical values cannot be represented losslessly" in output[0]
+    assert dict(info) == info_snapshot
+    assert task.choice_flag is choice_snapshot
+    assert task.match is match_snapshot
+    assert task.items == items_snapshot
+
+
+def test_unsupported_target_is_clear_in_preview(monkeypatch: pytest.MonkeyPatch) -> None:
+    output: list[str] = []
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (
+            candidate("format_descriptions", ("CD", "Album")),
+        ),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin)
+
+    plugin._import_task_choice(None, import_task(album_info()))
+
+    assert "format_descriptions\n    BLOCKED" in output[0]
+    assert "target: unsupported" in output[0]
+    assert "no supported AlbumInfo target" in output[0]
 
 
 def test_preview_disabled_suppresses_candidate_output(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -778,7 +870,7 @@ def test_resolved_integration_produces_keep_and_skip_actions(
     assert "field is disabled by policy" in output[0]
     assert "unchanged: 1" in output[0]
     assert "skipped: 1" in output[0]
-    assert "conflict-free: yes" in output[0]
+    assert "mapping complete: yes" in output[0]
 
 
 def test_ambiguous_review_preview_has_no_selected_value(

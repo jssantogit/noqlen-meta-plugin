@@ -12,7 +12,11 @@ from beets import ui
 from beets.autotag.hooks import AlbumInfo
 from beets.importer.actions import Action
 
-from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
+from beetsplug.noqlenmeta.beets_mapping import (
+    BeetsMappingBlocker,
+    BeetsTargetChange,
+    BeetsTargetPlan,
+)
 from beetsplug.noqlenmeta.domain import (
     ExternalIdentifier,
     MetadataValue,
@@ -130,20 +134,25 @@ def eligible_album_info(task: object) -> AlbumInfo | None:
     return album_info if isinstance(album_info, AlbumInfo) else None
 
 
-def render_change_plan(plan: ChangePlan) -> None:
-    """Print a safe, concise description of planned read-only consequences."""
+def render_beets_target_plan(plan: BeetsTargetPlan) -> None:
+    """Print a safe, target-aware description of the read-only mapping plan."""
+    source = plan.source
     lines = [
-        "Noqlen Meta / change plan:",
+        "Noqlen Meta / beets target plan:",
         "",
-        f"  planned changes: {len(plan.changes)}",
-        f"  review required: {len(plan.reviews)}",
-        f"  unchanged: {len(plan.kept)}",
-        f"  skipped: {len(plan.skipped)}",
-        f"  conflict-free: {'yes' if plan.is_conflict_free else 'no'}",
+        f"  planned changes: {len(source.changes)}",
+        f"  losslessly mapped: {len(plan.mapped_changes)}",
+        f"  mapping blockers: {len(plan.blocked_changes)}",
+        f"  resolution review: {len(source.reviews)}",
+        f"  unchanged: {len(source.kept)}",
+        f"  skipped: {len(source.skipped)}",
+        f"  mapping complete: {'yes' if plan.is_fully_mapped else 'no'}",
     ]
-    for change in plan.changes:
-        lines.extend(_render_planned_change(change))
-    for decision in (*plan.reviews, *plan.kept, *plan.skipped):
+    for change in plan.mapped_changes:
+        lines.extend(_render_target_change(change))
+    for blocker in plan.blocked_changes:
+        lines.extend(_render_mapping_blocker(blocker))
+    for decision in (*source.reviews, *source.kept, *source.skipped):
         lines.extend(
             ("", f"  {_safe_preview_text(decision.field)}", f"    {decision.action.name}")
         )
@@ -168,19 +177,34 @@ def render_change_plan(plan: ChangePlan) -> None:
     ui.print_("\n".join(lines))
 
 
-def _render_planned_change(change: PlannedChange) -> tuple[str, ...]:
-    lines = ["", f"  {_safe_preview_text(change.field)}", "    PROPOSE"]
-    if change.before is not None:
-        lines.append(f"    current: {_preview_value(change.before)}")
+def _render_target_change(change: BeetsTargetChange) -> tuple[str, ...]:
+    source = change.source
+    lines = ["", f"  {_safe_preview_text(change.canonical_field)}", "    PROPOSE"]
+    if source.before is not None:
+        lines.append(f"    current: {_preview_value(source.before)}")
     lines.extend(
         (
-            f"    proposed: {_preview_value(change.after)}",
-            f"    source: {_provider_display_name(change.source.provider)}",
-            f"    confidence: {change.source.confidence:.2f}",
-            f"    reason: {_safe_preview_text(change.reason)}",
+            f"    target: {_safe_preview_text(change.target_field)}",
+            f"    target shape: {change.target_shape.value.replace('_', '-')}",
+            f"    proposed: {_preview_value(change.target_value)}",
+            f"    source: {_provider_display_name(source.source.provider)}",
+            f"    confidence: {source.source.confidence:.2f}",
+            f"    reason: {_safe_preview_text(source.reason)}",
         )
     )
     return tuple(lines)
+
+
+def _render_mapping_blocker(blocker: BeetsMappingBlocker) -> tuple[str, ...]:
+    target = blocker.target_field if blocker.target_field is not None else "unsupported"
+    return (
+        "",
+        f"  {_safe_preview_text(blocker.source.field)}",
+        "    BLOCKED",
+        f"    target: {_safe_preview_text(target)}",
+        f"    proposed: {_preview_value(blocker.source.after)}",
+        f"    reason: {_safe_preview_text(blocker.reason)}",
+    )
 
 
 def _optional_text(value: object) -> str | None:

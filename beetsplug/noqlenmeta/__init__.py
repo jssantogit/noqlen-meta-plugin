@@ -4,13 +4,14 @@ from collections.abc import Callable, Sequence
 
 from beets.plugins import BeetsPlugin
 
+from beetsplug.noqlenmeta.beets_mapping import map_change_plan_to_beets
 from beetsplug.noqlenmeta.changeplan import build_change_plan
 from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
 from beetsplug.noqlenmeta.integration import (
     context_from_album_info,
     current_values_from_album_info,
     eligible_album_info,
-    render_change_plan,
+    render_beets_target_plan,
     resolution_policy_from_settings,
     resolve_discogs_token,
 )
@@ -112,9 +113,10 @@ class NoqlenMetaPlugin(BeetsPlugin):
             )
 
         decisions = resolve_metadata(current_values, candidates, policy)
-        plan = build_change_plan(decisions)
+        change_plan = build_change_plan(decisions)
+        target_plan = map_change_plan_to_beets(change_plan)
         if decisions and self.config["preview"].get(bool):
-            render_change_plan(plan)
+            render_beets_target_plan(target_plan)
 
     def _collect_provider_candidates(
         self,
