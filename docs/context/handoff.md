@@ -2,49 +2,44 @@
 
 ## State
 
-Block 004 connects the existing `DiscogsProvider` to beets' selected album phase through
-`import_task_choice`. It constructs a provider-independent context and emits a read-only candidate
-preview before normal beets metadata application. There is still no resolver, field authority,
-candidate application, provenance persistence, or Noqlen metadata write.
+Block 005 adds a pure provider-independent resolver. Current metadata plus normalized candidates and a
+`ResolutionPolicy` now produce immutable, explainable `FieldDecision` values. Nothing is applied to
+beets, files, or the database.
 
 ## Completed
 
-- Discogs is disabled by default; preview defaults on and the configured personal token is redacted.
-- Non-empty `NOQLENMETA_DISCOGS_TOKEN` overrides config; an empty environment value does not erase a
-  configured token.
-- Album APPLY eligibility excludes SKIP, ASIS, RETAG, TRACKS, ALBUMS, singleton tasks, and missing
-  selected `AlbumInfo` values.
-- Selected artist/title, year, barcode, catalog number, and defensible Discogs release identity map
-  into `ReleaseEnrichmentContext` without mutating `AlbumInfo`.
-- Provider failures produce a fixed warning and allow normal import to continue.
-- Candidate previews contain only normalized field values and source release identity.
-- The optional Discogs client is imported lazily only after an eligible enabled task is selected.
-- The provider boundary now catches concrete Discogs, requests, HTTP, and response-decoding failures;
-  programming errors propagate.
-- An environment-gated production direct-release live smoke test covers public release ID `1`.
+- `FieldRule` defines field enablement, normalized ordered authority, confidence eligibility, and
+  preserve-existing behavior.
+- `ResolutionPolicy` independently controls fields and providers with copied read-only mappings.
+- Unknown fields/providers and unlisted authority providers are ineligible by default.
+- Authority outranks confidence after threshold eligibility; eligible lower authority provides a
+  fallback when higher authority is unavailable or below threshold.
+- Same-provider conflicts review without an arbitrary winner; identical values deduplicate
+  deterministically.
+- Current values produce propose, keep, or review actions without mutation.
+- Selected candidates retain their original structured value and source provenance; lower-authority
+  contenders remain alternatives.
+- The default policy enables current Discogs fields and only the implemented Discogs provider while
+  recording disabled future authority vocabulary.
 
 ## Important decisions
 
-- `import_task_choice` is late enough to observe the selected match and early enough that the preview
-  cannot interfere with beets metadata application.
-- Explicit `discogs_albumid` values are accepted; generic `album_id` values are accepted only when the
-  selected metadata source identifies itself as Discogs. Duplicate release IDs are removed.
-- A missing token remains valid for direct release lookup. Tokenless search fails safely at the
-  provider boundary and does not abort import.
-- Preview-off still permits enrichment but suppresses candidate values at normal output level.
+- Field authority is not a global provider ranking.
+- Field and provider enablement are independent.
+- Existing metadata is preserved on conflict by default.
+- Empty authority chains have safe skip semantics.
+- Resolution creates decisions, never writes; semantic merging remains deferred.
 
 ## Deferred
 
-- OAuth, consumer credentials, interactive authentication, and token persistence.
-- Resolver, field authority, confidence calibration across providers, candidate application, and
-  provenance persistence.
-- Caching, Master Release/original-year lookup, track enrichment, cover art, and other providers.
-- Before public release/documentation, account for current Discogs API attribution and usage
-  requirements; retained public `source_url` values support future provenance and attribution.
+- Resolver integration with selected `AlbumInfo` and the existing preview lifecycle.
+- Mapping user-facing independent `fields` and `providers` configuration into policy.
+- Metadata change plans/application, provenance persistence, and field-specific merge policy.
+- `beet noqlenmeta` and preferred `beet nm` alias.
+- Confidence calibration, artwork, lyrics, and additional provider adapters.
 
 ## Recommended next block
 
-Block 005 should define the minimum field-authority and resolver policy required to choose between
-selected-release metadata and normalized provider candidates. It should preserve candidate
-provenance, make overwrite decisions explicit and testable, and establish a review boundary before
-any separate metadata-application/write block.
+Block 006 should combine selected-release current values and provider candidates through the resolver,
+then render a resolved preview/change plan. It should begin mapping independent field and provider
+configuration without applying metadata. The manual CLI remains a later dedicated slice.

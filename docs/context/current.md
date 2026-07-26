@@ -2,7 +2,7 @@
 
 ## Project
 
-Noqlen Meta Plugin — universal multi-provider metadata enrichment for beets.
+Noqlen Meta Plugin - universal multi-provider metadata enrichment for beets.
 
 ## Profile
 
@@ -10,67 +10,57 @@ Noqlen Meta Plugin — universal multi-provider metadata enrichment for beets.
 
 ## Context level
 
-Use `tiny` by default and `standard` for non-trivial feature blocks. Use `full` only for architecture or milestone audits.
+`standard` for Block 005 because it establishes resolver architecture and an ADR.
 
 ## Tool Mode
 
-`combo` for Block 004: OpenCode native capabilities, Serena for targeted symbol/navigation work,
-and RTK for noisy shell commands.
+`combo`: OpenCode native capabilities, Serena for targeted symbol/navigation work, and RTK for noisy
+shell commands.
 
 ## Active block
 
-Block 004 - Beets Lifecycle Integration and Discogs Preview.
+Block 005 - Field Authority and Resolver Core.
 
 ## Active spec
 
-`docs/specs/004-beets-lifecycle-preview/`
+`docs/specs/005-field-authority-resolver/`
 
 ## Active ADRs
 
 - `docs/adr/0001-external-beets-plugin.md`
 - `docs/adr/0002-python3-discogs-client.md`
+- `docs/adr/0003-field-authority-resolution.md`
 
 ## Allowed files
 
-The Noqlen plugin entry point, optional lifecycle helper, narrowly hardened Discogs error boundary,
-focused deterministic/live tests, README, Block 004 specs, and context/handoff documents.
+Provider-independent resolver/policy code, focused synthetic tests, ADR 0003, Block 005 specs, and
+context/handoff documents.
 
 ## Forbidden files
 
-Domain/provider contract changes, candidate application, resolver/authority behavior, persistence,
-MediaFile fields, OAuth, credential files, caching, other providers, beets core, unrelated files,
-local tool configuration, and real user-library data.
-
-## Non-goals
-
-- Do not fork or patch beets core as part of the current project direction.
-- Do not replace beets matching in the initial product scope.
-- Do not apply preview candidates or alter beets matching/import choices.
-- Do not use a real music library in automated tests.
+Lifecycle/provider changes, candidate application, beets/file/database mutation, configuration
+migration, CLI, semantic field merging, persistence, another provider, and beets core.
 
 ## Behavior budget
 
-One `import_task_choice` listener may invoke the production Discogs adapter only for a selected album
-APPLY choice and print a safe normalized preview. It performs no metadata, database, or file writes.
+Pure resolution from current values, normalized candidates, and immutable policy into immutable field
+decisions. No decision is applied.
 
 ## Validation
-
-Baseline repository validation:
 
 ```bash
 ruff check .
 pytest
 python scripts/check_repo_contamination.py
 git diff --check
+git status --short
 ```
 
 ## Done when
 
-Selected album APPLY tasks can produce a safe Discogs candidate preview, provider failures cannot
-abort import, deterministic validation passes offline, and the opt-in direct-ID live smoke is
-attempted before the scoped commit.
+Field/provider policy and deterministic authority resolution are tested, documented, and validated;
+current conflicts review by default and provenance remains structured.
 
 ## Stop condition
 
-Stop after Block 004. Do not implement candidate application, resolver/field authority, persistence,
-metadata writes, or another provider.
+Stop after Block 005. Do not integrate the resolver into beets or begin Block 006.
