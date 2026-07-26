@@ -32,7 +32,7 @@ TEXT_SUFFIXES = {
 PERSONAL_PATH_PATTERNS = (
     re.compile(r"/home/[^/\s]+/"),
     re.compile(r"/Users/[^/\s]+/"),
-    re.compile(r"[A-Za-z]:\\\\Users\\\\[^\\\s]+\\\\"),
+    re.compile(r"[A-Za-z]:\\Users\\[^\\\s]+\\"),
 )
 
 SECRET_ASSIGNMENT = re.compile(
