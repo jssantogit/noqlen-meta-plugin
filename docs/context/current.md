@@ -10,8 +10,8 @@ Noqlen Meta Plugin - universal multi-provider metadata enrichment for beets.
 
 ## Context level
 
-`standard` for Block 013 because it adds a read-only library entry point and target adapter without
-redesigning providers, resolution, ChangePlan, importer application, or the beets lifecycle.
+`standard` for Block 014 because it adds one conservative persistent Album write boundary without
+redesigning providers, resolution, ChangePlan, importer application, or beets persistence.
 
 ## Tool Mode
 
@@ -20,11 +20,11 @@ shell commands.
 
 ## Active block
 
-Block 013 - Library CLI Preview Boundary.
+Block 014 - Strict Library Database Application.
 
 ## Active spec
 
-`docs/specs/013-library-cli-preview/`
+`docs/specs/014-library-db-application/`
 
 ## Active ADRs
 
@@ -37,23 +37,24 @@ Block 013 - Library CLI Preview Boundary.
 - `docs/adr/0007-strict-selected-release-application.md`
 - `docs/adr/0008-partial-application-policy.md`
 - `docs/adr/0009-library-cli-preview-boundary.md`
+- `docs/adr/0010-strict-library-database-application.md`
 
 ## Allowed files
 
-Minimal plugin/integration changes, explicit library adapters and mapping, focused tests, README,
-ADR 0009, Block 013 specs, and context/handoff documents.
+One library application module, minimal CLI/renderer integration, focused tests, README, ADR 0010,
+Block 014 specs, and context/handoff documents.
 
 ## Forbidden files
 
-`--apply`, lossy mapping, direct Item/Album mutation, database/tag/file writes, singleton or track
-mode, interactive review, persistence, provider/resolver redesign, network behavior changes,
+CLI partial policy, direct Item orchestration, file-tag writes, media mapping, path/art/file changes,
+interactive review, command-wide rollback, provider/resolver redesign, network behavior changes,
 additional providers, and beets core.
 
 ## Behavior budget
 
-Existing importer behavior remains unchanged. CLI and importer share provider/resolver/ChangePlan
-planning, then diverge into their explicit target adapters. The library command always previews and
-never mutates persistent Albums, Items, tags, files, or importer objects.
+Existing importer behavior remains unchanged. CLI preview remains default. Explicit `--apply`
+strictly persists only review-free, blocker-free mapped Album changes through normal beets database
+storage. File tags remain unchanged.
 
 ## Validation
 
@@ -67,11 +68,13 @@ git status --short
 
 ## Done when
 
-One Subcommand owns `noqlenmeta` and `nm`, query intent is explicit, native Album queries and
-read-only adapters feed the shared planning path, persistent target reality and blockers are visible,
-importer configuration grants no CLI writes, and baseline validation is green.
+One Subcommand owns `noqlenmeta` and `nm`; `--apply` is the only CLI write permission; all Albums are
+planned before strict per-Album application; guards prevent forged, dirty, stale, malformed, or
+duplicate-target writes; normal beets Album storage updates Album and inherited Item database rows;
+no physical tag operation occurs; and baseline validation is green.
 
 ## Stop condition
 
-Stop after Block 013. Do not add CLI application, direct downstream writes, singleton/track mode,
-providers, mapping configuration, provenance persistence, lyrics, artwork, or Block 014 behavior.
+Stop after Block 014. Do not add partial CLI application, tag synchronization, direct Item
+orchestration, media mapping, rollback infrastructure, providers, provenance persistence, lyrics, or
+artwork.

@@ -124,9 +124,9 @@ blocker. Strict mode applies zero fields. Partial mode applies genres and withho
 not discard or serialize the label values. `preview` and `apply` are independent, so preview can be
 disabled without disabling application and preview output never implies application.
 
-## Library preview command
+## Library command
 
-Noqlen Meta can preview enrichment for albums already stored in the beets library:
+Noqlen Meta previews enrichment for albums already stored in the beets library by default:
 
 ```bash
 beet nm artist:Gojira
@@ -134,27 +134,48 @@ beet nm album:"From Mars to Sirius"
 beet nm --all
 ```
 
+Explicit application persists eligible metadata to the beets library database under strict
+per-album safety:
+
+```bash
+beet nm artist:Gojira --apply
+beet nm --all --apply
+```
+
 The canonical command name is `beet noqlenmeta ...`; `nm` is its preferred short alias. A non-empty
 native beets album query is required unless `--all` explicitly requests every album. The command
 operates on albums only; singleton and per-track command modes are not available.
 
-Block 013's library command is preview-only. It runs the same provider collection, Field Authority,
-resolver, and `ChangePlan` path as importer enrichment, then analyzes the result against an explicit
-persistent `Album` target map. Losslessly representable changes, resolver reviews, and mapping
-blockers are displayed without changing database rows, Items, tags, or files. In particular,
-persistent `Album` has no album-level `media` field, so media proposals are reported as blockers
-rather than being inferred from or applied to Items.
+The command runs the same provider collection, Field Authority, resolver, and `ChangePlan` path as
+importer enrichment, then analyzes the result against an explicit persistent `Album` target map.
+Without `--apply`, it displays losslessly representable changes, resolver reviews, and mapping
+blockers without changing database rows, Items, tags, or files.
 
-`noqlenmeta.apply` and `apply_mode` currently control importer-time selected-release application
-only; they do not make `beet nm` write to the library. The explicit library preview also remains
-visible when importer `preview` is false. There is no `--apply` option in Block 013.
+`--apply` is the only CLI write permission. Importer `noqlenmeta.apply` and `apply_mode` settings do
+not authorize CLI writes, and importer `apply: false` does not override an explicit CLI `--apply`.
+The first CLI policy is strict only: any resolver `REVIEW` or library mapping blocker prevents all
+Noqlen mutation for that Album. Strictness is evaluated independently per Album, so another safe
+Album selected by the same query may still be stored. Persistent `Album` has no supported
+album-level `media` field, so media remains blocking rather than being inferred from or applied to
+Items.
 
-Noqlen mutates only eligible fields on the selected `AlbumInfo`. It does not directly mutate Items or
-Albums, add library records, write tags, or move/copy files. After selected-release enrichment,
-normal beets import behavior determines Item application, database persistence, file handling, and
-tag writing. Consequently, `apply: true` is a real metadata application feature: the normal import
-can persist enriched values to the beets library and, depending on beets configuration, file
-metadata.
+Successful application mutates only mapped persistent Album fields and calls
+`Album.store(inherit=True)` once. Normal beets behavior propagates inheritable Album fields to Item
+database rows. Noqlen does not assign Item metadata or call `Item.store()` itself. Physical file tags
+remain unchanged: CLI database application does not call `Item.write()`, tag synchronization, file
+moves, or art operations.
+
+All selected Albums are planned before the first database write. Persistence then occurs one Album
+at a time using normal beets store transactions. There is no command-wide rollback: if one Album is
+stored and a later Album store fails, the earlier database change may remain and later Albums are
+not attempted.
+
+During importer enrichment, Noqlen mutates only eligible fields on the selected `AlbumInfo`. It does
+not directly mutate Items or persistent Albums, add library records, write tags, or move/copy files.
+After selected-release enrichment, normal beets import behavior determines Item application,
+database persistence, file handling, and tag writing. Consequently, importer `apply: true` is a real
+metadata application feature: the normal import can persist enriched values to the beets library
+and, depending on beets configuration, file metadata.
 
 Field Authority expresses provider preference and ordering for each field. Provider Capabilities
 describe the fields each current adapter can actually produce. An enabled provider is contacted only
@@ -204,8 +225,9 @@ Noqlen Meta / beets target plan:
 ## Current status
 
 The plugin resolves Discogs and iTunes candidates through one shared planning path. Importer
-enrichment maps the resulting `ChangePlan` to `BeetsTargetPlan`; the read-only library command maps
-it to `LibraryTargetPlan`. Importer application can mutate only selected `AlbumInfo` under its
-explicit strict or partial policy. The library command performs no application or persistence.
+enrichment maps the resulting `ChangePlan` to `BeetsTargetPlan`; the library command maps it to
+`LibraryTargetPlan`. Importer application can mutate only selected `AlbumInfo` under its explicit
+strict or partial policy. CLI application is separately authorized by `--apply`, uses strict
+per-Album safety, and persists database metadata without touching physical file tags.
 
 See `docs/context/current.md` and `docs/context/handoff.md` before starting a development block.

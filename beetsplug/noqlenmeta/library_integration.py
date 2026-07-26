@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from beets import ui
 from beets.library import Album
 
@@ -25,6 +27,9 @@ from beetsplug.noqlenmeta.library_mapping import (
     LibraryTargetChange,
     LibraryTargetPlan,
 )
+
+if TYPE_CHECKING:
+    from beetsplug.noqlenmeta.library_application import LibraryApplicationResult
 
 _DISCOGS_RELEASE_NAMESPACE = "discogs.release"
 
@@ -84,11 +89,12 @@ def current_values_from_library_album(album: Album) -> dict[str, MetadataValue]:
 def render_library_target_plan(
     album: Album,
     plan: LibraryTargetPlan,
+    application_result: LibraryApplicationResult | None = None,
     *,
     position: int | None = None,
     total: int | None = None,
 ) -> None:
-    """Print a safe, unconditionally read-only persistent Album preview."""
+    """Print a safe persistent Album plan and truthful application state."""
     source = plan.source
     artist = _safe_preview_text(album.albumartist) or "unknown artist"
     title = _safe_preview_text(album.album) or "unknown album"
@@ -97,8 +103,21 @@ def render_library_target_plan(
         lines.append(f"  [{position}/{total}] {artist} - {title}")
     else:
         lines.append(f"  album: {artist} - {title}")
+    if application_result is None:
+        application_status = "disabled (preview only)"
+    elif application_result.is_blocked:
+        application_status = "blocked"
+    elif application_result.stored:
+        application_status = (
+            "stored in library database "
+            f"({len(application_result.applied_changes)} fields)"
+        )
+    else:
+        application_status = "no changes"
     lines.extend(
         (
+            f"  application: {application_status}",
+            "  file tags: unchanged",
             f"  planned changes: {len(source.changes)}",
             f"  losslessly mapped: {len(plan.mapped_changes)}",
             f"  mapping blockers: {len(plan.blocked_changes)}",

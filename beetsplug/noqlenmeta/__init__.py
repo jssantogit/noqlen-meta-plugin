@@ -1,9 +1,10 @@
 """Noqlen Meta beets plugin."""
 
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 
 from beets import ui
-from beets.library import Library
+from beets.library import Album, Library
 from beets.plugins import BeetsPlugin
 from beets.ui import Subcommand
 
@@ -27,12 +28,19 @@ from beetsplug.noqlenmeta.integration import (
     resolution_policy_from_settings,
     resolve_discogs_token,
 )
+from beetsplug.noqlenmeta.library_application import (
+    LibraryApplicationResult,
+    apply_library_target_plan,
+)
 from beetsplug.noqlenmeta.library_integration import (
     context_from_library_album,
     current_values_from_library_album,
     render_library_target_plan,
 )
-from beetsplug.noqlenmeta.library_mapping import map_change_plan_to_library_album
+from beetsplug.noqlenmeta.library_mapping import (
+    LibraryTargetPlan,
+    map_change_plan_to_library_album,
+)
 from beetsplug.noqlenmeta.orchestration import (
     provider_can_contribute,
     validate_provider_candidates,
@@ -61,6 +69,18 @@ _FIELD_DEFAULTS = {
     "synced_lyrics": False,
     "cover": False,
 }
+
+
+@dataclass(frozen=True, slots=True)
+class LibraryAlbumPlan:
+    """One prepared command plan retained until every Album is planned."""
+
+    album: Album
+    target_plan: LibraryTargetPlan
+    position: int
+    total: int
+
+
 class NoqlenMetaPlugin(BeetsPlugin):
     """Entry point loaded by beets as the ``noqlenmeta`` plugin."""
 
@@ -96,7 +116,14 @@ class NoqlenMetaPlugin(BeetsPlugin):
             dest="all",
             action="store_true",
             default=False,
-            help="explicitly preview every album in the library",
+            help="explicitly process every album in the library",
+        )
+        self._command.parser.add_option(
+            "--apply",
+            dest="apply",
+            action="store_true",
+            default=False,
+            help="strictly persist eligible metadata to the library database",
         )
         self._command.func = self._command_noqlenmeta
 
@@ -178,6 +205,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
     def _command_noqlenmeta(self, lib: Library, opts: object, args: list[str]) -> None:
         all_albums = bool(getattr(opts, "all", False))
+        apply_enabled = bool(getattr(opts, "apply", False))
         has_query = any(isinstance(argument, str) and argument.strip() for argument in args)
         if not has_query and not all_albums:
             raise ui.UserError("noqlenmeta: provide an album query or use --all")
@@ -194,6 +222,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
             ui.print_("Noqlen Meta: no albums matched")
             return
 
+        prepared: list[LibraryAlbumPlan] = []
         total = len(albums)
         for position, album in enumerate(albums, 1):
             context = context_from_library_album(album)
@@ -208,11 +237,28 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 current_values_from_library_album(album),
                 policy,
             )
+            prepared.append(
+                LibraryAlbumPlan(
+                    album,
+                    map_change_plan_to_library_album(change_plan),
+                    position,
+                    total,
+                )
+            )
+
+        for album_plan in prepared:
+            application_result: LibraryApplicationResult | None = None
+            if apply_enabled:
+                application_result = apply_library_target_plan(
+                    album_plan.album,
+                    album_plan.target_plan,
+                )
             render_library_target_plan(
-                album,
-                map_change_plan_to_library_album(change_plan),
-                position=position,
-                total=total,
+                album_plan.album,
+                album_plan.target_plan,
+                application_result,
+                position=album_plan.position,
+                total=album_plan.total,
             )
 
     def _resolution_policy(self) -> ResolutionPolicy:

@@ -104,8 +104,9 @@ def test_commands_register_one_real_subcommand_with_alias() -> None:
     assert commands[0].name == "noqlenmeta"
     assert "nm" in commands[0].aliases
     assert commands[0].func == plugin._command_noqlenmeta
-    with pytest.raises(SystemExit):
-        commands[0].parse_args(["--apply"])
+    opts, query = commands[0].parse_args(["--apply"])
+    assert opts.apply is True
+    assert query == []
 
 
 def test_no_query_fails_before_provider_or_library_work(
@@ -125,6 +126,9 @@ def test_no_query_fails_before_provider_or_library_work(
 
     with pytest.raises(ui.UserError, match="provide an album query or use --all"):
         invoke(plugin, lib, ["   "])
+
+    with pytest.raises(ui.UserError, match="provide an album query or use --all"):
+        invoke(plugin, lib, ["--apply"])
 
 
 def test_all_is_allowed_and_query_plus_all_is_rejected(
@@ -256,6 +260,8 @@ def test_cli_preview_maps_supported_fields_and_blocks_media(
     assert "labels\n    PROPOSE\n    target: label" in output[0]
     assert "media\n    BLOCKED" in output[0]
     assert "persistent Album has no supported album-level media target" in output[0]
+    assert "application: disabled (preview only)" in output[0]
+    assert "file tags: unchanged" in output[0]
     assert dict(album) == snapshot
 
 
@@ -481,3 +487,206 @@ def test_importer_and_cli_invoke_the_same_planning_helper(
     assert calls[0][0] == calls[1][0]
     assert calls[0][1] == calls[1][1]
     assert calls[0][2] == calls[1][2]
+
+
+def test_cli_apply_persists_even_when_importer_apply_is_false(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    output: list[str] = []
+    album = add_album(library)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, apply=False)
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda *args: (candidate(value=("Rock", "Metal")),),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.library_integration.ui.print_", output.append)
+
+    invoke(plugin, library, ["artist:Gojira", "--apply"])
+
+    reloaded = library.get_album(album.id)
+    assert reloaded.genres == ["Rock", "Metal"]
+    assert [item.genres for item in reloaded.items()] == [["Rock", "Metal"]]
+    assert "application: stored in library database (1 fields)" in output[0]
+    assert "file tags: unchanged" in output[0]
+
+
+def test_importer_config_does_not_authorize_cli_database_writes(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    album = add_album(library)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, preview=False, apply=True, apply_mode="partial")
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda *args: (candidate(value=("Rock", "Metal")),),
+    )
+    monkeypatch.setattr(
+        "beetsplug.noqlenmeta.library_integration.ui.print_", lambda output: None
+    )
+
+    invoke(plugin, library, ["artist:Gojira"])
+
+    reloaded = library.get_album(album.id)
+    assert reloaded.genres == []
+    assert [item.genres for item in reloaded.items()] == [[]]
+
+
+def test_cli_strict_mapping_blocker_prevents_mapped_database_change(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    output: list[str] = []
+    album = add_album(library)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin)
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda *args: (candidate(value=("Rock",)), candidate("media", ("CD",))),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.library_integration.ui.print_", output.append)
+
+    invoke(plugin, library, ["artist:Gojira", "--apply"])
+
+    reloaded = library.get_album(album.id)
+    assert reloaded.genres == []
+    assert [item.genres for item in reloaded.items()] == [[]]
+    assert "application: blocked" in output[0]
+    assert "mapping blockers: 1" in output[0]
+
+
+def test_cli_strict_review_prevents_mapped_database_change(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    output: list[str] = []
+    album = add_album(library, label="Existing")
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin)
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda *args: (
+            candidate(value=("Rock",)),
+            candidate("labels", ("Replacement",)),
+        ),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.library_integration.ui.print_", output.append)
+
+    invoke(plugin, library, ["artist:Gojira", "--apply"])
+
+    reloaded = library.get_album(album.id)
+    assert reloaded.genres == []
+    assert reloaded.label == "Existing"
+    assert [item.genres for item in reloaded.items()] == [[]]
+    assert "application: blocked" in output[0]
+    assert "resolution review: 1" in output[0]
+
+
+def test_all_apply_is_strict_per_album(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    output: list[str] = []
+    albums = [
+        add_album(library, album="Album A"),
+        add_album(library, album="Album B", title="Track B"),
+        add_album(library, album="Album C", title="Track C"),
+    ]
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin)
+
+    def candidates(
+        self: NoqlenMetaPlugin,
+        context: ReleaseEnrichmentContext,
+        token: str | None,
+    ) -> tuple[MetadataCandidate, ...]:
+        values = [candidate(value=(context.album_title,))]
+        if context.album_title == "Album B":
+            values.append(candidate("media", ("CD",)))
+        return tuple(values)
+
+    monkeypatch.setattr(NoqlenMetaPlugin, "_discogs_candidates", candidates)
+    monkeypatch.setattr("beetsplug.noqlenmeta.library_integration.ui.print_", output.append)
+
+    invoke(plugin, library, ["--all", "--apply"])
+
+    assert library.get_album(albums[0].id).genres == ["Album A"]
+    assert library.get_album(albums[1].id).genres == []
+    assert library.get_album(albums[2].id).genres == ["Album C"]
+    assert ["application: blocked" in entry for entry in output] == [False, True, False]
+
+
+def test_all_planning_completes_before_first_store(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    add_album(library, album="Album A")
+    add_album(library, album="Album B", title="Track B")
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin)
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda *args: (candidate(value=("Rock",)),),
+    )
+    calls = 0
+    original_map = plugin_module.map_change_plan_to_library_album
+
+    def fail_second_mapping(plan: ChangePlan) -> object:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise LibraryMappingError("broken second plan")
+        return original_map(plan)
+
+    monkeypatch.setattr(plugin_module, "map_change_plan_to_library_album", fail_second_mapping)
+    store_calls: list[Album] = []
+    monkeypatch.setattr(Album, "store", lambda album, *args, **kwargs: store_calls.append(album))
+
+    with pytest.raises(LibraryMappingError, match="broken second plan"):
+        invoke(plugin, library, ["--all", "--apply"])
+
+    assert calls == 2
+    assert store_calls == []
+
+
+def test_store_failure_aborts_later_albums_without_global_rollback(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    albums = [
+        add_album(library, album="Album A"),
+        add_album(library, album="Album B", title="Track B"),
+        add_album(library, album="Album C", title="Track C"),
+    ]
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin)
+
+    def candidates(
+        self: NoqlenMetaPlugin,
+        context: ReleaseEnrichmentContext,
+        token: str | None,
+    ) -> tuple[MetadataCandidate, ...]:
+        return (candidate(value=(context.album_title,)),)
+
+    monkeypatch.setattr(NoqlenMetaPlugin, "_discogs_candidates", candidates)
+    monkeypatch.setattr(
+        "beetsplug.noqlenmeta.library_integration.ui.print_", lambda output: None
+    )
+    original_store = Album.store
+    store_attempts: list[str] = []
+
+    def fail_album_b(self: Album, fields: object = None, inherit: bool = True) -> None:
+        store_attempts.append(self.album)
+        if self.album == "Album B":
+            raise RuntimeError("database failure")
+        original_store(self, fields=fields, inherit=inherit)
+
+    monkeypatch.setattr(Album, "store", fail_album_b)
+
+    with pytest.raises(RuntimeError, match="database failure"):
+        invoke(plugin, library, ["--all", "--apply"])
+
+    assert store_attempts == ["Album A", "Album B"]
+    assert library.get_album(albums[0].id).genres == ["Album A"]
+    assert library.get_album(albums[1].id).genres == []
+    assert library.get_album(albums[2].id).genres == []
