@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 
 from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
 from beetsplug.noqlenmeta.providers.base import ProviderError
+from beetsplug.noqlenmeta.providers.specs import ITUNES_SPEC
 
 _ITUNES_COLLECTION_NAMESPACE = "itunes.collection"
 _API_URL = "https://itunes.apple.com"
@@ -40,7 +41,8 @@ _EXTERNAL_ERRORS = (
 class ITunesProvider:
     """Resolve one iTunes collection and emit its defensible metadata."""
 
-    name = "itunes"
+    name = ITUNES_SPEC.name
+    supported_fields = ITUNES_SPEC.supported_fields
 
     def __init__(
         self,

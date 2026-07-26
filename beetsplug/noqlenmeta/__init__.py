@@ -1,5 +1,7 @@
 """Noqlen Meta beets plugin."""
 
+from collections.abc import Callable, Sequence
+
 from beets.plugins import BeetsPlugin
 
 from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
@@ -11,7 +13,17 @@ from beetsplug.noqlenmeta.integration import (
     resolution_policy_from_settings,
     resolve_discogs_token,
 )
+from beetsplug.noqlenmeta.orchestration import (
+    provider_can_contribute,
+    validate_provider_candidates,
+)
 from beetsplug.noqlenmeta.providers import ProviderError
+from beetsplug.noqlenmeta.providers.specs import (
+    BUILTIN_PROVIDER_SPECS,
+    DISCOGS_SPEC,
+    ITUNES_SPEC,
+    ProviderSpec,
+)
 from beetsplug.noqlenmeta.resolver import resolve_metadata
 
 _FIELD_DEFAULTS = {
@@ -29,9 +41,6 @@ _FIELD_DEFAULTS = {
     "synced_lyrics": False,
     "cover": False,
 }
-_ITUNES_FIELDS = ("genres", "year")
-
-
 class NoqlenMetaPlugin(BeetsPlugin):
     """Entry point loaded by beets as the ``noqlenmeta`` plugin."""
 
@@ -65,15 +74,13 @@ class NoqlenMetaPlugin(BeetsPlugin):
             {field: self.config["fields"][field].get(bool) for field in _FIELD_DEFAULTS},
             {
                 provider: self.config["providers"][provider]["enabled"].get(bool)
-                for provider in ("discogs", "itunes")
+                for provider in BUILTIN_PROVIDER_SPECS
             },
         )
-        itunes_can_contribute = policy.provider_can_contribute("itunes") and any(
-            policy.is_field_enabled(field)
-            and policy.authority_rank(field, "itunes") is not None
-            for field in _ITUNES_FIELDS
-        )
-        if not policy.provider_can_contribute("discogs") and not itunes_can_contribute:
+        if not any(
+            provider_can_contribute(policy, spec)
+            for spec in BUILTIN_PROVIDER_SPECS.values()
+        ):
             return
 
         context = context_from_album_info(album_info)
@@ -83,39 +90,51 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
         current_values = current_values_from_album_info(album_info)
         candidates: list[MetadataCandidate] = []
-        if policy.provider_can_contribute("discogs"):
+        if provider_can_contribute(policy, DISCOGS_SPEC):
             token = resolve_discogs_token(
                 self.config["providers"]["discogs"]["user_token"].as_str()
             )
-            try:
-                discogs_candidates = self._discogs_candidates(context, token)
-            except ProviderError:
-                self._log.warning(
-                    "Noqlen Meta: Discogs enrichment unavailable; import will continue"
+            candidates.extend(
+                self._collect_provider_candidates(
+                    DISCOGS_SPEC,
+                    lambda: self._discogs_candidates(context, token),
                 )
-            else:
-                self._log.debug(
-                    "Discogs enrichment returned {} candidate fields", len(discogs_candidates)
-                )
-                candidates.extend(discogs_candidates)
+            )
 
-        if itunes_can_contribute:
+        if provider_can_contribute(policy, ITUNES_SPEC):
             storefront = self.config["providers"]["itunes"]["storefront"].as_str()
-            try:
-                itunes_candidates = self._itunes_candidates(context, storefront)
-            except ProviderError:
-                self._log.warning(
-                    "Noqlen Meta: iTunes enrichment unavailable; import will continue"
+            candidates.extend(
+                self._collect_provider_candidates(
+                    ITUNES_SPEC,
+                    lambda: self._itunes_candidates(context, storefront),
                 )
-            else:
-                self._log.debug(
-                    "iTunes enrichment returned {} candidate fields", len(itunes_candidates)
-                )
-                candidates.extend(itunes_candidates)
+            )
 
         decisions = resolve_metadata(current_values, candidates, policy)
         if decisions and self.config["preview"].get(bool):
             render_resolved_preview(decisions)
+
+    def _collect_provider_candidates(
+        self,
+        spec: ProviderSpec,
+        fetch: Callable[[], Sequence[MetadataCandidate]],
+    ) -> tuple[MetadataCandidate, ...]:
+        try:
+            candidates = fetch()
+        except ProviderError:
+            self._log.warning(
+                "Noqlen Meta: {} enrichment unavailable; import will continue",
+                spec.display_name,
+            )
+            return ()
+
+        validated = validate_provider_candidates(spec, candidates)
+        self._log.debug(
+            "{} enrichment returned {} candidate fields",
+            spec.display_name,
+            len(validated),
+        )
+        return validated
 
     def _discogs_candidates(
         self, context: ReleaseEnrichmentContext, token: str | None

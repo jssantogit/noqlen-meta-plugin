@@ -87,6 +87,11 @@ release year metadata exposed with defensible semantics. Field Authority determi
 both providers return a candidate; higher provider-local confidence alone does not override a more
 authoritative source.
 
+Field Authority expresses provider preference and ordering for each field. Provider Capabilities
+describe the fields each current adapter can actually produce. An enabled provider is contacted only
+when its capabilities intersect both enabled user fields and its Field Authority entries; authority
+may retain future fallback vocabulary that an adapter does not implement yet.
+
 Set `providers.discogs.enabled: true` to preview resolved Discogs decisions after selecting an album
 match. A non-empty `NOQLENMETA_DISCOGS_TOKEN` takes precedence over
 `providers.discogs.user_token`; direct Discogs release-ID lookups do not require a token. Tokens are

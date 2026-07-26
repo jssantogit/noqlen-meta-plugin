@@ -15,6 +15,7 @@ from requests.exceptions import RequestException
 
 from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
 from beetsplug.noqlenmeta.providers.base import ProviderError
+from beetsplug.noqlenmeta.providers.specs import DISCOGS_SPEC
 
 _DISCOGS_RELEASE_NAMESPACE = "discogs.release"
 _SEARCH_LIMIT = 10
@@ -52,7 +53,8 @@ class _DiscogsClient(Protocol):
 class DiscogsProvider:
     """Resolve one Discogs edition and emit normalized field candidates."""
 
-    name = "discogs"
+    name = DISCOGS_SPEC.name
+    supported_fields = DISCOGS_SPEC.supported_fields
 
     def __init__(
         self,

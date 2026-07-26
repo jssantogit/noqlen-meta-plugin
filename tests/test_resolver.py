@@ -85,10 +85,10 @@ def test_provider_contribution_requires_enablement_field_and_authority() -> None
         {"catalog": True, "community": False, "fallback": True},
     )
 
-    assert resolution_policy.provider_can_contribute("catalog")
-    assert not resolution_policy.provider_can_contribute("community")
-    assert not resolution_policy.provider_can_contribute("fallback")
-    assert not resolution_policy.provider_can_contribute("unknown")
+    assert resolution_policy.provider_has_enabled_authority("catalog")
+    assert not resolution_policy.provider_has_enabled_authority("community")
+    assert not resolution_policy.provider_has_enabled_authority("fallback")
+    assert not resolution_policy.provider_has_enabled_authority("unknown")
 
 
 def test_unlisted_provider_has_no_authority() -> None:

@@ -8,6 +8,7 @@ from beetsplug.noqlenmeta.providers import MetadataProvider, ProviderError
 
 class SampleProvider:
     name = "sample"
+    supported_fields = frozenset({"label"})
 
     def get_candidates(
         self, context: ReleaseEnrichmentContext

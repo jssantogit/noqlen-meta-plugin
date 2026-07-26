@@ -9,6 +9,7 @@ from beets.autotag.hooks import AlbumInfo
 from beets.importer.actions import Action
 from beets.importer.tasks import ImportTask
 
+import beetsplug.noqlenmeta as plugin_module
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
 from beetsplug.noqlenmeta.integration import (
@@ -18,6 +19,7 @@ from beetsplug.noqlenmeta.integration import (
     resolve_discogs_token,
 )
 from beetsplug.noqlenmeta.providers import ProviderError
+from beetsplug.noqlenmeta.providers.base import ProviderContractError
 from beetsplug.noqlenmeta.resolver import default_resolution_policy
 
 TOKEN = "test-personal-token"
@@ -106,6 +108,7 @@ def test_configuration_defaults_and_redacts_user_token() -> None:
     assert plugin.config["providers"]["itunes"]["storefront"].as_str() == "us"
     assert "discogs" not in plugin.config.keys()
     assert plugin._import_task_choice in plugin._raw_listeners["import_task_choice"]
+    assert not hasattr(plugin_module, "_ITUNES_FIELDS")
 
 
 def test_environment_token_overrides_config(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -364,6 +367,33 @@ def test_itunes_is_not_invoked_for_authoritative_fields_it_does_not_emit(
     plugin._import_task_choice(None, import_task(album_info()))
 
 
+def test_discogs_is_not_loaded_or_invoked_for_cover_only_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_import = builtins.__import__
+
+    def reject_discogs_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "beetsplug.noqlenmeta.providers.discogs":
+            pytest.fail("Discogs dependency boundary must remain unloaded")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", reject_discogs_import)
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: pytest.fail("Discogs cannot emit cover"),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(
+        plugin,
+        fields={field: False for field in DISCOGS_FIELDS},
+        discogs=True,
+    )
+    plugin.config["fields"]["cover"].set(True)
+
+    plugin._import_task_choice(None, import_task(album_info()))
+
+
 def test_both_providers_feed_one_resolver_pass_and_discogs_authority_wins(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -512,6 +542,19 @@ def test_itunes_failure_does_not_suppress_discogs(
 
     assert "iTunes enrichment unavailable" in caplog.text
     assert "source: Discogs" in output[0]
+
+
+def test_provider_contract_error_is_not_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_itunes_candidates",
+        lambda self, context, storefront: (candidate(field="labels", provider="itunes"),),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, discogs=False, itunes=True)
+
+    with pytest.raises(ProviderContractError, match="unsupported field 'labels'"):
+        plugin._import_task_choice(None, import_task(album_info()))
 
 
 @pytest.mark.parametrize(

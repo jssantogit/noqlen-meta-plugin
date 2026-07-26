@@ -9,6 +9,7 @@ from requests.exceptions import Timeout
 from beetsplug.noqlenmeta.domain import ExternalIdentifier, ReleaseEnrichmentContext
 from beetsplug.noqlenmeta.providers import MetadataProvider, ProviderError
 from beetsplug.noqlenmeta.providers.discogs import DiscogsProvider
+from beetsplug.noqlenmeta.providers.specs import DISCOGS_SPEC
 
 FIXTURES = Path(__file__).parent / "fixtures" / "discogs"
 DEFAULT_RELEASE = object()
@@ -354,4 +355,8 @@ def test_programming_errors_are_not_disguised_as_provider_errors(
 
 
 def test_discogs_provider_satisfies_metadata_provider_contract() -> None:
-    assert isinstance(DiscogsProvider(client=Client()), MetadataProvider)
+    provider = DiscogsProvider(client=Client())
+
+    assert isinstance(provider, MetadataProvider)
+    assert provider.name == DISCOGS_SPEC.name
+    assert provider.supported_fields is DISCOGS_SPEC.supported_fields

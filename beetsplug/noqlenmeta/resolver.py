@@ -10,6 +10,7 @@ from math import isfinite
 from types import MappingProxyType
 
 from beetsplug.noqlenmeta.domain import MetadataCandidate, MetadataValue
+from beetsplug.noqlenmeta.providers.specs import BUILTIN_PROVIDER_SPECS, DISCOGS_SPEC
 
 
 def _name(value: object, label: str) -> str:
@@ -99,7 +100,7 @@ class ResolutionPolicy:
     def is_provider_enabled(self, provider: str) -> bool:
         return self.providers.get(_name(provider, "provider name"), False)
 
-    def provider_can_contribute(self, provider: str) -> bool:
+    def provider_has_enabled_authority(self, provider: str) -> bool:
         """Return whether an enabled provider has authority for an enabled field."""
         normalized = _name(provider, "provider name")
         return self.providers.get(normalized, False) and any(
@@ -152,34 +153,19 @@ _DEFAULT_AUTHORITY: dict[str, tuple[str, ...]] = {
     "synced_lyrics": ("local", "lrclib"),
     "cover": ("local", "coverartarchive", "itunes", "deezer", "discogs"),
 }
-_DISCOGS_FIELDS = frozenset(
-    {
-        "genres",
-        "styles",
-        "labels",
-        "catalog_numbers",
-        "barcodes",
-        "country",
-        "year",
-        "media",
-        "format_descriptions",
-    }
-)
-
-
 def default_resolution_policy() -> ResolutionPolicy:
     """Return the operational field policy with production providers disabled."""
 
     return ResolutionPolicy(
         field_rules={
             field: FieldRule(
-                enabled=field in _DISCOGS_FIELDS,
+                enabled=field in DISCOGS_SPEC.supported_fields,
                 authority=authority,
                 min_confidence=0.8,
             )
             for field, authority in _DEFAULT_AUTHORITY.items()
         },
-        providers={"discogs": False, "itunes": False},
+        providers={name: False for name in BUILTIN_PROVIDER_SPECS},
     )
 
 

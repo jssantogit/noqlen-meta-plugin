@@ -10,6 +10,7 @@ import pytest
 from beetsplug.noqlenmeta.domain import ExternalIdentifier, ReleaseEnrichmentContext
 from beetsplug.noqlenmeta.providers import MetadataProvider, ProviderError
 from beetsplug.noqlenmeta.providers.itunes import ITunesProvider
+from beetsplug.noqlenmeta.providers.specs import ITUNES_SPEC
 
 FIXTURES = Path(__file__).parent / "fixtures" / "itunes"
 COLLECTION_ID = 1097861387
@@ -266,4 +267,8 @@ def test_storefront_must_be_two_ascii_letters(storefront: str) -> None:
 
 
 def test_itunes_provider_satisfies_metadata_provider_contract() -> None:
-    assert isinstance(ITunesProvider(request_json=Requests()), MetadataProvider)
+    provider = ITunesProvider(request_json=Requests())
+
+    assert isinstance(provider, MetadataProvider)
+    assert provider.name == ITUNES_SPEC.name
+    assert provider.supported_fields is ITUNES_SPEC.supported_fields
