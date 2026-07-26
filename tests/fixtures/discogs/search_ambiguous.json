@@ -1,0 +1,18 @@
+{
+  "results": [
+    {
+      "id": 123456,
+      "type": "release",
+      "title": "Synthetic Artist - Synthetic Album",
+      "year": "2024",
+      "catno": "SYN-001"
+    },
+    {
+      "id": 123457,
+      "type": "release",
+      "title": "Synthetic Artist - Synthetic Album",
+      "year": "2024",
+      "catno": "SYN-002"
+    }
+  ]
+}

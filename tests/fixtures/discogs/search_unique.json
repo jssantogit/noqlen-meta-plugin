@@ -1,0 +1,12 @@
+{
+  "results": [
+    {
+      "id": 123456,
+      "type": "release",
+      "title": "Synthetic Artist - Synthetic Album",
+      "year": "2024",
+      "barcode": ["012345678901"],
+      "catno": "SYN-001"
+    }
+  ]
+}

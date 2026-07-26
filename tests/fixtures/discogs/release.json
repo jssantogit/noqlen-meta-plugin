@@ -1,0 +1,26 @@
+{
+  "id": 123456,
+  "title": "Synthetic Album",
+  "artists_sort": "Synthetic Artist",
+  "genres": ["Electronic", "Rock", "Electronic", ""],
+  "styles": ["Ambient", "Experimental"],
+  "labels": [
+    {"name": "Synthetic Records", "catno": "SYN-001"},
+    {"name": "Second Label", "catno": "ALT 002"},
+    {"name": "Synthetic Records", "catno": "none"},
+    {"name": "", "catno": "NONE"}
+  ],
+  "identifiers": [
+    {"type": "Barcode", "value": "0123 4567 8901"},
+    {"type": "Barcode", "value": "012345678902"},
+    {"type": "Matrix / Runout", "value": "SYN-001-A"},
+    {"type": "Barcode", "value": "0123 4567 8901"}
+  ],
+  "country": "UK",
+  "year": 2024,
+  "formats": [
+    {"name": "Vinyl", "qty": "1", "descriptions": ["LP", "Album"]},
+    {"name": "Vinyl", "qty": "1", "descriptions": ["Limited Edition", "Album"]}
+  ],
+  "uri": "https://www.discogs.com/release/123456-Synthetic-Release"
+}

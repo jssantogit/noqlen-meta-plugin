@@ -2,64 +2,50 @@
 
 ## State
 
-Block 002 defines the first production metadata domain and provider boundary. The package still has
-no network behavior, concrete provider, resolver, or beets enrichment hook.
-
-The project is an external beets plugin named `noqlenmeta`. Beets remains responsible for candidate matching and import flow. Noqlen Meta is intended to enrich the selected release by gathering field-level candidates from multiple providers, resolving those candidates according to authority/confidence policy, preserving provenance, and exposing reviewable changes before eventual writes.
+Block 003 adds the first production provider, `DiscogsProvider`, on top of the unchanged Block 002
+domain/provider contracts. The package still has no beets configuration/lifecycle integration,
+resolver, field authority, persistence, or writes.
 
 ## Completed
 
-- Repository identity and project direction documented.
-- External beets plugin package scaffolded under `beetsplug/noqlenmeta`.
-- Python packaging and baseline development dependencies defined.
-- Noqlen Playbook agent contract added.
-- Real-first, fixture-backed provider policy documented.
-- Initial architecture decision recorded.
-- Baseline CI, lint, test, and contamination checks defined.
-- Immutable album-level `ReleaseEnrichmentContext` with generic `ExternalIdentifier` values.
-- Validated field-level `MetadataCandidate` with structured scalar/multi-value data, source details,
-  and inclusive `0.0..1.0` confidence.
-- Synchronous `MetadataProvider` protocol and minimal `ProviderError` boundary.
-- Offline focused contract tests using synthetic values.
+- Optional `python3-discogs-client>=2.8,<3` runtime extra, also installed by development extras.
+- ADR 0002 documenting the maintained client, no hand-written HTTP client, personal token first, and
+  the provider boundary.
+- Exact direct lookup for one positive numeric `discogs.release` identifier without requiring search
+  authentication.
+- Personal-token authenticated structured release search, bounded to 10 results on page one.
+- Conservative exact normalized artist/title selection, optional year exclusion, and unique
+  barcode/catalog-number strengthening.
+- Concrete release fetch before normalization and candidate provenance.
+- Native Discogs genres/styles; all meaningful labels, catalog numbers, and Barcode identifiers;
+  country, year, media, and format descriptions.
+- Fixed provider-boundary errors, 5/10 second connect/read timeouts, and normal client backoff.
+- Sanitized release/search fixtures and deterministic offline tests of the production adapter.
 
 ## Important decisions
 
-- Prefer an external beets plugin over a beets fork.
-- Do not replace the beets matcher in the initial scope.
-- Treat provider integration as enrichment after release identification.
-- Implement real production adapters directly; use sanitized fixtures for deterministic default tests.
-- Keep live network tests opt-in.
-- Never use real music-library data in automated tests.
-- Keep release context album-level and limited to artist/title plus practical search hints.
-- Represent future provider IDs as namespaced values instead of adding provider-specific fields.
-- Require candidates to identify a provider source record; defer authority and cross-provider
-  confidence interpretation.
+- Malformed, non-positive, or multiple `discogs.release` identifiers return no metadata rather than
+  falling back to a weaker search.
+- Search no-match and ambiguity return `()`; service/client/network failures raise `ProviderError`.
+- Confidence is local release-selection confidence: direct `0.98`, uniquely identifier-strengthened
+  search `0.92`, and unique artist/title/year search `0.82`. All fields from one release share it.
+- No controlled search relaxation is implemented because returning no metadata is safer and keeps
+  selection explainable.
+- The optional dependency is imported only by the Discogs provider module, not generic contracts.
 
-## Not implemented
+## Deferred
 
-- Provider adapters.
-- Field authority.
-- Cross-provider confidence calibration.
-- Resolver.
-- Provenance storage.
-- Import hooks or enrichment commands.
-- Dry-run/review user experience.
+- Beets configuration and lifecycle wiring, including secure token delivery.
+- OAuth, consumer credentials, interactive authentication, and token persistence.
+- Resolver, field authority, confidence calibration across providers, and provenance persistence.
+- Caching, Master Release/original-year lookup, track enrichment, cover art, and other providers.
+- Live API smoke coverage. Default tests remain fixture-backed and offline.
+- Before public release/documentation, account for current Discogs API attribution and usage
+  requirements; retained public `source_url` values support future provenance and attribution.
 
 ## Recommended next block
 
-Implement a **Discogs album-level enrichment adapter** as Block 003. It is a useful proof of the
-contract because it can use artist/title, year, barcode, catalog number, and external IDs to produce
-structured candidates such as label, genres/styles, country, and related release metadata without
-changing beets matching.
-
-Keep the adapter production-first and fixture-backed: use a narrow private HTTP boundary, sanitized
-representative response fixtures, deterministic default tests, opt-in live checks only if scoped,
-and `ProviderError` translation for client/service failures.
-
-Suggested scope decisions for Block 003:
-
-- Discogs authentication/configuration boundary and dependency choice.
-- Release search/lookup strategy using `ReleaseEnrichmentContext`.
-- Normalization into existing `MetadataCandidate` values only.
-- Sanitized fixture tests for success, no-match, malformed response, and service failure.
-- No resolver, authority policy, persistence, or beets lifecycle integration.
+Block 004 should be the narrow beets configuration and lifecycle integration slice that constructs a
+`ReleaseEnrichmentContext`, supplies the Discogs personal token to this provider, and invokes it at a
+reviewable album-level point. Keep resolver/field-authority policy and metadata writes out unless
+they are separately scoped.

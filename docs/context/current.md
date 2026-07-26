@@ -14,42 +14,44 @@ Use `tiny` by default and `standard` for non-trivial feature blocks. Use `full` 
 
 ## Tool Mode
 
-`combo` for Block 002: OpenCode native capabilities, Serena for targeted symbol/navigation work,
+`combo` for Block 003: OpenCode native capabilities, Serena for targeted symbol/navigation work,
 and RTK for noisy shell commands.
 
 ## Active block
 
-None. Block 002 - Metadata Domain Model + Provider Contract is complete and validated; it is closed
-by commit `feat: add metadata domain and provider contract`.
+Block 003 - Discogs Album Enrichment Provider.
 
 ## Active spec
 
-`docs/specs/002-metadata-domain-provider-contract/`
+`docs/specs/003-discogs-provider/`
 
 ## Active ADRs
 
 - `docs/adr/0001-external-beets-plugin.md`
+- `docs/adr/0002-python3-discogs-client.md`
 
 ## Allowed files
 
-Block 002 was limited to domain/provider contract modules, focused tests, its spec, and context
-handoff documents.
+Discogs provider implementation, its optional dependency, focused fixtures/tests, ADR 0002, Block
+003 specs, and context/handoff documents.
 
 ## Forbidden files
 
-Concrete providers, resolver/authority behavior, persistence, beets hooks, unrelated project files,
-local agent/tool configuration, and real user-library data.
+Block 002 contract redesign, resolver/authority behavior, persistence, beets hooks/configuration,
+OAuth, caching, Master Release lookup, other providers, unrelated files, local tool configuration,
+and real user-library data.
 
 ## Non-goals
 
 - Do not fork or patch beets core as part of the current project direction.
 - Do not replace beets matching in the initial product scope.
-- Do not implement providers without an active scoped block.
+- Do not expand the provider into beets lifecycle or resolver behavior.
 - Do not use a real music library in automated tests.
 
 ## Behavior budget
 
-The package now defines inert production contracts only. It performs no enrichment or network I/O.
+One synchronous production Discogs adapter may perform direct release lookup or one bounded search
+and concrete release fetch. It only returns normalized candidates and performs no writes.
 
 ## Validation
 
@@ -59,13 +61,15 @@ Baseline repository validation:
 ruff check .
 pytest
 python scripts/check_repo_contamination.py
+git diff --check
 ```
 
 ## Done when
 
-The immutable release context, validated metadata candidate, provider protocol, provider error,
-focused tests, specs, and handoff are committed after baseline validation passes.
+The production provider, optional dependency/ADR, fixture-backed tests, specs, and handoff are
+committed after baseline validation passes.
 
 ## Stop condition
 
-Stop after Block 002. Do not begin a concrete provider until Block 003 is explicitly scoped.
+Stop after Block 003. Do not begin beets lifecycle integration, resolver behavior, or another
+provider.
