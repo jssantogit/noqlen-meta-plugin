@@ -2,39 +2,39 @@
 
 ## State
 
-Block 010 inserts an immutable, read-only `BeetsTargetPlan` after the canonical `ChangePlan`. The real
-import flow analyzes whether planned changes fit current `AlbumInfo` fields losslessly and renders a
-target-oriented preview while selected import state remains unchanged.
+Block 011 adds an explicit default-off, strict application gate after `BeetsTargetPlan`. With
+`apply: true`, a fully lossless and review-free plan may mutate only the selected `AlbumInfo`; the
+listener then returns and normal beets duplicate/apply/add/file lifecycle continues.
 
 ## Completed
 
-- Exact beets targets and list/scalar shapes are declared in one immutable mapping table.
-- Genres, country, year, and one-value style/label/catalog/barcode/media changes map losslessly.
-- Multi-value to singular changes and unsupported fields become explicit mapping blockers.
-- Malformed known-field shapes raise `BeetsMappingError` and are not treated as provider failures.
-- Mapped changes and blockers retain the original `PlannedChange` and full candidate provenance.
-- Target-plan categories and preview output are deterministic and resolver reviews remain visible.
-- Real `AlbumInfo` compatibility is covered without mutating a music library.
-- Existing providers, authority, confidence, failure isolation, one resolver pass, and read-only import
-  snapshots remain unchanged.
+- `apply` defaults false and remains independent from preview.
+- Canonical target-plan integrity and selected metadata `before` values are revalidated.
+- Any resolver review or mapping blocker causes zero Noqlen application.
+- All values and unique targets are validated/materialized before selected-info mutation.
+- Genre tuples become fresh lists; scalar values retain their validated shape.
+- Successful application invalidates `raw_data` and `item_data` caches.
+- The listener mutates no Items or Albums and invokes no downstream beets lifecycle method.
+- A focused in-memory handoff proves later normal `task.apply_metadata()` consumes enrichment.
+- Provider failures remain isolated while internal application errors propagate.
 
 ## Important decisions
 
-- `ChangePlan` remains canonical; `BeetsTargetPlan` describes only lossless target representation.
-- A fully mapped plan is not writable, applicable, or approved.
-- Multi-values are never silently collapsed or delimiter-serialized into singular beets fields.
-- The target plan keeps genres as an immutable tuple; future list materialization is deferred.
-- Candidate provenance is retained by structure and is not duplicated or persisted.
-- No metadata, database, tags, files, plans, or provenance are written.
+- Application permission requires explicit configuration plus a review-free, blocker-free plan.
+- No partial application, hidden coercion, selection, dropping, or delimiter serialization exists.
+- Only selected `AlbumInfo` mapped fields are changed; beets owns all later persistence effects.
+- Hook placement precedes duplicate resolution. Default `albumartist album` keys are unchanged by
+  current targets, while configured custom duplicate keys may observe enrichment.
+- `apply: true` is a real feature because normal beets import may later persist enriched values.
 
 ## Deferred
 
-- Pre-apply safety checks, metadata application, partial-application policy, and provenance persistence.
+- Partial-application policy and provenance persistence.
 - `beet noqlenmeta` and preferred `beet nm` alias.
 - Confidence calibration, artwork, previews, lyrics, and additional provider adapters.
 
 ## Recommended next block
 
-After independent Block 010 review, Block 011 may define the first explicit opt-in application boundary
-for losslessly mapped changes. Plans with resolver reviews or mapping blockers require a separately
-reviewed protection policy before any write path is allowed.
+After independent Block 011 review and real-behavior inspection, consider either a separately reviewed
+partial-application policy or an application UX/CLI boundary. Do not automatically add a provider or
+CLI before auditing this mutation behavior.

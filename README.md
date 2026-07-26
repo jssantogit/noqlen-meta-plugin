@@ -19,14 +19,19 @@ ChangePlan
     ↓
 BeetsTargetPlan
     ↓
-read-only target preview
+strict application gate
+    ↓
+selected AlbumInfo mutation
+    ↓
+normal beets lifecycle
 ```
 
 `ChangePlan` describes what Noqlen would change and what still requires review. It does not write
 metadata. `BeetsTargetPlan` then determines whether each canonical change can be represented by the
 current beets `AlbumInfo` model without information loss. Noqlen maps canonical values to beets only
 when the mapping is lossless. Multi-value metadata is not silently collapsed into singular beets
-fields.
+fields. With explicit application enabled, a review-free and fully lossless target plan may enrich
+only the selected `AlbumInfo`; beets then remains responsible for its normal import lifecycle.
 
 ```text
 genres = [Rock, Metal]          -> genres (lossless)
@@ -65,6 +70,7 @@ plugins:
 
 noqlenmeta:
   preview: true
+  apply: false
 
   fields:
     genres: true
@@ -98,6 +104,18 @@ release year metadata exposed with defensible semantics. Field Authority determi
 both providers return a candidate; higher provider-local confidence alone does not override a more
 authoritative source.
 
+`apply` is `false` by default. With `apply: false`, Noqlen never mutates the selected release. With
+`apply: true`, Noqlen may enrich the selected `AlbumInfo` only when the entire target plan is
+lossless and has no resolver review. Any mapping blocker or resolver `REVIEW` means zero Noqlen
+application; partial application is not supported. `preview` and `apply` are independent, so preview
+can be disabled without disabling application and preview output never implies application.
+
+Noqlen does not directly mutate Items or Albums, add library records, write tags, or move/copy files.
+After selected-release enrichment, normal beets import behavior determines Item application,
+database persistence, file handling, and tag writing. Consequently, `apply: true` is a real metadata
+application feature: the normal import can persist enriched values to the beets library and,
+depending on beets configuration, file metadata.
+
 Field Authority expresses provider preference and ordering for each field. Provider Capabilities
 describe the fields each current adapter can actually produce. An enabled provider is contacted only
 when its capabilities intersect both enabled user fields and its Field Authority entries; authority
@@ -118,11 +136,13 @@ number, or barcode metadata.
 The pre-release `noqlenmeta.discogs` configuration from Block 004 has been replaced rather than
 retained as a parallel schema. Move its values under `noqlenmeta.providers.discogs`.
 
-The target-plan preview is read-only and normal beets metadata application continues unchanged:
+The target-plan preview reports application state while normal beets metadata application continues
+unchanged:
 
 ```text
 Noqlen Meta / beets target plan:
 
+  application: disabled (preview only)
   planned changes: 1
   losslessly mapped: 1
   mapping blockers: 0
@@ -145,7 +165,8 @@ Noqlen Meta / beets target plan:
 
 The plugin resolves Discogs and iTunes candidates against selected-release metadata, translates
 `KEEP`/`PROPOSE`/`REVIEW`/`SKIP` decisions into an immutable `ChangePlan`, maps planned changes into
-an immutable `BeetsTargetPlan`, and previews target fields or mapping blockers during import. The
-flow remains read-only; application and persistence are not implemented.
+an immutable `BeetsTargetPlan`, and previews target fields or mapping blockers during import. Its
+first explicit opt-in application boundary can mutate only the selected `AlbumInfo` under strict,
+all-or-nothing safety checks; downstream application and persistence remain normal beets behavior.
 
 See `docs/context/current.md` and `docs/context/handoff.md` before starting a development block.

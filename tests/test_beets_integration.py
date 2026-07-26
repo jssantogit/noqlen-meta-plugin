@@ -5,12 +5,15 @@ from types import SimpleNamespace
 
 import pytest
 from beets import config
-from beets.autotag.hooks import AlbumInfo
+from beets.autotag import AlbumMatch
+from beets.autotag.hooks import AlbumInfo, TrackInfo
 from beets.importer.actions import Action
 from beets.importer.tasks import ImportTask
+from beets.library import Item
 
 import beetsplug.noqlenmeta as plugin_module
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
+from beetsplug.noqlenmeta.beets_application import BeetsApplicationError
 from beetsplug.noqlenmeta.beets_mapping import BeetsMappingError
 from beetsplug.noqlenmeta.changeplan import ChangePlanError
 from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
@@ -52,7 +55,8 @@ def album_info(**overrides: object) -> AlbumInfo:
         "album": "Selected Album",
     }
     values.update(overrides)
-    return AlbumInfo([], **values)
+    tracks = values.pop("tracks", [])
+    return AlbumInfo(tracks, **values)  # type: ignore[arg-type]
 
 
 def import_task(info: AlbumInfo, choice: Action = Action.APPLY) -> ImportTask:
@@ -81,6 +85,7 @@ def configure_enabled(
     plugin: NoqlenMetaPlugin,
     *,
     preview: bool = True,
+    apply: bool = False,
     fields: dict[str, bool] | None = None,
     discogs: bool = True,
     itunes: bool = False,
@@ -89,6 +94,7 @@ def configure_enabled(
     plugin.config.set(
         {
             "preview": preview,
+            "apply": apply,
             "fields": fields or {},
             "providers": {
                 "discogs": {"enabled": discogs, "user_token": TOKEN},
@@ -102,6 +108,7 @@ def test_configuration_defaults_and_redacts_user_token() -> None:
     plugin = NoqlenMetaPlugin()
 
     assert plugin.config["preview"].get(bool) is True
+    assert plugin.config["apply"].get(bool) is False
     assert all(plugin.config["fields"][field].get(bool) for field in DISCOGS_FIELDS)
     assert all(not plugin.config["fields"][field].get(bool) for field in FUTURE_FIELDS)
     assert plugin.config["providers"]["discogs"]["enabled"].get(bool) is False
@@ -448,7 +455,7 @@ def test_both_providers_feed_one_resolver_pass_and_discogs_authority_wins(
     monkeypatch.setattr("beetsplug.noqlenmeta.map_change_plan_to_beets", record_mapping)
     monkeypatch.setattr(
         "beetsplug.noqlenmeta.render_beets_target_plan",
-        lambda plan: rendered.append(plan),
+        lambda plan, application_result: rendered.append(plan),
     )
     plugin = NoqlenMetaPlugin()
     configure_enabled(plugin, discogs=True, itunes=True, storefront="gb")
@@ -615,6 +622,23 @@ def test_beets_mapping_error_is_not_swallowed(monkeypatch: pytest.MonkeyPatch) -
         plugin._import_task_choice(None, import_task(album_info()))
 
 
+def test_beets_application_error_is_not_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (candidate(),),
+    )
+    monkeypatch.setattr(
+        "beetsplug.noqlenmeta.apply_beets_target_plan",
+        lambda info, plan: (_ for _ in ()).throw(BeetsApplicationError("unsafe plan")),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, apply=True)
+
+    with pytest.raises(BeetsApplicationError, match="unsafe plan"):
+        plugin._import_task_choice(None, import_task(album_info()))
+
+
 @pytest.mark.parametrize(
     ("choice", "is_album"),
     [
@@ -724,6 +748,7 @@ def test_preview_is_visible_and_selected_info_remains_unchanged(
     assert task.items == items_snapshot
     assert len(output) == 1
     assert "Noqlen Meta / beets target plan:" in output[0]
+    assert "application: disabled (preview only)" in output[0]
     assert "planned changes: 1" in output[0]
     assert "losslessly mapped: 1" in output[0]
     assert "mapping blockers: 0" in output[0]
@@ -812,10 +837,242 @@ def test_preview_disabled_suppresses_candidate_output(monkeypatch: pytest.Monkey
     monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
     plugin = NoqlenMetaPlugin()
     configure_enabled(plugin, preview=False)
+    info = album_info()
 
-    plugin._import_task_choice(None, import_task(album_info()))
+    plugin._import_task_choice(None, import_task(info))
 
     assert output == []
+    assert info.genres is None
+
+
+def test_apply_true_mutates_only_selected_album_info_and_never_calls_task_apply_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output: list[str] = []
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (candidate(),),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, apply=True)
+    tracks: list[object] = [object()]
+    info = album_info(
+        tracks=tracks,
+        album_id="mb-release",
+        releasegroup_id="mb-release-group",
+        discogs_albumid="123456",
+        data_source="MusicBrainz",
+    )
+    item = Item(
+        title="Original Track",
+        album="Original Album",
+        albumartist="Original Artist",
+        genres=["Existing"],
+    )
+    task = import_task(info)
+    task.items.append(item)
+    match_snapshot = task.match
+    items_snapshot = task.items
+    item_snapshot = copy.deepcopy(dict(item))
+    identity_snapshot = {
+        field: info[field]
+        for field in (
+            "album",
+            "artist",
+            "album_id",
+            "releasegroup_id",
+            "discogs_albumid",
+            "data_source",
+        )
+    }
+
+    def reject_direct_application() -> None:
+        pytest.fail("Noqlen must not call task.apply_metadata()")
+
+    monkeypatch.setattr(task, "apply_metadata", reject_direct_application)
+
+    plugin._import_task_choice(None, task)
+
+    assert info.genres == ["Electronic", "Rock"]
+    assert dict(item) == item_snapshot
+    assert task.choice_flag is Action.APPLY
+    assert task.match is match_snapshot
+    assert task.items is items_snapshot
+    assert task.items == [item]
+    assert info.tracks is tracks
+    assert {field: info[field] for field in identity_snapshot} == identity_snapshot
+    assert "application: applied to selected release (1 fields)" in output[0]
+
+
+def test_preview_false_does_not_disable_application(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    output: list[str] = []
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (candidate(),),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, preview=False, apply=True)
+    info = album_info()
+
+    with caplog.at_level(logging.INFO, logger="beets.noqlenmeta"):
+        plugin._import_task_choice(None, import_task(info))
+
+    assert output == []
+    assert info.genres == ["Electronic", "Rock"]
+    assert "prepared 1 selected-release metadata field(s) for beets application" in caplog.text
+
+
+def test_apply_true_with_nothing_to_change_reports_no_changes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output: list[str] = []
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (candidate(value=("Rock",)),),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, apply=True)
+    info = album_info(genres=["Rock"])
+
+    plugin._import_task_choice(None, import_task(info))
+
+    assert info.genres == ["Rock"]
+    assert "application: no changes" in output[0]
+    assert "unchanged: 1" in output[0]
+
+
+def test_apply_true_with_mapping_blocker_applies_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output: list[str] = []
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (
+            candidate("genres", ("Rock",)),
+            candidate("labels", ("Label A", "Label B")),
+        ),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, apply=True)
+    info = album_info()
+
+    plugin._import_task_choice(None, import_task(info))
+
+    assert info.genres is None
+    assert info.label is None
+    assert "application: blocked" in output[0]
+    assert "mapping blockers: 1" in output[0]
+
+
+def test_preview_false_logs_blocked_application(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (
+            candidate("genres", ("Rock",)),
+            candidate("labels", ("Label A", "Label B")),
+        ),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, preview=False, apply=True)
+    info = album_info()
+
+    with caplog.at_level(logging.WARNING, logger="beets.noqlenmeta"):
+        plugin._import_task_choice(None, import_task(info))
+
+    assert info.genres is None
+    assert info.label is None
+    assert "application blocked by unresolved review or target mapping" in caplog.text
+
+
+def test_apply_true_with_resolution_review_applies_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (
+            candidate("genres", ("Rock",)),
+            candidate("labels", ("New Label",)),
+        ),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, apply=True)
+    info = album_info(label="Existing Label")
+
+    plugin._import_task_choice(None, import_task(info))
+
+    assert info.genres is None
+    assert info.label == "Existing Label"
+
+
+def test_provider_failure_allows_strict_fallback_application(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (_ for _ in ()).throw(ProviderError("unavailable")),
+    )
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_itunes_candidates",
+        lambda self, context, storefront: (
+            candidate(value=("Alternative",), provider="itunes"),
+        ),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, apply=True, discogs=True, itunes=True)
+    info = album_info()
+
+    with caplog.at_level(logging.WARNING, logger="beets.noqlenmeta"):
+        plugin._import_task_choice(None, import_task(info))
+
+    assert "Discogs enrichment unavailable" in caplog.text
+    assert info.genres == ["Alternative"]
+
+
+def test_normal_later_beets_application_consumes_enriched_selected_info(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (candidate(value=("Rock", "Metal")),),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, apply=True)
+    item = Item(title="Original Track", genres=[])
+    track = TrackInfo(title="Matched Track", index=1, artist="Track Artist")
+    info = album_info(tracks=[track])
+    match = AlbumMatch(None, info, {item: track})  # type: ignore[arg-type]
+    task = ImportTask(None, [], [item])
+    task.choice_flag = Action.APPLY
+    task.match = match
+
+    plugin._import_task_choice(None, task)
+
+    assert info.genres == ["Rock", "Metal"]
+    assert item.genres == []
+
+    task.apply_metadata()
+
+    assert item.genres == ["Rock", "Metal"]
 
 
 def test_preview_removes_provider_control_characters(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -6,7 +6,7 @@ import os
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from beets import ui
 from beets.autotag.hooks import AlbumInfo
@@ -28,6 +28,9 @@ from beetsplug.noqlenmeta.resolver import (
     ResolutionPolicy,
     default_resolution_policy,
 )
+
+if TYPE_CHECKING:
+    from beetsplug.noqlenmeta.beets_application import BeetsApplicationResult
 
 _DISCOGS_RELEASE_NAMESPACE = "discogs.release"
 _DISCOGS_TOKEN_ENV = "NOQLENMETA_DISCOGS_TOKEN"
@@ -134,12 +137,27 @@ def eligible_album_info(task: object) -> AlbumInfo | None:
     return album_info if isinstance(album_info, AlbumInfo) else None
 
 
-def render_beets_target_plan(plan: BeetsTargetPlan) -> None:
-    """Print a safe, target-aware description of the read-only mapping plan."""
+def render_beets_target_plan(
+    plan: BeetsTargetPlan,
+    application_result: BeetsApplicationResult | None = None,
+) -> None:
+    """Print a safe target plan and truthful selected-release application state."""
     source = plan.source
+    if application_result is None:
+        application_status = "disabled (preview only)"
+    elif application_result.is_blocked:
+        application_status = "blocked"
+    elif application_result.has_applied_changes:
+        application_status = (
+            "applied to selected release "
+            f"({len(application_result.applied_changes)} fields)"
+        )
+    else:
+        application_status = "no changes"
     lines = [
         "Noqlen Meta / beets target plan:",
         "",
+        f"  application: {application_status}",
         f"  planned changes: {len(source.changes)}",
         f"  losslessly mapped: {len(plan.mapped_changes)}",
         f"  mapping blockers: {len(plan.blocked_changes)}",

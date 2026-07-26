@@ -4,6 +4,7 @@ from collections.abc import Callable, Sequence
 
 from beets.plugins import BeetsPlugin
 
+from beetsplug.noqlenmeta.beets_application import apply_beets_target_plan
 from beetsplug.noqlenmeta.beets_mapping import map_change_plan_to_beets
 from beetsplug.noqlenmeta.changeplan import build_change_plan
 from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
@@ -51,6 +52,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         self.config.add(
             {
                 "preview": True,
+                "apply": False,
                 "fields": _FIELD_DEFAULTS,
                 "providers": {
                     "discogs": {
@@ -115,8 +117,28 @@ class NoqlenMetaPlugin(BeetsPlugin):
         decisions = resolve_metadata(current_values, candidates, policy)
         change_plan = build_change_plan(decisions)
         target_plan = map_change_plan_to_beets(change_plan)
-        if decisions and self.config["preview"].get(bool):
-            render_beets_target_plan(target_plan)
+        application_result = None
+        apply_enabled = self.config["apply"].get(bool)
+        if apply_enabled:
+            application_result = apply_beets_target_plan(album_info, target_plan)
+        if self.config["preview"].get(bool):
+            render_beets_target_plan(target_plan, application_result)
+        elif apply_enabled and application_result is not None:
+            if application_result.is_blocked:
+                self._log.warning(
+                    "Noqlen Meta: application blocked by unresolved review or target mapping"
+                )
+            elif application_result.has_applied_changes:
+                self._log.info(
+                    "Noqlen Meta: prepared {} selected-release metadata field(s) "
+                    "for beets application",
+                    len(application_result.applied_changes),
+                )
+            else:
+                self._log.info(
+                    "Noqlen Meta: no selected-release metadata changes prepared "
+                    "for beets application"
+                )
 
     def _collect_provider_candidates(
         self,
