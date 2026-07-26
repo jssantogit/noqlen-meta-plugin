@@ -6,8 +6,6 @@ Noqlen Meta is a beets plugin focused on enriching an already identified release
 
 ## Project direction
 
-The intended flow is:
-
 ```text
 beets candidate matching
         ↓
@@ -34,19 +32,29 @@ This repository follows the Noqlen Playbook workflow:
 Plan → Block → Prompt → Tool Mode → Implement → Validate → Audit → Fix → Commit → Handoff → Next block
 ```
 
-Development uses a fast integration path for external providers:
+For provider integrations, this project uses the repository's **real-first, fixture-backed** fast path. Production adapters are implemented directly, external I/O stays behind narrow boundaries, representative real responses may be sanitized into fixtures, normal tests remain offline and deterministic, live tests are opt-in, and failure-only mocks are used where reproducing failures against a real service would be wasteful or unsafe.
 
-1. Implement the production adapter directly.
-2. Keep network I/O behind a narrow boundary.
-3. Validate representative behavior against the real service when appropriate.
-4. Store sanitized representative responses as fixtures.
-5. Run normal automated tests against fixtures, without requiring network access.
-6. Keep live integration tests opt-in.
-7. Mock only failure conditions that are impractical or unsafe to reproduce against a real service.
-8. Never use a real music library in automated tests.
+Automated tests must never use a real music library.
+
+## Development setup
+
+```bash
+python -m venv .venv
+python -m pip install -e ".[dev]"
+pytest
+ruff check .
+python scripts/check_repo_contamination.py
+```
+
+Enable the plugin in a beets configuration after installing it into the same Python environment:
+
+```yaml
+plugins:
+  - noqlenmeta
+```
 
 ## Current status
 
-Repository bootstrap. No metadata provider or production enrichment behavior is implemented yet.
+Project foundation only. The plugin package can be imported by beets, but no metadata provider or enrichment behavior is implemented yet.
 
-See `docs/context/current.md` for the active block and `docs/specs/001-project-foundation/` for the initial specification.
+See `docs/context/current.md` and `docs/context/handoff.md` before starting a development block.
