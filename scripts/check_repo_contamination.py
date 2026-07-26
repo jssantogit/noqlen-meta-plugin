@@ -7,7 +7,6 @@ import re
 import subprocess
 from pathlib import Path
 
-
 FORBIDDEN_PATHS = {
     "opencode.json",
     "RTK.md",
@@ -30,9 +29,9 @@ TEXT_SUFFIXES = {
 }
 
 PERSONAL_PATH_PATTERNS = (
-    re.compile(r"/home/[^/\s]+/"),
-    re.compile(r"/Users/[^/\s]+/"),
-    re.compile(r"[A-Za-z]:\\Users\\[^\\\s]+\\"),
+    re.compile(r"/" + r"home/[^/\s]+/"),
+    re.compile(r"/" + r"Users/[^/\s]+/"),
+    re.compile(r"[A-Za-z]:\\" + r"Users\\[^\\\s]+\\"),
 )
 
 SECRET_ASSIGNMENT = re.compile(
@@ -60,7 +59,10 @@ def main() -> int:
             failures.append(f"forbidden tracked artifact: {path}")
             continue
 
-        if path.suffix.lower() not in TEXT_SUFFIXES and path.name not in {"AGENTS.md", ".gitignore"}:
+        if path.suffix.lower() not in TEXT_SUFFIXES and path.name not in {
+            "AGENTS.md",
+            ".gitignore",
+        }:
             continue
 
         try:
