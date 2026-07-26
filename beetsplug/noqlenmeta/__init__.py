@@ -29,6 +29,7 @@ _FIELD_DEFAULTS = {
     "synced_lyrics": False,
     "cover": False,
 }
+_ITUNES_FIELDS = ("genres", "year")
 
 
 class NoqlenMetaPlugin(BeetsPlugin):
@@ -45,6 +46,10 @@ class NoqlenMetaPlugin(BeetsPlugin):
                         "enabled": False,
                         "user_token": "",
                     },
+                    "itunes": {
+                        "enabled": False,
+                        "storefront": "us",
+                    },
                 },
             }
         )
@@ -58,27 +63,56 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
         policy = resolution_policy_from_settings(
             {field: self.config["fields"][field].get(bool) for field in _FIELD_DEFAULTS},
-            {"discogs": self.config["providers"]["discogs"]["enabled"].get(bool)},
+            {
+                provider: self.config["providers"][provider]["enabled"].get(bool)
+                for provider in ("discogs", "itunes")
+            },
         )
-        if not policy.provider_can_contribute("discogs"):
+        itunes_can_contribute = policy.provider_can_contribute("itunes") and any(
+            policy.is_field_enabled(field)
+            and policy.authority_rank(field, "itunes") is not None
+            for field in _ITUNES_FIELDS
+        )
+        if not policy.provider_can_contribute("discogs") and not itunes_can_contribute:
             return
 
         context = context_from_album_info(album_info)
         if context is None:
-            self._log.debug("Discogs preview skipped: selected release has no album identity")
+            self._log.debug("Noqlen Meta preview skipped: selected release has no album identity")
             return
 
         current_values = current_values_from_album_info(album_info)
-        token = resolve_discogs_token(
-            self.config["providers"]["discogs"]["user_token"].as_str()
-        )
-        try:
-            candidates = self._discogs_candidates(context, token)
-        except ProviderError:
-            self._log.warning("Noqlen Meta: Discogs enrichment unavailable; import will continue")
-            return
+        candidates: list[MetadataCandidate] = []
+        if policy.provider_can_contribute("discogs"):
+            token = resolve_discogs_token(
+                self.config["providers"]["discogs"]["user_token"].as_str()
+            )
+            try:
+                discogs_candidates = self._discogs_candidates(context, token)
+            except ProviderError:
+                self._log.warning(
+                    "Noqlen Meta: Discogs enrichment unavailable; import will continue"
+                )
+            else:
+                self._log.debug(
+                    "Discogs enrichment returned {} candidate fields", len(discogs_candidates)
+                )
+                candidates.extend(discogs_candidates)
 
-        self._log.debug("Discogs enrichment returned {} candidate fields", len(candidates))
+        if itunes_can_contribute:
+            storefront = self.config["providers"]["itunes"]["storefront"].as_str()
+            try:
+                itunes_candidates = self._itunes_candidates(context, storefront)
+            except ProviderError:
+                self._log.warning(
+                    "Noqlen Meta: iTunes enrichment unavailable; import will continue"
+                )
+            else:
+                self._log.debug(
+                    "iTunes enrichment returned {} candidate fields", len(itunes_candidates)
+                )
+                candidates.extend(itunes_candidates)
+
         decisions = resolve_metadata(current_values, candidates, policy)
         if decisions and self.config["preview"].get(bool):
             render_resolved_preview(decisions)
@@ -96,3 +130,10 @@ class NoqlenMetaPlugin(BeetsPlugin):
             raise
 
         return tuple(DiscogsProvider(token=token).get_candidates(context))
+
+    def _itunes_candidates(
+        self, context: ReleaseEnrichmentContext, storefront: str
+    ) -> tuple[MetadataCandidate, ...]:
+        from beetsplug.noqlenmeta.providers.itunes import ITunesProvider
+
+        return tuple(ITunesProvider(storefront=storefront).get_candidates(context))

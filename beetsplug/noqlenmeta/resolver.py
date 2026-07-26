@@ -168,7 +168,7 @@ _DISCOGS_FIELDS = frozenset(
 
 
 def default_resolution_policy() -> ResolutionPolicy:
-    """Return the initial operational policy; only Discogs is currently enabled."""
+    """Return the operational field policy with production providers disabled."""
 
     return ResolutionPolicy(
         field_rules={
@@ -179,7 +179,7 @@ def default_resolution_policy() -> ResolutionPolicy:
             )
             for field, authority in _DEFAULT_AUTHORITY.items()
         },
-        providers={"discogs": True},
+        providers={"discogs": False, "itunes": False},
     )
 
 

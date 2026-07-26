@@ -74,13 +74,30 @@ noqlenmeta:
     discogs:
       enabled: false
       user_token: ""
+
+    itunes:
+      enabled: false
+      storefront: "us"
 ```
 
-`fields` controls what Noqlen may enrich. `providers` controls where Noqlen may obtain metadata.
-Discogs enrichment is disabled by default. Set `providers.discogs.enabled: true` to preview resolved
-Discogs decisions after selecting an album match. A non-empty `NOQLENMETA_DISCOGS_TOKEN` takes
-precedence over `providers.discogs.user_token`; direct Discogs release-ID lookups do not require a
-token. Tokens are redacted and never included in preview output.
+`fields` controls what Noqlen may enrich. `providers` controls where Noqlen may obtain metadata. Both
+providers are disabled by default and can be enabled independently or simultaneously. Discogs is
+catalog- and edition-oriented. iTunes is currently a fallback only for the narrow album genre and
+release year metadata exposed with defensible semantics. Field Authority determines the winner when
+both providers return a candidate; higher provider-local confidence alone does not override a more
+authoritative source.
+
+Set `providers.discogs.enabled: true` to preview resolved Discogs decisions after selecting an album
+match. A non-empty `NOQLENMETA_DISCOGS_TOKEN` takes precedence over
+`providers.discogs.user_token`; direct Discogs release-ID lookups do not require a token. Tokens are
+redacted and never included in preview output.
+
+Set `providers.itunes.enabled: true` to use Apple's public iTunes Search API for album enrichment.
+`storefront` is a two-letter search territory such as `us`, `br`, `gb`, or `jp`. iTunes requests are
+bounded to at most 10 album search results, and direct collection-ID or UPC lookup is preferred when
+available. No API key is required. No artwork or previews are requested or consumed. iTunes store
+country is not treated as release-country metadata, and the provider does not claim label, catalog
+number, or barcode metadata.
 
 The pre-release `noqlenmeta.discogs` configuration from Block 004 has been replaced rather than
 retained as a parallel schema. Move its values under `noqlenmeta.providers.discogs`.
@@ -100,7 +117,7 @@ Noqlen Meta / resolved preview:
 
 ## Current status
 
-The plugin resolves Discogs candidates against selected-release metadata and previews
+The plugin resolves Discogs and iTunes candidates against selected-release metadata and previews
 `KEEP`/`PROPOSE`/`REVIEW`/`SKIP` decisions during import. The flow remains read-only; candidate
 application and persistence are not implemented.
 

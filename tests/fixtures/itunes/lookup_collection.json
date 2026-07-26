@@ -1,0 +1,16 @@
+{
+  "resultCount": 1,
+  "results": [
+    {
+      "wrapperType": "collection",
+      "collectionType": "Album",
+      "collectionId": 1097861387,
+      "artistName": "Radiohead",
+      "collectionName": "OK Computer",
+      "collectionViewUrl": "https://music.apple.com/us/album/ok-computer/1097861387?uo=4",
+      "country": "USA",
+      "releaseDate": "1997-05-21T07:00:00Z",
+      "primaryGenreName": "Alternative"
+    }
+  ]
+}

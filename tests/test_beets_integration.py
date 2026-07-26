@@ -62,13 +62,14 @@ def candidate(
     field: str = "genres",
     value: object = ("Electronic", "Rock"),
     confidence: float = 0.98,
+    provider: str = "discogs",
 ) -> MetadataCandidate:
     return MetadataCandidate(
         field=field,
         value=value,  # type: ignore[arg-type]
-        provider="discogs",
+        provider=provider,
         confidence=confidence,
-        source_id="123456",
+        source_id="123456" if provider == "discogs" else "1097861387",
     )
 
 
@@ -77,12 +78,18 @@ def configure_enabled(
     *,
     preview: bool = True,
     fields: dict[str, bool] | None = None,
+    discogs: bool = True,
+    itunes: bool = False,
+    storefront: str = "us",
 ) -> None:
     plugin.config.set(
         {
             "preview": preview,
             "fields": fields or {},
-            "providers": {"discogs": {"enabled": True, "user_token": TOKEN}},
+            "providers": {
+                "discogs": {"enabled": discogs, "user_token": TOKEN},
+                "itunes": {"enabled": itunes, "storefront": storefront},
+            },
         }
     )
 
@@ -95,6 +102,8 @@ def test_configuration_defaults_and_redacts_user_token() -> None:
     assert all(not plugin.config["fields"][field].get(bool) for field in FUTURE_FIELDS)
     assert plugin.config["providers"]["discogs"]["enabled"].get(bool) is False
     assert plugin.config["providers"]["discogs"]["user_token"].redact is True
+    assert plugin.config["providers"]["itunes"]["enabled"].get(bool) is False
+    assert plugin.config["providers"]["itunes"]["storefront"].as_str() == "us"
     assert "discogs" not in plugin.config.keys()
     assert plugin._import_task_choice in plugin._raw_listeners["import_task_choice"]
 
@@ -226,6 +235,29 @@ def test_settings_can_enable_provider_and_future_field_without_granting_authorit
     assert policy.authority_rank("mood", "discogs") is None
 
 
+def test_policy_provider_map_includes_both_production_providers_disabled_by_default() -> None:
+    policy = default_resolution_policy()
+
+    assert dict(policy.providers) == {"discogs": False, "itunes": False}
+
+
+@pytest.mark.parametrize(
+    ("provider_settings", "discogs_enabled", "itunes_enabled"),
+    [
+        ({"discogs": True, "itunes": False}, True, False),
+        ({"discogs": False, "itunes": True}, False, True),
+        ({"discogs": True, "itunes": True}, True, True),
+    ],
+)
+def test_providers_can_be_enabled_independently(
+    provider_settings: dict[str, bool], discogs_enabled: bool, itunes_enabled: bool
+) -> None:
+    policy = resolution_policy_from_settings({}, provider_settings)
+
+    assert policy.is_provider_enabled("discogs") is discogs_enabled
+    assert policy.is_provider_enabled("itunes") is itunes_enabled
+
+
 @pytest.mark.parametrize("missing", ["artist", "album"])
 def test_missing_required_selected_identity_skips_context(missing: str) -> None:
     assert context_from_album_info(album_info(**{missing: " "})) is None
@@ -269,6 +301,11 @@ def test_disabled_integration_does_not_invoke_provider(monkeypatch: pytest.Monke
         "_discogs_candidates",
         lambda self, context, token: pytest.fail("provider must remain disabled"),
     )
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_itunes_candidates",
+        lambda self, context, storefront: pytest.fail("provider must remain disabled"),
+    )
 
     NoqlenMetaPlugin()._import_task_choice(None, import_task(album_info()))
 
@@ -286,6 +323,195 @@ def test_enabled_provider_is_not_invoked_when_no_authoritative_field_is_enabled(
     plugin.config["fields"]["mood"].set(True)
 
     plugin._import_task_choice(None, import_task(album_info()))
+
+
+def test_itunes_is_not_invoked_when_only_styles_can_be_enriched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_itunes_candidates",
+        lambda self, context, storefront: pytest.fail("iTunes has no styles authority"),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(
+        plugin,
+        fields={field: field == "styles" for field in DISCOGS_FIELDS},
+        discogs=False,
+        itunes=True,
+    )
+
+    plugin._import_task_choice(None, import_task(album_info()))
+
+
+@pytest.mark.parametrize("field", ["labels", "catalog_numbers", "country", "media"])
+def test_itunes_is_not_invoked_for_authoritative_fields_it_does_not_emit(
+    monkeypatch: pytest.MonkeyPatch, field: str
+) -> None:
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_itunes_candidates",
+        lambda self, context, storefront: pytest.fail("iTunes cannot emit this field"),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(
+        plugin,
+        fields={known: known == field for known in DISCOGS_FIELDS},
+        discogs=False,
+        itunes=True,
+    )
+
+    plugin._import_task_choice(None, import_task(album_info()))
+
+
+def test_both_providers_feed_one_resolver_pass_and_discogs_authority_wins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from beetsplug.noqlenmeta.resolver import resolve_metadata as real_resolve_metadata
+
+    provider_calls: list[tuple[str, str | None]] = []
+    resolution_calls: list[tuple[MetadataCandidate, ...]] = []
+    rendered: list[object] = []
+
+    def discogs_candidates(
+        self: NoqlenMetaPlugin,
+        context: ReleaseEnrichmentContext,
+        token: str | None,
+    ) -> tuple[MetadataCandidate, ...]:
+        provider_calls.append(("discogs", token))
+        return (candidate(value=("Rock", "Alternative"), confidence=0.88),)
+
+    def itunes_candidates(
+        self: NoqlenMetaPlugin,
+        context: ReleaseEnrichmentContext,
+        storefront: str,
+    ) -> tuple[MetadataCandidate, ...]:
+        provider_calls.append(("itunes", storefront))
+        return (candidate(value=("Alternative",), confidence=0.99, provider="itunes"),)
+
+    def record_resolution(
+        current_values: object, candidates: object, policy: object
+    ) -> object:
+        resolution_calls.append(tuple(candidates))  # type: ignore[arg-type]
+        return real_resolve_metadata(current_values, candidates, policy)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(NoqlenMetaPlugin, "_discogs_candidates", discogs_candidates)
+    monkeypatch.setattr(NoqlenMetaPlugin, "_itunes_candidates", itunes_candidates)
+    monkeypatch.setattr("beetsplug.noqlenmeta.resolve_metadata", record_resolution)
+    monkeypatch.setattr(
+        "beetsplug.noqlenmeta.render_resolved_preview",
+        lambda decisions: rendered.append(decisions),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, discogs=True, itunes=True, storefront="gb")
+    info = album_info()
+    info_snapshot = copy.deepcopy(dict(info))
+    task = import_task(info)
+    choice_snapshot = task.choice_flag
+    match_snapshot = task.match
+    items_snapshot = list(task.items)
+
+    plugin._import_task_choice(None, task)
+
+    assert provider_calls == [("discogs", TOKEN), ("itunes", "gb")]
+    assert len(resolution_calls) == 1
+    assert [item.provider for item in resolution_calls[0]] == ["discogs", "itunes"]
+    decisions = rendered[0]
+    assert len(decisions) == 1  # type: ignore[arg-type]
+    decision = decisions[0]  # type: ignore[index]
+    assert decision.selected.provider == "discogs"
+    assert [item.provider for item in decision.alternatives] == ["itunes"]
+    assert dict(info) == info_snapshot
+    assert task.choice_flag is choice_snapshot
+    assert task.match is match_snapshot
+    assert task.items == items_snapshot
+
+
+def test_itunes_wins_when_discogs_has_no_eligible_genres_candidate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output: list[str] = []
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (),
+    )
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_itunes_candidates",
+        lambda self, context, storefront: (
+            candidate(value=("Alternative",), confidence=0.99, provider="itunes"),
+        ),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, discogs=True, itunes=True)
+
+    plugin._import_task_choice(None, import_task(album_info()))
+
+    assert "source: iTunes" in output[0]
+    assert "source: Itunes" not in output[0]
+    assert "selected 'itunes' by field authority" in output[0]
+
+
+def test_discogs_failure_does_not_suppress_itunes(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    output: list[str] = []
+
+    def fail_discogs(
+        self: NoqlenMetaPlugin,
+        context: ReleaseEnrichmentContext,
+        token: str | None,
+    ) -> tuple[()]:
+        raise ProviderError("unsafe Discogs detail")
+
+    monkeypatch.setattr(NoqlenMetaPlugin, "_discogs_candidates", fail_discogs)
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_itunes_candidates",
+        lambda self, context, storefront: (candidate(provider="itunes"),),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, discogs=True, itunes=True)
+
+    with caplog.at_level(logging.WARNING, logger="beets.noqlenmeta"):
+        plugin._import_task_choice(None, import_task(album_info()))
+
+    assert "Discogs enrichment unavailable" in caplog.text
+    assert "source: iTunes" in output[0]
+
+
+def test_itunes_failure_does_not_suppress_discogs(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    output: list[str] = []
+
+    def fail_itunes(
+        self: NoqlenMetaPlugin,
+        context: ReleaseEnrichmentContext,
+        storefront: str,
+    ) -> tuple[()]:
+        raise ProviderError("unsafe iTunes detail")
+
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (candidate(),),
+    )
+    monkeypatch.setattr(NoqlenMetaPlugin, "_itunes_candidates", fail_itunes)
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, discogs=True, itunes=True)
+
+    with caplog.at_level(logging.WARNING, logger="beets.noqlenmeta"):
+        plugin._import_task_choice(None, import_task(album_info()))
+
+    assert "iTunes enrichment unavailable" in caplog.text
+    assert "source: Discogs" in output[0]
 
 
 @pytest.mark.parametrize(

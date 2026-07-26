@@ -26,6 +26,7 @@ from beetsplug.noqlenmeta.resolver import (
 
 _DISCOGS_RELEASE_NAMESPACE = "discogs.release"
 _DISCOGS_TOKEN_ENV = "NOQLENMETA_DISCOGS_TOKEN"
+_PROVIDER_DISPLAY_NAMES = {"discogs": "Discogs", "itunes": "iTunes"}
 
 
 def resolve_discogs_token(configured_token: str) -> str | None:
@@ -142,13 +143,13 @@ def render_resolved_preview(decisions: Sequence[FieldDecision]) -> None:
             lines.extend(
                 (
                     f"    candidate: {_preview_value(decision.selected.value)}",
-                    f"    source: {_safe_preview_text(decision.selected.provider).title()}",
+                    f"    source: {_provider_display_name(decision.selected.provider)}",
                     f"    confidence: {decision.selected.confidence:.2f}",
                 )
             )
         elif decision.action is ResolutionAction.REVIEW and decision.alternatives:
             providers = sorted(
-                {_safe_preview_text(item.provider).title() for item in decision.alternatives}
+                {_provider_display_name(item.provider) for item in decision.alternatives}
             )
             lines.append(
                 f"    contenders: {len(decision.alternatives)} from {', '.join(providers)}"
@@ -185,6 +186,11 @@ def _positive_release_id(value: object) -> str | None:
 def _safe_preview_text(value: object) -> str:
     printable = "".join(character if character.isprintable() else " " for character in str(value))
     return " ".join(printable.split())
+
+
+def _provider_display_name(provider: object) -> str:
+    safe_name = _safe_preview_text(provider)
+    return _PROVIDER_DISPLAY_NAMES.get(safe_name.casefold(), safe_name.title())
 
 
 def _preview_value(value: MetadataValue) -> str:

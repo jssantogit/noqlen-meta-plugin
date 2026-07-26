@@ -10,7 +10,8 @@ Noqlen Meta Plugin - universal multi-provider metadata enrichment for beets.
 
 ## Context level
 
-`standard` for Block 006 because it integrates policy, provider I/O, and the beets import lifecycle.
+`standard` for Block 007 because it integrates a second provider boundary with policy and the beets
+import lifecycle.
 
 ## Tool Mode
 
@@ -19,11 +20,11 @@ shell commands.
 
 ## Active block
 
-Block 006 - Resolved Import Preview and Fields/Providers Configuration.
+Block 007 - iTunes Album Enrichment Provider and Real Multi-Provider Resolution.
 
 ## Active spec
 
-`docs/specs/006-resolved-preview-config/`
+`docs/specs/007-itunes-provider/`
 
 ## Active ADRs
 
@@ -33,18 +34,20 @@ Block 006 - Resolved Import Preview and Fields/Providers Configuration.
 
 ## Allowed files
 
-The plugin entry point, beets integration helpers, a minimal resolver query, focused tests, README,
-Block 006 specs, and context/handoff documents.
+The iTunes provider, plugin entry point, beets integration helpers, minimal resolver provider defaults,
+focused tests and fixtures, README, Block 007 specs, and context/handoff documents.
 
 ## Forbidden files
 
 Provider/domain contract redesign, candidate application, beets/file/database mutation, CLI,
-semantic field merging, persistence, another provider, advanced policy YAML, and beets core.
+semantic field merging, persistence, provider registry, caching, concurrency, Apple Music API,
+artwork/previews, additional providers, advanced policy YAML, and beets core.
 
 ## Behavior budget
 
-Selected `AlbumInfo` is copied to canonical current values, Discogs candidates are resolved through
-configured field/provider policy, and safe decisions are previewed. No decision is applied.
+One concrete iTunes collection may emit genres/year candidates. Independently gated Discogs and iTunes
+candidates share one Field Authority resolver pass with isolated failures. Safe decisions are
+previewed and never applied.
 
 ## Validation
 
@@ -58,9 +61,10 @@ git status --short
 
 ## Done when
 
-The actual import preview uses the resolver, configuration independently gates fields and providers,
-unusable providers are not called, and all selected beets state remains unchanged.
+iTunes direct/UPC/search paths are conservative, both real providers can coexist, authority outranks
+confidence, failures are isolated, unnecessary calls are gated, and all selected beets state remains
+unchanged.
 
 ## Stop condition
 
-Stop after Block 006. Do not apply decisions or begin Block 007.
+Stop after Block 007. Do not apply decisions or begin metadata writes, Last.fm, lyrics, artwork, or CLI.
