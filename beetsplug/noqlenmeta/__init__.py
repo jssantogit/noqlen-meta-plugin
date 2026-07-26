@@ -1,8 +1,11 @@
 """Noqlen Meta beets plugin."""
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
+from beets import ui
+from beets.library import Library
 from beets.plugins import BeetsPlugin
+from beets.ui import Subcommand
 
 from beetsplug.noqlenmeta.beets_application import (
     BeetsApplicationMode,
@@ -10,8 +13,12 @@ from beetsplug.noqlenmeta.beets_application import (
     parse_application_mode,
 )
 from beetsplug.noqlenmeta.beets_mapping import map_change_plan_to_beets
-from beetsplug.noqlenmeta.changeplan import build_change_plan
-from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
+from beetsplug.noqlenmeta.changeplan import ChangePlan, build_change_plan
+from beetsplug.noqlenmeta.domain import (
+    MetadataCandidate,
+    MetadataValue,
+    ReleaseEnrichmentContext,
+)
 from beetsplug.noqlenmeta.integration import (
     context_from_album_info,
     current_values_from_album_info,
@@ -20,6 +27,12 @@ from beetsplug.noqlenmeta.integration import (
     resolution_policy_from_settings,
     resolve_discogs_token,
 )
+from beetsplug.noqlenmeta.library_integration import (
+    context_from_library_album,
+    current_values_from_library_album,
+    render_library_target_plan,
+)
+from beetsplug.noqlenmeta.library_mapping import map_change_plan_to_library_album
 from beetsplug.noqlenmeta.orchestration import (
     provider_can_contribute,
     validate_provider_candidates,
@@ -31,7 +44,7 @@ from beetsplug.noqlenmeta.providers.specs import (
     ITUNES_SPEC,
     ProviderSpec,
 )
-from beetsplug.noqlenmeta.resolver import resolve_metadata
+from beetsplug.noqlenmeta.resolver import ResolutionPolicy, resolve_metadata
 
 _FIELD_DEFAULTS = {
     "genres": True,
@@ -73,6 +86,22 @@ class NoqlenMetaPlugin(BeetsPlugin):
         )
         self.config["providers"]["discogs"]["user_token"].redact = True
         self.register_listener("import_task_choice", self._import_task_choice)
+        self._command = Subcommand(
+            "noqlenmeta",
+            help="preview Noqlen metadata enrichment for library albums",
+            aliases=["nm"],
+        )
+        self._command.parser.add_option(
+            "--all",
+            dest="all",
+            action="store_true",
+            default=False,
+            help="explicitly preview every album in the library",
+        )
+        self._command.func = self._command_noqlenmeta
+
+    def commands(self) -> list[Subcommand]:
+        return [self._command]
 
     def _import_task_choice(self, session: object, task: object) -> None:
         album_info = eligible_album_info(task)
@@ -84,17 +113,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
         if apply_enabled:
             application_mode = parse_application_mode(self.config["apply_mode"].as_str())
 
-        policy = resolution_policy_from_settings(
-            {field: self.config["fields"][field].get(bool) for field in _FIELD_DEFAULTS},
-            {
-                provider: self.config["providers"][provider]["enabled"].get(bool)
-                for provider in BUILTIN_PROVIDER_SPECS
-            },
-        )
-        if not any(
-            provider_can_contribute(policy, spec)
-            for spec in BUILTIN_PROVIDER_SPECS.values()
-        ):
+        policy = self._resolution_policy()
+        if not self._has_contributing_provider(policy):
             return
 
         context = context_from_album_info(album_info)
@@ -102,30 +122,11 @@ class NoqlenMetaPlugin(BeetsPlugin):
             self._log.debug("Noqlen Meta preview skipped: selected release has no album identity")
             return
 
-        current_values = current_values_from_album_info(album_info)
-        candidates: list[MetadataCandidate] = []
-        if provider_can_contribute(policy, DISCOGS_SPEC):
-            token = resolve_discogs_token(
-                self.config["providers"]["discogs"]["user_token"].as_str()
-            )
-            candidates.extend(
-                self._collect_provider_candidates(
-                    DISCOGS_SPEC,
-                    lambda: self._discogs_candidates(context, token),
-                )
-            )
-
-        if provider_can_contribute(policy, ITUNES_SPEC):
-            storefront = self.config["providers"]["itunes"]["storefront"].as_str()
-            candidates.extend(
-                self._collect_provider_candidates(
-                    ITUNES_SPEC,
-                    lambda: self._itunes_candidates(context, storefront),
-                )
-            )
-
-        decisions = resolve_metadata(current_values, candidates, policy)
-        change_plan = build_change_plan(decisions)
+        change_plan = self._build_change_plan_for_release(
+            context,
+            current_values_from_album_info(album_info),
+            policy,
+        )
         target_plan = map_change_plan_to_beets(change_plan)
         application_result = None
         if apply_enabled:
@@ -175,6 +176,90 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     "for beets application"
                 )
 
+    def _command_noqlenmeta(self, lib: Library, opts: object, args: list[str]) -> None:
+        all_albums = bool(getattr(opts, "all", False))
+        has_query = any(isinstance(argument, str) and argument.strip() for argument in args)
+        if not has_query and not all_albums:
+            raise ui.UserError("noqlenmeta: provide an album query or use --all")
+        if args and all_albums:
+            raise ui.UserError("noqlenmeta: use an album query or --all, not both")
+
+        policy = self._resolution_policy()
+        if not self._has_contributing_provider(policy):
+            ui.print_("Noqlen Meta: no enabled provider can contribute to the configured fields")
+            return
+
+        albums = tuple(lib.albums(args if args else None))
+        if not albums:
+            ui.print_("Noqlen Meta: no albums matched")
+            return
+
+        total = len(albums)
+        for position, album in enumerate(albums, 1):
+            context = context_from_library_album(album)
+            if context is None:
+                ui.print_(
+                    f"Noqlen Meta: [{position}/{total}] album has no usable "
+                    "artist/title identity; skipped"
+                )
+                continue
+            change_plan = self._build_change_plan_for_release(
+                context,
+                current_values_from_library_album(album),
+                policy,
+            )
+            render_library_target_plan(
+                album,
+                map_change_plan_to_library_album(change_plan),
+                position=position,
+                total=total,
+            )
+
+    def _resolution_policy(self) -> ResolutionPolicy:
+        return resolution_policy_from_settings(
+            {field: self.config["fields"][field].get(bool) for field in _FIELD_DEFAULTS},
+            {
+                provider: self.config["providers"][provider]["enabled"].get(bool)
+                for provider in BUILTIN_PROVIDER_SPECS
+            },
+        )
+
+    @staticmethod
+    def _has_contributing_provider(policy: ResolutionPolicy) -> bool:
+        return any(
+            provider_can_contribute(policy, spec)
+            for spec in BUILTIN_PROVIDER_SPECS.values()
+        )
+
+    def _build_change_plan_for_release(
+        self,
+        context: ReleaseEnrichmentContext,
+        current_values: Mapping[str, MetadataValue],
+        policy: ResolutionPolicy,
+    ) -> ChangePlan:
+        candidates: list[MetadataCandidate] = []
+        if provider_can_contribute(policy, DISCOGS_SPEC):
+            token = resolve_discogs_token(
+                self.config["providers"]["discogs"]["user_token"].as_str()
+            )
+            candidates.extend(
+                self._collect_provider_candidates(
+                    DISCOGS_SPEC,
+                    lambda: self._discogs_candidates(context, token),
+                )
+            )
+
+        if provider_can_contribute(policy, ITUNES_SPEC):
+            storefront = self.config["providers"]["itunes"]["storefront"].as_str()
+            candidates.extend(
+                self._collect_provider_candidates(
+                    ITUNES_SPEC,
+                    lambda: self._itunes_candidates(context, storefront),
+                )
+            )
+
+        return build_change_plan(resolve_metadata(current_values, candidates, policy))
+
     def _collect_provider_candidates(
         self,
         spec: ProviderSpec,
@@ -184,7 +269,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
             candidates = fetch()
         except ProviderError:
             self._log.warning(
-                "Noqlen Meta: {} enrichment unavailable; import will continue",
+                "Noqlen Meta: {} enrichment unavailable; processing will continue",
                 spec.display_name,
             )
             return ()

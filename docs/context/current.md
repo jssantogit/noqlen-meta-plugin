@@ -10,8 +10,8 @@ Noqlen Meta Plugin - universal multi-provider metadata enrichment for beets.
 
 ## Context level
 
-`standard` for Block 012 because it adds an explicit application policy after the existing target
-plan without redesigning providers, resolution, planning, mapping, or the beets lifecycle.
+`standard` for Block 013 because it adds a read-only library entry point and target adapter without
+redesigning providers, resolution, ChangePlan, importer application, or the beets lifecycle.
 
 ## Tool Mode
 
@@ -20,11 +20,11 @@ shell commands.
 
 ## Active block
 
-Block 012 - Explicit Safe Partial Application Policy.
+Block 013 - Library CLI Preview Boundary.
 
 ## Active spec
 
-`docs/specs/012-partial-application-policy/`
+`docs/specs/013-library-cli-preview/`
 
 ## Active ADRs
 
@@ -36,23 +36,24 @@ Block 012 - Explicit Safe Partial Application Policy.
 - `docs/adr/0006-beets-target-mapping.md`
 - `docs/adr/0007-strict-selected-release-application.md`
 - `docs/adr/0008-partial-application-policy.md`
+- `docs/adr/0009-library-cli-preview-boundary.md`
 
 ## Allowed files
 
-The existing beets application module, minimal plugin/integration changes, focused tests, README,
-ADR 0008, Block 012 specs, and context/handoff documents.
+Minimal plugin/integration changes, explicit library adapters and mapping, focused tests, README,
+ADR 0009, Block 013 specs, and context/handoff documents.
 
 ## Forbidden files
 
-Review acceptance, lossy mapping, per-field error recovery, direct Item/Album mutation, downstream
-beets application calls, database/tag/file writes, CLI, persistence, provider/resolver redesign,
-network behavior changes, additional providers, and beets core.
+`--apply`, lossy mapping, direct Item/Album mutation, database/tag/file writes, singleton or track
+mode, interactive review, persistence, provider/resolver redesign, network behavior changes,
+additional providers, and beets core.
 
 ## Behavior budget
 
-Existing provider orchestration, resolution, ChangePlan translation, target mapping, and lifecycle
-remain unchanged. Strict application stays default. Explicit partial mode may atomically mutate only
-the mapped subset on selected `AlbumInfo`; reviews and mapping blockers remain withheld.
+Existing importer behavior remains unchanged. CLI and importer share provider/resolver/ChangePlan
+planning, then diverge into their explicit target adapters. The library command always previews and
+never mutates persistent Albums, Items, tags, files, or importer objects.
 
 ## Validation
 
@@ -66,11 +67,11 @@ git status --short
 
 ## Done when
 
-Application defaults off and strict, invalid enabled modes fail before provider work, strict behavior
-is unchanged, partial mode applies only an atomically prevalidated mapped subset, withheld fields
-remain visible, caches are invalidated, and baseline validation is green.
+One Subcommand owns `noqlenmeta` and `nm`, query intent is explicit, native Album queries and
+read-only adapters feed the shared planning path, persistent target reality and blockers are visible,
+importer configuration grants no CLI writes, and baseline validation is green.
 
 ## Stop condition
 
-Stop after Block 012. Do not add CLI behavior, direct downstream writes, providers, mapping
-configuration, provenance persistence, lyrics, artwork, or Block 013 behavior.
+Stop after Block 013. Do not add CLI application, direct downstream writes, singleton/track mode,
+providers, mapping configuration, provenance persistence, lyrics, artwork, or Block 014 behavior.

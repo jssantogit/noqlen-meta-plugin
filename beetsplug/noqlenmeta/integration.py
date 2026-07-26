@@ -24,6 +24,7 @@ from beetsplug.noqlenmeta.domain import (
 )
 from beetsplug.noqlenmeta.providers.specs import provider_display_name
 from beetsplug.noqlenmeta.resolver import (
+    FieldDecision,
     ResolutionAction,
     ResolutionPolicy,
     default_resolution_policy,
@@ -64,14 +65,10 @@ def context_from_album_info(album_info: AlbumInfo) -> ReleaseEnrichmentContext |
             seen_ids.add(release_id)
             external_ids.append(ExternalIdentifier(_DISCOGS_RELEASE_NAMESPACE, release_id))
 
-    year = album_info.year
-    if isinstance(year, bool) or not isinstance(year, int) or not 1 <= year <= 9999:
-        year = None
-
     return ReleaseEnrichmentContext(
         album_artist=artist,
         album_title=title,
-        year=year,
+        year=_valid_year(album_info.year),
         barcode=_optional_text(album_info.barcode),
         catalog_number=_optional_text(album_info.catalognum),
         external_ids=tuple(external_ids),
@@ -102,8 +99,8 @@ def current_values_from_album_info(album_info: AlbumInfo) -> dict[str, MetadataV
     if country is not None:
         current_values["country"] = country
 
-    year = album_info.year
-    if isinstance(year, int) and not isinstance(year, bool) and 1 <= year <= 9999:
+    year = _valid_year(album_info.year)
+    if year is not None:
         current_values["year"] = year
 
     return current_values
@@ -184,27 +181,7 @@ def render_beets_target_plan(
     for blocker in plan.blocked_changes:
         lines.extend(_render_mapping_blocker(blocker))
     for decision in (*source.reviews, *source.kept, *source.skipped):
-        lines.extend(
-            ("", f"  {_safe_preview_text(decision.field)}", f"    {decision.action.name}")
-        )
-        if decision.current_value is not None:
-            lines.append(f"    current: {_preview_value(decision.current_value)}")
-        if decision.selected is not None:
-            lines.extend(
-                (
-                    f"    candidate: {_preview_value(decision.selected.value)}",
-                    f"    source: {_provider_display_name(decision.selected.provider)}",
-                    f"    confidence: {decision.selected.confidence:.2f}",
-                )
-            )
-        elif decision.action is ResolutionAction.REVIEW and decision.alternatives:
-            providers = sorted(
-                {_provider_display_name(item.provider) for item in decision.alternatives}
-            )
-            lines.append(
-                f"    contenders: {len(decision.alternatives)} from {', '.join(providers)}"
-            )
-        lines.append(f"    reason: {_safe_preview_text(decision.reason)}")
+        lines.extend(_render_resolution_decision(decision))
     ui.print_("\n".join(lines))
 
 
@@ -263,6 +240,12 @@ def _positive_release_id(value: object) -> str | None:
         return None
 
 
+def _valid_year(value: object) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= 9999:
+        return value
+    return None
+
+
 def _safe_preview_text(value: object) -> str:
     printable = "".join(character if character.isprintable() else " " for character in str(value))
     return " ".join(printable.split())
@@ -271,6 +254,33 @@ def _safe_preview_text(value: object) -> str:
 def _provider_display_name(provider: object) -> str:
     safe_name = _safe_preview_text(provider)
     return provider_display_name(safe_name)
+
+
+def _render_resolution_decision(decision: FieldDecision) -> tuple[str, ...]:
+    lines = [
+        "",
+        f"  {_safe_preview_text(decision.field)}",
+        f"    {decision.action.name}",
+    ]
+    if decision.current_value is not None:
+        lines.append(f"    current: {_preview_value(decision.current_value)}")
+    if decision.selected is not None:
+        lines.extend(
+            (
+                f"    candidate: {_preview_value(decision.selected.value)}",
+                f"    source: {_provider_display_name(decision.selected.provider)}",
+                f"    confidence: {decision.selected.confidence:.2f}",
+            )
+        )
+    elif decision.action is ResolutionAction.REVIEW and decision.alternatives:
+        providers = sorted(
+            {_provider_display_name(item.provider) for item in decision.alternatives}
+        )
+        lines.append(
+            f"    contenders: {len(decision.alternatives)} from {', '.join(providers)}"
+        )
+    lines.append(f"    reason: {_safe_preview_text(decision.reason)}")
+    return tuple(lines)
 
 
 def _preview_value(value: MetadataValue) -> str:

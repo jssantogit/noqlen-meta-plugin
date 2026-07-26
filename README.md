@@ -124,6 +124,31 @@ blocker. Strict mode applies zero fields. Partial mode applies genres and withho
 not discard or serialize the label values. `preview` and `apply` are independent, so preview can be
 disabled without disabling application and preview output never implies application.
 
+## Library preview command
+
+Noqlen Meta can preview enrichment for albums already stored in the beets library:
+
+```bash
+beet nm artist:Gojira
+beet nm album:"From Mars to Sirius"
+beet nm --all
+```
+
+The canonical command name is `beet noqlenmeta ...`; `nm` is its preferred short alias. A non-empty
+native beets album query is required unless `--all` explicitly requests every album. The command
+operates on albums only; singleton and per-track command modes are not available.
+
+Block 013's library command is preview-only. It runs the same provider collection, Field Authority,
+resolver, and `ChangePlan` path as importer enrichment, then analyzes the result against an explicit
+persistent `Album` target map. Losslessly representable changes, resolver reviews, and mapping
+blockers are displayed without changing database rows, Items, tags, or files. In particular,
+persistent `Album` has no album-level `media` field, so media proposals are reported as blockers
+rather than being inferred from or applied to Items.
+
+`noqlenmeta.apply` and `apply_mode` currently control importer-time selected-release application
+only; they do not make `beet nm` write to the library. The explicit library preview also remains
+visible when importer `preview` is false. There is no `--apply` option in Block 013.
+
 Noqlen mutates only eligible fields on the selected `AlbumInfo`. It does not directly mutate Items or
 Albums, add library records, write tags, or move/copy files. After selected-release enrichment,
 normal beets import behavior determines Item application, database persistence, file handling, and
@@ -178,11 +203,9 @@ Noqlen Meta / beets target plan:
 
 ## Current status
 
-The plugin resolves Discogs and iTunes candidates against selected-release metadata, translates
-`KEEP`/`PROPOSE`/`REVIEW`/`SKIP` decisions into an immutable `ChangePlan`, maps planned changes into
-an immutable `BeetsTargetPlan`, and previews target fields or mapping blockers during import. Its
-explicit opt-in application boundary can mutate only the selected `AlbumInfo` under the strict
-default or an explicitly configured atomic partial policy; downstream application and persistence
-remain normal beets behavior.
+The plugin resolves Discogs and iTunes candidates through one shared planning path. Importer
+enrichment maps the resulting `ChangePlan` to `BeetsTargetPlan`; the read-only library command maps
+it to `LibraryTargetPlan`. Importer application can mutate only selected `AlbumInfo` under its
+explicit strict or partial policy. The library command performs no application or persistence.
 
 See `docs/context/current.md` and `docs/context/handoff.md` before starting a development block.
