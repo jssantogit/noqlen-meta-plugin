@@ -2,50 +2,49 @@
 
 ## State
 
-Block 003 adds the first production provider, `DiscogsProvider`, on top of the unchanged Block 002
-domain/provider contracts. The package still has no beets configuration/lifecycle integration,
-resolver, field authority, persistence, or writes.
+Block 004 connects the existing `DiscogsProvider` to beets' selected album phase through
+`import_task_choice`. It constructs a provider-independent context and emits a read-only candidate
+preview before normal beets metadata application. There is still no resolver, field authority,
+candidate application, provenance persistence, or Noqlen metadata write.
 
 ## Completed
 
-- Optional `python3-discogs-client>=2.8,<3` runtime extra, also installed by development extras.
-- ADR 0002 documenting the maintained client, no hand-written HTTP client, personal token first, and
-  the provider boundary.
-- Exact direct lookup for one positive numeric `discogs.release` identifier without requiring search
-  authentication.
-- Personal-token authenticated structured release search, bounded to 10 results on page one.
-- Conservative exact normalized artist/title selection, optional year exclusion, and unique
-  barcode/catalog-number strengthening.
-- Concrete release fetch before normalization and candidate provenance.
-- Native Discogs genres/styles; all meaningful labels, catalog numbers, and Barcode identifiers;
-  country, year, media, and format descriptions.
-- Fixed provider-boundary errors, 5/10 second connect/read timeouts, and normal client backoff.
-- Sanitized release/search fixtures and deterministic offline tests of the production adapter.
+- Discogs is disabled by default; preview defaults on and the configured personal token is redacted.
+- Non-empty `NOQLENMETA_DISCOGS_TOKEN` overrides config; an empty environment value does not erase a
+  configured token.
+- Album APPLY eligibility excludes SKIP, ASIS, RETAG, TRACKS, ALBUMS, singleton tasks, and missing
+  selected `AlbumInfo` values.
+- Selected artist/title, year, barcode, catalog number, and defensible Discogs release identity map
+  into `ReleaseEnrichmentContext` without mutating `AlbumInfo`.
+- Provider failures produce a fixed warning and allow normal import to continue.
+- Candidate previews contain only normalized field values and source release identity.
+- The optional Discogs client is imported lazily only after an eligible enabled task is selected.
+- The provider boundary now catches concrete Discogs, requests, HTTP, and response-decoding failures;
+  programming errors propagate.
+- An environment-gated production direct-release live smoke test covers public release ID `1`.
 
 ## Important decisions
 
-- Malformed, non-positive, or multiple `discogs.release` identifiers return no metadata rather than
-  falling back to a weaker search.
-- Search no-match and ambiguity return `()`; service/client/network failures raise `ProviderError`.
-- Confidence is local release-selection confidence: direct `0.98`, uniquely identifier-strengthened
-  search `0.92`, and unique artist/title/year search `0.82`. All fields from one release share it.
-- No controlled search relaxation is implemented because returning no metadata is safer and keeps
-  selection explainable.
-- The optional dependency is imported only by the Discogs provider module, not generic contracts.
+- `import_task_choice` is late enough to observe the selected match and early enough that the preview
+  cannot interfere with beets metadata application.
+- Explicit `discogs_albumid` values are accepted; generic `album_id` values are accepted only when the
+  selected metadata source identifies itself as Discogs. Duplicate release IDs are removed.
+- A missing token remains valid for direct release lookup. Tokenless search fails safely at the
+  provider boundary and does not abort import.
+- Preview-off still permits enrichment but suppresses candidate values at normal output level.
 
 ## Deferred
 
-- Beets configuration and lifecycle wiring, including secure token delivery.
 - OAuth, consumer credentials, interactive authentication, and token persistence.
-- Resolver, field authority, confidence calibration across providers, and provenance persistence.
+- Resolver, field authority, confidence calibration across providers, candidate application, and
+  provenance persistence.
 - Caching, Master Release/original-year lookup, track enrichment, cover art, and other providers.
-- Live API smoke coverage. Default tests remain fixture-backed and offline.
 - Before public release/documentation, account for current Discogs API attribution and usage
   requirements; retained public `source_url` values support future provenance and attribution.
 
 ## Recommended next block
 
-Block 004 should be the narrow beets configuration and lifecycle integration slice that constructs a
-`ReleaseEnrichmentContext`, supplies the Discogs personal token to this provider, and invokes it at a
-reviewable album-level point. Keep resolver/field-authority policy and metadata writes out unless
-they are separately scoped.
+Block 005 should define the minimum field-authority and resolver policy required to choose between
+selected-release metadata and normalized provider candidates. It should preserve candidate
+provenance, make overwrite decisions explicit and testable, and establish a review boundary before
+any separate metadata-application/write block.

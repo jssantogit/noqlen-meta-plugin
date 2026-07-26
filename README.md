@@ -51,10 +51,31 @@ Enable the plugin in a beets configuration after installing it into the same Pyt
 ```yaml
 plugins:
   - noqlenmeta
+
+noqlenmeta:
+  discogs:
+    enabled: false
+    user_token: ""
+  preview: true
+```
+
+Discogs enrichment is disabled by default. Set `discogs.enabled: true` to preview normalized Discogs
+candidates after selecting an album match. A non-empty `NOQLENMETA_DISCOGS_TOKEN` takes precedence
+over `user_token`; direct Discogs release-ID lookups do not require a token. Tokens are redacted and
+never included in preview output.
+
+The preview is read-only and normal beets metadata application continues unchanged:
+
+```text
+Noqlen Meta / Discogs:
+  release: 123456
+  genres: Electronic, Rock
+  styles: Ambient
 ```
 
 ## Current status
 
-Project foundation only. The plugin package can be imported by beets, but no metadata provider or enrichment behavior is implemented yet.
+The plugin can preview Discogs enrichment for a selected album release during import. Candidate
+application, field authority, conflict resolution, and persistence are not implemented yet.
 
 See `docs/context/current.md` and `docs/context/handoff.md` before starting a development block.

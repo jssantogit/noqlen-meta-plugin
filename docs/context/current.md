@@ -14,16 +14,16 @@ Use `tiny` by default and `standard` for non-trivial feature blocks. Use `full` 
 
 ## Tool Mode
 
-`combo` for Block 003: OpenCode native capabilities, Serena for targeted symbol/navigation work,
+`combo` for Block 004: OpenCode native capabilities, Serena for targeted symbol/navigation work,
 and RTK for noisy shell commands.
 
 ## Active block
 
-Block 003 - Discogs Album Enrichment Provider.
+Block 004 - Beets Lifecycle Integration and Discogs Preview.
 
 ## Active spec
 
-`docs/specs/003-discogs-provider/`
+`docs/specs/004-beets-lifecycle-preview/`
 
 ## Active ADRs
 
@@ -32,26 +32,26 @@ Block 003 - Discogs Album Enrichment Provider.
 
 ## Allowed files
 
-Discogs provider implementation, its optional dependency, focused fixtures/tests, ADR 0002, Block
-003 specs, and context/handoff documents.
+The Noqlen plugin entry point, optional lifecycle helper, narrowly hardened Discogs error boundary,
+focused deterministic/live tests, README, Block 004 specs, and context/handoff documents.
 
 ## Forbidden files
 
-Block 002 contract redesign, resolver/authority behavior, persistence, beets hooks/configuration,
-OAuth, caching, Master Release lookup, other providers, unrelated files, local tool configuration,
-and real user-library data.
+Domain/provider contract changes, candidate application, resolver/authority behavior, persistence,
+MediaFile fields, OAuth, credential files, caching, other providers, beets core, unrelated files,
+local tool configuration, and real user-library data.
 
 ## Non-goals
 
 - Do not fork or patch beets core as part of the current project direction.
 - Do not replace beets matching in the initial product scope.
-- Do not expand the provider into beets lifecycle or resolver behavior.
+- Do not apply preview candidates or alter beets matching/import choices.
 - Do not use a real music library in automated tests.
 
 ## Behavior budget
 
-One synchronous production Discogs adapter may perform direct release lookup or one bounded search
-and concrete release fetch. It only returns normalized candidates and performs no writes.
+One `import_task_choice` listener may invoke the production Discogs adapter only for a selected album
+APPLY choice and print a safe normalized preview. It performs no metadata, database, or file writes.
 
 ## Validation
 
@@ -66,10 +66,11 @@ git diff --check
 
 ## Done when
 
-The production provider, optional dependency/ADR, fixture-backed tests, specs, and handoff are
-committed after baseline validation passes.
+Selected album APPLY tasks can produce a safe Discogs candidate preview, provider failures cannot
+abort import, deterministic validation passes offline, and the opt-in direct-ID live smoke is
+attempted before the scoped commit.
 
 ## Stop condition
 
-Stop after Block 003. Do not begin beets lifecycle integration, resolver behavior, or another
-provider.
+Stop after Block 004. Do not implement candidate application, resolver/field authority, persistence,
+metadata writes, or another provider.

@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from discogs_client.exceptions import DiscogsAPIError
 from requests.exceptions import Timeout
 
 from beetsplug.noqlenmeta.domain import ExternalIdentifier, ReleaseEnrichmentContext
@@ -293,7 +294,14 @@ def test_search_without_token_fails_at_provider_boundary() -> None:
         DiscogsProvider(client=Client()).get_candidates(context())
 
 
-@pytest.mark.parametrize("error", [RuntimeError("service unavailable"), Timeout("timed out")])
+@pytest.mark.parametrize(
+    "error",
+    [
+        DiscogsAPIError("service unavailable"),
+        Timeout("timed out"),
+        KeyError("malformed response"),
+    ],
+)
 def test_release_client_failures_become_provider_error(error: Exception) -> None:
     client = Client()
     client.release_error = error
@@ -307,7 +315,14 @@ def test_release_client_failures_become_provider_error(error: Exception) -> None
     assert "secret-token" not in str(caught.value)
 
 
-@pytest.mark.parametrize("error", [RuntimeError("service unavailable"), Timeout("timed out")])
+@pytest.mark.parametrize(
+    "error",
+    [
+        DiscogsAPIError("service unavailable"),
+        Timeout("timed out"),
+        KeyError("malformed response"),
+    ],
+)
 def test_search_client_failures_become_provider_error(error: Exception) -> None:
     client = Client()
     client.search_error = error
@@ -317,6 +332,25 @@ def test_search_client_failures_become_provider_error(error: Exception) -> None:
         provider.get_candidates(context())
 
     assert "secret-token" not in str(caught.value)
+
+
+@pytest.mark.parametrize("error", [AttributeError("programming defect"), TypeError("type defect")])
+@pytest.mark.parametrize("operation", ["release", "search"])
+def test_programming_errors_are_not_disguised_as_provider_errors(
+    operation: str, error: Exception
+) -> None:
+    client = Client()
+    if operation == "release":
+        client.release_error = error
+        release_context = context(
+            external_ids=(ExternalIdentifier("discogs.release", "123456"),)
+        )
+    else:
+        client.search_error = error
+        release_context = context()
+
+    with pytest.raises(type(error), match=str(error)):
+        DiscogsProvider(token="token", client=client).get_candidates(release_context)
 
 
 def test_discogs_provider_satisfies_metadata_provider_contract() -> None:

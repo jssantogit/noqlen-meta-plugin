@@ -5,9 +5,13 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections.abc import Mapping, Sequence
+from http.client import HTTPException
+from json import JSONDecodeError
 from typing import Any, Protocol
 
 import discogs_client
+from discogs_client.exceptions import DiscogsAPIError
+from requests.exceptions import RequestException
 
 from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
 from beetsplug.noqlenmeta.providers.base import ProviderError
@@ -20,6 +24,15 @@ _USER_AGENT = "NoqlenMeta/0.0.0"
 _DIRECT_CONFIDENCE = 0.98
 _STRONG_SEARCH_CONFIDENCE = 0.92
 _WEAK_SEARCH_CONFIDENCE = 0.82
+
+_EXTERNAL_ERRORS = (
+    DiscogsAPIError,
+    RequestException,
+    HTTPException,
+    JSONDecodeError,
+    UnicodeDecodeError,
+    KeyError,
+)
 
 
 class _SearchResults(Protocol):
@@ -80,7 +93,7 @@ class DiscogsProvider:
             release = self._client.release(release_id)
             release.refresh()
             data = release.data
-        except Exception:
+        except _EXTERNAL_ERRORS:
             raise ProviderError("Discogs release lookup failed") from None
 
         return data if isinstance(data, Mapping) else {}
@@ -92,7 +105,7 @@ class DiscogsProvider:
             results = self._client.search(**_search_parameters(context))
             results.per_page = _SEARCH_LIMIT
             first_page = results.page(1)
-        except Exception:
+        except _EXTERNAL_ERRORS:
             raise ProviderError("Discogs release search failed") from None
 
         return _select_release(first_page, context)
