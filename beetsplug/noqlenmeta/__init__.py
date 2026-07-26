@@ -4,7 +4,11 @@ from collections.abc import Callable, Sequence
 
 from beets.plugins import BeetsPlugin
 
-from beetsplug.noqlenmeta.beets_application import apply_beets_target_plan
+from beetsplug.noqlenmeta.beets_application import (
+    BeetsApplicationMode,
+    apply_beets_target_plan,
+    parse_application_mode,
+)
 from beetsplug.noqlenmeta.beets_mapping import map_change_plan_to_beets
 from beetsplug.noqlenmeta.changeplan import build_change_plan
 from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
@@ -53,6 +57,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
             {
                 "preview": True,
                 "apply": False,
+                "apply_mode": "strict",
                 "fields": _FIELD_DEFAULTS,
                 "providers": {
                     "discogs": {
@@ -73,6 +78,11 @@ class NoqlenMetaPlugin(BeetsPlugin):
         album_info = eligible_album_info(task)
         if album_info is None:
             return
+
+        apply_enabled = self.config["apply"].get(bool)
+        application_mode = BeetsApplicationMode.STRICT
+        if apply_enabled:
+            application_mode = parse_application_mode(self.config["apply_mode"].as_str())
 
         policy = resolution_policy_from_settings(
             {field: self.config["fields"][field].get(bool) for field in _FIELD_DEFAULTS},
@@ -118,9 +128,12 @@ class NoqlenMetaPlugin(BeetsPlugin):
         change_plan = build_change_plan(decisions)
         target_plan = map_change_plan_to_beets(change_plan)
         application_result = None
-        apply_enabled = self.config["apply"].get(bool)
         if apply_enabled:
-            application_result = apply_beets_target_plan(album_info, target_plan)
+            application_result = apply_beets_target_plan(
+                album_info,
+                target_plan,
+                mode=application_mode,
+            )
         if self.config["preview"].get(bool):
             render_beets_target_plan(target_plan, application_result)
         elif apply_enabled and application_result is not None:
@@ -129,10 +142,32 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     "Noqlen Meta: application blocked by unresolved review or target mapping"
                 )
             elif application_result.has_applied_changes:
-                self._log.info(
-                    "Noqlen Meta: prepared {} selected-release metadata field(s) "
-                    "for beets application",
-                    len(application_result.applied_changes),
+                if application_result.has_withheld_fields:
+                    self._log.info(
+                        "Noqlen Meta: prepared {} selected-release metadata field(s) for "
+                        "beets application; {} review and {} mapping blocker withheld",
+                        len(application_result.applied_changes),
+                        application_result.resolution_review_count,
+                        application_result.mapping_blocker_count,
+                    )
+                else:
+                    self._log.info(
+                        "Noqlen Meta: prepared {} selected-release metadata field(s) "
+                        "for beets application",
+                        len(application_result.applied_changes),
+                    )
+            elif (
+                application_result.mode is BeetsApplicationMode.PARTIAL
+                and application_result.has_withheld_fields
+            ):
+                withheld_count = (
+                    application_result.resolution_review_count
+                    + application_result.mapping_blocker_count
+                )
+                self._log.warning(
+                    "Noqlen Meta: no eligible selected-release metadata changes; "
+                    "{} unresolved field(s) withheld",
+                    withheld_count,
                 )
             else:
                 self._log.info(

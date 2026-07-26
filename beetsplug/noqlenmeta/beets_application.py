@@ -1,8 +1,9 @@
-"""Strict application of lossless target plans to selected beets metadata."""
+"""Safe application of lossless target plans to selected beets metadata."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 
 from beets.autotag.hooks import AlbumInfo
@@ -21,32 +22,68 @@ class BeetsApplicationError(RuntimeError):
     """An internal or safety contract failure during selected-release application."""
 
 
+class BeetsApplicationMode(Enum):
+    """Explicit selected-release application policies."""
+
+    STRICT = "strict"
+    PARTIAL = "partial"
+
+
+def parse_application_mode(value: str) -> BeetsApplicationMode:
+    """Parse one configured application mode without unsafe fallback."""
+    if not isinstance(value, str):
+        raise BeetsApplicationError("application mode must be 'strict' or 'partial'")
+    normalized = value.strip().lower()
+    try:
+        return BeetsApplicationMode(normalized)
+    except ValueError:
+        raise BeetsApplicationError(
+            "invalid application mode; expected 'strict' or 'partial'"
+        ) from None
+
+
 @dataclass(frozen=True, slots=True)
 class BeetsApplicationResult:
-    """Immutable outcome of one strict selected-release application attempt."""
+    """Immutable outcome of one selected-release application attempt."""
 
+    mode: BeetsApplicationMode = BeetsApplicationMode.STRICT
     applied_changes: tuple[BeetsTargetChange, ...] = ()
     resolution_review_count: int = 0
     mapping_blocker_count: int = 0
 
     @property
-    def is_blocked(self) -> bool:
+    def has_withheld_fields(self) -> bool:
         return self.resolution_review_count > 0 or self.mapping_blocker_count > 0
+
+    @property
+    def is_blocked(self) -> bool:
+        return self.mode is BeetsApplicationMode.STRICT and self.has_withheld_fields
 
     @property
     def has_applied_changes(self) -> bool:
         return bool(self.applied_changes)
 
+    @property
+    def is_partial_application(self) -> bool:
+        return (
+            self.mode is BeetsApplicationMode.PARTIAL
+            and self.has_applied_changes
+            and self.has_withheld_fields
+        )
+
 
 def apply_beets_target_plan(
     album_info: AlbumInfo,
     plan: BeetsTargetPlan,
+    mode: BeetsApplicationMode = BeetsApplicationMode.STRICT,
 ) -> BeetsApplicationResult:
-    """Apply a fully lossless, review-free plan to the selected AlbumInfo only."""
+    """Atomically apply the mapped subset permitted by the explicit policy."""
     if not isinstance(album_info, AlbumInfo):
         raise BeetsApplicationError("application target must be an AlbumInfo")
     if not isinstance(plan, BeetsTargetPlan):
         raise BeetsApplicationError("application plan must be a BeetsTargetPlan")
+    if not isinstance(mode, BeetsApplicationMode):
+        raise BeetsApplicationError("application mode must be a BeetsApplicationMode")
 
     try:
         expected = map_change_plan_to_beets(plan.source)
@@ -56,6 +93,7 @@ def apply_beets_target_plan(
         raise BeetsApplicationError("target plan does not match its canonical source mapping")
 
     result = BeetsApplicationResult(
+        mode=mode,
         resolution_review_count=len(plan.source.reviews),
         mapping_blocker_count=len(plan.blocked_changes),
     )
@@ -89,6 +127,7 @@ def apply_beets_target_plan(
         album_info.__dict__.pop("item_data", None)
 
     return BeetsApplicationResult(
+        mode=mode,
         applied_changes=plan.mapped_changes,
         resolution_review_count=result.resolution_review_count,
         mapping_blocker_count=result.mapping_blocker_count,

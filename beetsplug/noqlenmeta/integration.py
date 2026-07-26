@@ -147,25 +147,38 @@ def render_beets_target_plan(
         application_status = "disabled (preview only)"
     elif application_result.is_blocked:
         application_status = "blocked"
+    elif application_result.is_partial_application:
+        application_status = (
+            "partially applied to selected release "
+            f"({len(application_result.applied_changes)} fields)"
+        )
     elif application_result.has_applied_changes:
         application_status = (
             "applied to selected release "
             f"({len(application_result.applied_changes)} fields)"
         )
+    elif application_result.has_withheld_fields:
+        application_status = "no eligible changes applied"
     else:
         application_status = "no changes"
     lines = [
         "Noqlen Meta / beets target plan:",
         "",
-        f"  application: {application_status}",
-        f"  planned changes: {len(source.changes)}",
-        f"  losslessly mapped: {len(plan.mapped_changes)}",
-        f"  mapping blockers: {len(plan.blocked_changes)}",
-        f"  resolution review: {len(source.reviews)}",
-        f"  unchanged: {len(source.kept)}",
-        f"  skipped: {len(source.skipped)}",
-        f"  mapping complete: {'yes' if plan.is_fully_mapped else 'no'}",
     ]
+    if application_result is not None:
+        lines.append(f"  application mode: {application_result.mode.value}")
+    lines.extend(
+        (
+            f"  application: {application_status}",
+            f"  planned changes: {len(source.changes)}",
+            f"  losslessly mapped: {len(plan.mapped_changes)}",
+            f"  mapping blockers: {len(plan.blocked_changes)}",
+            f"  resolution review: {len(source.reviews)}",
+            f"  unchanged: {len(source.kept)}",
+            f"  skipped: {len(source.skipped)}",
+            f"  mapping complete: {'yes' if plan.is_fully_mapped else 'no'}",
+        )
+    )
     for change in plan.mapped_changes:
         lines.extend(_render_target_change(change))
     for blocker in plan.blocked_changes:
