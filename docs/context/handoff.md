@@ -2,44 +2,38 @@
 
 ## State
 
-Block 005 adds a pure provider-independent resolver. Current metadata plus normalized candidates and a
-`ResolutionPolicy` now produce immutable, explainable `FieldDecision` values. Nothing is applied to
-beets, files, or the database.
+Block 006 integrates the Block 005 resolver into the selected-release import preview. User-facing
+`fields` and `providers` configuration now controls Discogs eligibility independently, selected
+`AlbumInfo` values are canonicalized, and resolved decisions are rendered without applying them.
 
 ## Completed
 
-- `FieldRule` defines field enablement, normalized ordered authority, confidence eligibility, and
-  preserve-existing behavior.
-- `ResolutionPolicy` independently controls fields and providers with copied read-only mappings.
-- Unknown fields/providers and unlisted authority providers are ineligible by default.
-- Authority outranks confidence after threshold eligibility; eligible lower authority provides a
-  fallback when higher authority is unavailable or below threshold.
-- Same-provider conflicts review without an arbitrary winner; identical values deduplicate
-  deterministically.
-- Current values produce propose, keep, or review actions without mutation.
-- Selected candidates retain their original structured value and source provenance; lower-authority
-  contenders remain alternatives.
-- The default policy enables current Discogs fields and only the implemented Discogs provider while
-  recording disabled future authority vocabulary.
+- Configuration uses `fields` for desired metadata and `providers.discogs` for the production source.
+- Safe defaults keep preview enabled, Discogs disabled, current Discogs fields enabled, and future
+  capabilities disabled.
+- Plain settings are overlaid on `default_resolution_policy()` without exposing advanced policy YAML.
+- `ResolutionPolicy.provider_can_contribute()` prevents provider calls unless an enabled provider has
+  authority for at least one enabled field.
+- Selected genres and singular style/label/catalog/barcode/media values use canonical tuple shapes;
+  country and valid year remain scalar.
+- The preview renders safe `KEEP`, `PROPOSE`, `REVIEW`, and `SKIP` decisions with selected provenance.
+- Provider failures still warn and allow import to continue; resolver defects are not broadly caught.
+- Integration tests snapshot `AlbumInfo`, choice, match, and items to enforce read-only behavior.
 
 ## Important decisions
 
-- Field authority is not a global provider ranking.
-- Field and provider enablement are independent.
-- Existing metadata is preserved on conflict by default.
-- Empty authority chains have safe skip semantics.
-- Resolution creates decisions, never writes; semantic merging remains deferred.
+- The old pre-release top-level `discogs` configuration is removed, not maintained in parallel.
+- Unknown configured fields/providers are ignored and gain no authority.
+- Provider-level gating avoids unnecessary API calls; Discogs responses are not field-filtered.
+- Resolution creates preview decisions only and never writes.
 
 ## Deferred
 
-- Resolver integration with selected `AlbumInfo` and the existing preview lifecycle.
-- Mapping user-facing independent `fields` and `providers` configuration into policy.
 - Metadata change plans/application, provenance persistence, and field-specific merge policy.
 - `beet noqlenmeta` and preferred `beet nm` alias.
 - Confidence calibration, artwork, lyrics, and additional provider adapters.
 
 ## Recommended next block
 
-Block 006 should combine selected-release current values and provider candidates through the resolver,
-then render a resolved preview/change plan. It should begin mapping independent field and provider
-configuration without applying metadata. The manual CLI remains a later dedicated slice.
+Review the real Block 006 branch before choosing between a safe metadata application/`ChangePlan`
+slice and a second production provider. Do not assume that writes are next.

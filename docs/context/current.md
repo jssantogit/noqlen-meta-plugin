@@ -10,7 +10,7 @@ Noqlen Meta Plugin - universal multi-provider metadata enrichment for beets.
 
 ## Context level
 
-`standard` for Block 005 because it establishes resolver architecture and an ADR.
+`standard` for Block 006 because it integrates policy, provider I/O, and the beets import lifecycle.
 
 ## Tool Mode
 
@@ -19,11 +19,11 @@ shell commands.
 
 ## Active block
 
-Block 005 - Field Authority and Resolver Core.
+Block 006 - Resolved Import Preview and Fields/Providers Configuration.
 
 ## Active spec
 
-`docs/specs/005-field-authority-resolver/`
+`docs/specs/006-resolved-preview-config/`
 
 ## Active ADRs
 
@@ -33,18 +33,18 @@ Block 005 - Field Authority and Resolver Core.
 
 ## Allowed files
 
-Provider-independent resolver/policy code, focused synthetic tests, ADR 0003, Block 005 specs, and
-context/handoff documents.
+The plugin entry point, beets integration helpers, a minimal resolver query, focused tests, README,
+Block 006 specs, and context/handoff documents.
 
 ## Forbidden files
 
-Lifecycle/provider changes, candidate application, beets/file/database mutation, configuration
-migration, CLI, semantic field merging, persistence, another provider, and beets core.
+Provider/domain contract redesign, candidate application, beets/file/database mutation, CLI,
+semantic field merging, persistence, another provider, advanced policy YAML, and beets core.
 
 ## Behavior budget
 
-Pure resolution from current values, normalized candidates, and immutable policy into immutable field
-decisions. No decision is applied.
+Selected `AlbumInfo` is copied to canonical current values, Discogs candidates are resolved through
+configured field/provider policy, and safe decisions are previewed. No decision is applied.
 
 ## Validation
 
@@ -58,9 +58,9 @@ git status --short
 
 ## Done when
 
-Field/provider policy and deterministic authority resolution are tested, documented, and validated;
-current conflicts review by default and provenance remains structured.
+The actual import preview uses the resolver, configuration independently gates fields and providers,
+unusable providers are not called, and all selected beets state remains unchanged.
 
 ## Stop condition
 
-Stop after Block 005. Do not integrate the resolver into beets or begin Block 006.
+Stop after Block 006. Do not apply decisions or begin Block 007.

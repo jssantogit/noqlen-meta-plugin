@@ -13,11 +13,26 @@ from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
 from beetsplug.noqlenmeta.integration import (
     context_from_album_info,
+    current_values_from_album_info,
+    resolution_policy_from_settings,
     resolve_discogs_token,
 )
 from beetsplug.noqlenmeta.providers import ProviderError
+from beetsplug.noqlenmeta.resolver import default_resolution_policy
 
 TOKEN = "test-personal-token"
+DISCOGS_FIELDS = (
+    "genres",
+    "styles",
+    "labels",
+    "catalog_numbers",
+    "barcodes",
+    "country",
+    "year",
+    "media",
+    "format_descriptions",
+)
+FUTURE_FIELDS = ("mood", "lyrics", "synced_lyrics", "cover")
 
 
 @pytest.fixture(autouse=True)
@@ -43,21 +58,31 @@ def import_task(info: AlbumInfo, choice: Action = Action.APPLY) -> ImportTask:
     return task
 
 
-def candidate(field: str = "genres") -> MetadataCandidate:
+def candidate(
+    field: str = "genres",
+    value: object = ("Electronic", "Rock"),
+    confidence: float = 0.98,
+) -> MetadataCandidate:
     return MetadataCandidate(
         field=field,
-        value=("Electronic", "Rock"),
+        value=value,  # type: ignore[arg-type]
         provider="discogs",
-        confidence=0.98,
+        confidence=confidence,
         source_id="123456",
     )
 
 
-def configure_enabled(plugin: NoqlenMetaPlugin, *, preview: bool = True) -> None:
+def configure_enabled(
+    plugin: NoqlenMetaPlugin,
+    *,
+    preview: bool = True,
+    fields: dict[str, bool] | None = None,
+) -> None:
     plugin.config.set(
         {
-            "discogs": {"enabled": True, "user_token": TOKEN},
             "preview": preview,
+            "fields": fields or {},
+            "providers": {"discogs": {"enabled": True, "user_token": TOKEN}},
         }
     )
 
@@ -65,9 +90,12 @@ def configure_enabled(plugin: NoqlenMetaPlugin, *, preview: bool = True) -> None
 def test_configuration_defaults_and_redacts_user_token() -> None:
     plugin = NoqlenMetaPlugin()
 
-    assert plugin.config["discogs"]["enabled"].get(bool) is False
     assert plugin.config["preview"].get(bool) is True
-    assert plugin.config["discogs"]["user_token"].redact is True
+    assert all(plugin.config["fields"][field].get(bool) for field in DISCOGS_FIELDS)
+    assert all(not plugin.config["fields"][field].get(bool) for field in FUTURE_FIELDS)
+    assert plugin.config["providers"]["discogs"]["enabled"].get(bool) is False
+    assert plugin.config["providers"]["discogs"]["user_token"].redact is True
+    assert "discogs" not in plugin.config.keys()
     assert plugin._import_task_choice in plugin._raw_listeners["import_task_choice"]
 
 
@@ -127,6 +155,77 @@ def test_context_does_not_invent_source_for_arbitrary_album_id() -> None:
     assert context.external_ids == ()
 
 
+def test_current_values_map_album_info_to_canonical_shapes() -> None:
+    info = album_info(
+        genres=["Progressive Metal", "", "  Rock  "],
+        style="Progressive Metal, Heavy Metal",
+        label=" Roadrunner Records ",
+        catalognum=" RR-001 ",
+        barcode=" 012345678901 ",
+        country=" NL ",
+        year=2024,
+        media=" CD ",
+    )
+
+    assert current_values_from_album_info(info) == {
+        "genres": ("Progressive Metal", "Rock"),
+        "styles": ("Progressive Metal, Heavy Metal",),
+        "labels": ("Roadrunner Records",),
+        "catalog_numbers": ("RR-001",),
+        "barcodes": ("012345678901",),
+        "country": "NL",
+        "year": 2024,
+        "media": ("CD",),
+    }
+
+
+def test_current_values_omit_empty_invalid_and_unmapped_values() -> None:
+    info = album_info(
+        genres=["", "  "],
+        style=None,
+        label=" ",
+        catalognum=None,
+        barcode="",
+        country=None,
+        year=0,
+        media=" ",
+    )
+
+    assert current_values_from_album_info(info) == {}
+    assert "format_descriptions" not in current_values_from_album_info(info)
+
+
+def test_settings_only_override_known_policy_enablement() -> None:
+    baseline = default_resolution_policy()
+    policy = resolution_policy_from_settings(
+        {"genres": False, "styles": True, "unknown": True},
+        {"discogs": False, "unknown": True},
+    )
+
+    assert not policy.is_field_enabled("genres")
+    assert policy.is_field_enabled("styles")
+    assert not policy.is_field_enabled("unknown")
+    assert not policy.is_provider_enabled("discogs")
+    assert not policy.is_provider_enabled("unknown")
+    assert policy.field_rules["genres"].authority == baseline.field_rules["genres"].authority
+    assert (
+        policy.field_rules["genres"].min_confidence
+        == baseline.field_rules["genres"].min_confidence
+    )
+    assert (
+        policy.field_rules["genres"].preserve_existing
+        == baseline.field_rules["genres"].preserve_existing
+    )
+
+
+def test_settings_can_enable_provider_and_future_field_without_granting_authority() -> None:
+    policy = resolution_policy_from_settings({"mood": True}, {"discogs": True})
+
+    assert policy.is_provider_enabled("discogs")
+    assert policy.is_field_enabled("mood")
+    assert policy.authority_rank("mood", "discogs") is None
+
+
 @pytest.mark.parametrize("missing", ["artist", "album"])
 def test_missing_required_selected_identity_skips_context(missing: str) -> None:
     assert context_from_album_info(album_info(**{missing: " "})) is None
@@ -172,6 +271,21 @@ def test_disabled_integration_does_not_invoke_provider(monkeypatch: pytest.Monke
     )
 
     NoqlenMetaPlugin()._import_task_choice(None, import_task(album_info()))
+
+
+def test_enabled_provider_is_not_invoked_when_no_authoritative_field_is_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: pytest.fail("provider has no useful enabled field"),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, fields={field: False for field in DISCOGS_FIELDS})
+    plugin.config["fields"]["mood"].set(True)
+
+    plugin._import_task_choice(None, import_task(album_info()))
 
 
 @pytest.mark.parametrize(
@@ -261,13 +375,13 @@ def test_preview_is_visible_and_selected_info_remains_unchanged(
         token: str | None,
     ) -> tuple[MetadataCandidate, ...]:
         assert token == TOKEN
-        return (candidate(), candidate("styles"))
+        return (candidate(), candidate("labels", ("Listenable Records",)))
 
     monkeypatch.setattr(NoqlenMetaPlugin, "_discogs_candidates", preview_candidates)
     monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
     plugin = NoqlenMetaPlugin()
     configure_enabled(plugin)
-    info = album_info(discogs_albumid="123456")
+    info = album_info(discogs_albumid="123456", label="Roadrunner Records")
     snapshot = copy.deepcopy(dict(info))
 
     task = import_task(info)
@@ -281,12 +395,16 @@ def test_preview_is_visible_and_selected_info_remains_unchanged(
     assert task.choice_flag is choice_snapshot
     assert task.match is match_snapshot
     assert task.items == items_snapshot
-    assert output == [
-        "Noqlen Meta / Discogs:\n"
-        "  release: 123456\n"
-        "  genres: Electronic, Rock\n"
-        "  styles: Electronic, Rock"
-    ]
+    assert len(output) == 1
+    assert "Noqlen Meta / resolved preview:" in output[0]
+    assert "genres\n    PROPOSE" in output[0]
+    assert "candidate: Electronic, Rock" in output[0]
+    assert "source: Discogs" in output[0]
+    assert "confidence: 0.98" in output[0]
+    assert "labels\n    REVIEW" in output[0]
+    assert "current: Roadrunner Records" in output[0]
+    assert "candidate: Listenable Records" in output[0]
+    assert "existing conflicting value is preserved" in output[0]
     assert TOKEN not in output[0]
 
 
@@ -327,6 +445,57 @@ def test_preview_removes_provider_control_characters(monkeypatch: pytest.MonkeyP
 
     plugin._import_task_choice(None, import_task(album_info()))
 
-    assert output == [
-        "Noqlen Meta / Discogs:\n  release: 123456\n  labels: Safe Forged, [31mLabel"
-    ]
+    assert len(output) == 1
+    assert "candidate: Safe Forged, [31mLabel" in output[0]
+    assert "\x1b" not in output[0]
+
+
+def test_resolved_integration_produces_keep_and_skip_actions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output: list[str] = []
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (
+            candidate("genres", ("Electronic", "Rock")),
+            candidate("styles", ("Ambient",)),
+        ),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, fields={"styles": False})
+
+    plugin._import_task_choice(
+        None,
+        import_task(album_info(genres=["Electronic", "Rock"], style="Ambient")),
+    )
+
+    assert "genres\n    KEEP" in output[0]
+    assert "current: Electronic, Rock" in output[0]
+    assert "styles\n    SKIP" in output[0]
+    assert "field is disabled by policy" in output[0]
+
+
+def test_ambiguous_review_preview_has_no_selected_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output: list[str] = []
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (
+            candidate("country", "NL"),
+            MetadataCandidate("country", "US", "discogs", 0.95, "654321"),
+        ),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin)
+
+    plugin._import_task_choice(None, import_task(album_info()))
+
+    assert "country\n    REVIEW" in output[0]
+    assert "contenders: 2 from Discogs" in output[0]
+    assert "returned conflicting values" in output[0]
+    assert "candidate:" not in output[0]

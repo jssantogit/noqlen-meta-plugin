@@ -53,29 +53,55 @@ plugins:
   - noqlenmeta
 
 noqlenmeta:
-  discogs:
-    enabled: false
-    user_token: ""
   preview: true
+
+  fields:
+    genres: true
+    styles: true
+    labels: true
+    catalog_numbers: true
+    barcodes: true
+    country: true
+    year: true
+    media: true
+    format_descriptions: true
+    mood: false
+    lyrics: false
+    synced_lyrics: false
+    cover: false
+
+  providers:
+    discogs:
+      enabled: false
+      user_token: ""
 ```
 
-Discogs enrichment is disabled by default. Set `discogs.enabled: true` to preview normalized Discogs
-candidates after selecting an album match. A non-empty `NOQLENMETA_DISCOGS_TOKEN` takes precedence
-over `user_token`; direct Discogs release-ID lookups do not require a token. Tokens are redacted and
-never included in preview output.
+`fields` controls what Noqlen may enrich. `providers` controls where Noqlen may obtain metadata.
+Discogs enrichment is disabled by default. Set `providers.discogs.enabled: true` to preview resolved
+Discogs decisions after selecting an album match. A non-empty `NOQLENMETA_DISCOGS_TOKEN` takes
+precedence over `providers.discogs.user_token`; direct Discogs release-ID lookups do not require a
+token. Tokens are redacted and never included in preview output.
+
+The pre-release `noqlenmeta.discogs` configuration from Block 004 has been replaced rather than
+retained as a parallel schema. Move its values under `noqlenmeta.providers.discogs`.
 
 The preview is read-only and normal beets metadata application continues unchanged:
 
 ```text
-Noqlen Meta / Discogs:
-  release: 123456
-  genres: Electronic, Rock
-  styles: Ambient
+Noqlen Meta / resolved preview:
+
+  genres
+    PROPOSE
+    candidate: Electronic, Rock
+    source: Discogs
+    confidence: 0.92
+    reason: selected 'discogs' by field authority; current value is missing
 ```
 
 ## Current status
 
-The plugin can preview Discogs enrichment for a selected album release during import. Candidate
-application, field authority, conflict resolution, and persistence are not implemented yet.
+The plugin resolves Discogs candidates against selected-release metadata and previews
+`KEEP`/`PROPOSE`/`REVIEW`/`SKIP` decisions during import. The flow remains read-only; candidate
+application and persistence are not implemented.
 
 See `docs/context/current.md` and `docs/context/handoff.md` before starting a development block.

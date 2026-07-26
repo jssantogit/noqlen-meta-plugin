@@ -75,6 +75,22 @@ def test_policy_tracks_provider_enablement_independently() -> None:
     assert not resolution_policy.is_provider_enabled("unknown")
 
 
+def test_provider_contribution_requires_enablement_field_and_authority() -> None:
+    resolution_policy = ResolutionPolicy(
+        {
+            "genres": FieldRule(enabled=True, authority=("catalog",)),
+            "mood": FieldRule(enabled=True, authority=("community",)),
+            "styles": FieldRule(enabled=False, authority=("fallback",)),
+        },
+        {"catalog": True, "community": False, "fallback": True},
+    )
+
+    assert resolution_policy.provider_can_contribute("catalog")
+    assert not resolution_policy.provider_can_contribute("community")
+    assert not resolution_policy.provider_can_contribute("fallback")
+    assert not resolution_policy.provider_can_contribute("unknown")
+
+
 def test_unlisted_provider_has_no_authority() -> None:
     resolution_policy = policy(authority=("catalog",))
 

@@ -99,6 +99,13 @@ class ResolutionPolicy:
     def is_provider_enabled(self, provider: str) -> bool:
         return self.providers.get(_name(provider, "provider name"), False)
 
+    def provider_can_contribute(self, provider: str) -> bool:
+        """Return whether an enabled provider has authority for an enabled field."""
+        normalized = _name(provider, "provider name")
+        return self.providers.get(normalized, False) and any(
+            rule.enabled and normalized in rule.authority for rule in self.field_rules.values()
+        )
+
     def authority_rank(self, field: str, provider: str) -> int | None:
         rule = self.field_rules.get(_name(field, "field name"))
         if rule is None:
