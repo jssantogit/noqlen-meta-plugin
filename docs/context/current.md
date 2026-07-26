@@ -14,15 +14,17 @@ Use `tiny` by default and `standard` for non-trivial feature blocks. Use `full` 
 
 ## Tool Mode
 
-`none` until a block explicitly declares another mode.
+`combo` for Block 002: OpenCode native capabilities, Serena for targeted symbol/navigation work,
+and RTK for noisy shell commands.
 
 ## Active block
 
-None. Project-foundation bootstrap is complete.
+None. Block 002 - Metadata Domain Model + Provider Contract is complete and validated; it is closed
+by commit `feat: add metadata domain and provider contract`.
 
 ## Active spec
 
-No active implementation spec. Foundation record: `docs/specs/001-project-foundation/`.
+`docs/specs/002-metadata-domain-provider-contract/`
 
 ## Active ADRs
 
@@ -30,11 +32,13 @@ No active implementation spec. Foundation record: `docs/specs/001-project-founda
 
 ## Allowed files
 
-Defined per future block.
+Block 002 was limited to domain/provider contract modules, focused tests, its spec, and context
+handoff documents.
 
 ## Forbidden files
 
-Defined per future block. Local agent/tool configuration and real user-library data are always forbidden unless a later explicit policy says otherwise.
+Concrete providers, resolver/authority behavior, persistence, beets hooks, unrelated project files,
+local agent/tool configuration, and real user-library data.
 
 ## Non-goals
 
@@ -45,7 +49,7 @@ Defined per future block. Local agent/tool configuration and real user-library d
 
 ## Behavior budget
 
-Zero product behavior changes until the next block is explicitly planned.
+The package now defines inert production contracts only. It performs no enrichment or network I/O.
 
 ## Validation
 
@@ -59,8 +63,9 @@ python scripts/check_repo_contamination.py
 
 ## Done when
 
-The next block is explicitly defined with scope, allowed files, validation, done criteria, and stop condition.
+The immutable release context, validated metadata candidate, provider protocol, provider error,
+focused tests, specs, and handoff are committed after baseline validation passes.
 
 ## Stop condition
 
-Stop before implementation if the next block is not defined or requires an architectural decision that is not yet recorded.
+Stop after Block 002. Do not begin a concrete provider until Block 003 is explicitly scoped.
