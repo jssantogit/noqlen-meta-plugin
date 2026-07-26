@@ -12,15 +12,17 @@ and persists eligible mapped changes through `Album.store(inherit=True)`.
 - Missing query/`--all` intent still fails before providers, library queries, or writes.
 - All selected Albums are planned before the first database mutation.
 - Strict review and mapping-blocker policy is evaluated independently per Album.
-- Target-plan integrity, clean Album state, stale mapped values, target materialization, and target
-  uniqueness are checked before assignment.
+- Target-plan integrity and local dirty state are checked before fetching a fresh persisted Album;
+  mapped stale values, target materialization, and target uniqueness are then checked before
+  assignment.
 - Genre tuples become fresh lists; scalar values are validated without coercion.
 - Only mapped Album fields are assigned, then `Album.store(inherit=True)` is called once.
 - Normal beets storage propagates inheritable Album fields to Item database rows.
 - Preview/application output truthfully states that physical file tags are unchanged.
 - Unexpected application or store errors propagate and stop later Albums.
 - In-memory tests cover persistence, inheritance, forbidden file operations, planning order, and
-  per-Album failure behavior.
+  per-Album failure behavior; a two-connection file-backed test proves concurrent committed changes
+  are not overwritten by the Album object retained from planning.
 
 ## Important decisions
 

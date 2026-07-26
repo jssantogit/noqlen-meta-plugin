@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from beets.dbcore.db import NotFoundError
 from beets.library import Album
 
 from beetsplug.noqlenmeta.beets_mapping import BeetsTargetShape
@@ -66,7 +67,14 @@ def apply_library_target_plan(
     if album._dirty:
         raise LibraryApplicationError("library Album has pre-existing dirty metadata")
 
-    current_values = current_values_from_library_album(album)
+    try:
+        fresh_album = album.get_fresh_from_db()
+    except NotFoundError:
+        raise LibraryApplicationError(
+            "library Album no longer exists in the database"
+        ) from None
+
+    current_values = current_values_from_library_album(fresh_album)
     for change in plan.mapped_changes:
         current = current_values.get(change.canonical_field)
         if type(current) is not type(change.source.before) or current != change.source.before:

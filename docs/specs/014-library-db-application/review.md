@@ -7,15 +7,16 @@
 - [x] Strict review/blocker policy is independent per Album.
 - [x] Every selected Album is planned before the first store.
 - [x] Persistent mutation is limited to revalidated mapped Album fields.
+- [x] Mapped before-state is checked against a fresh database snapshot after the local dirty guard.
 - [x] Normal Album storage provides Item database inheritance.
 - [x] No direct Item, tag, path, art, or file operation is introduced.
 - [x] Unexpected application/store failures stop later Albums without claiming global rollback.
 
 ## Validation Evidence
 
-- Focused library application, CLI, and mapping tests: `74 passed`.
+- Focused library application, CLI, and mapping tests: `75 passed`.
 - `ruff check .`: passed.
-- `pytest`: `384 passed`, with 2 live provider tests skipped by default.
+- `pytest`: `385 passed`, with 2 live provider tests skipped by default.
 - `python scripts/check_repo_contamination.py`: passed in the isolated environment.
 - `git diff --check`: passed.
 - Isolated `beet help noqlenmeta` and `beet help nm`: passed and show `--apply`.

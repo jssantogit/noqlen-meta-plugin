@@ -70,8 +70,9 @@ git status --short
 
 One Subcommand owns `noqlenmeta` and `nm`; `--apply` is the only CLI write permission; all Albums are
 planned before strict per-Album application; guards prevent forged, dirty, stale, malformed, or
-duplicate-target writes; normal beets Album storage updates Album and inherited Item database rows;
-no physical tag operation occurs; and baseline validation is green.
+duplicate-target writes; stale checks use a fresh persisted Album snapshot; normal beets Album
+storage updates Album and inherited Item database rows; no physical tag operation occurs; and
+baseline validation is green.
 
 ## Stop condition
 

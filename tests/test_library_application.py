@@ -1,4 +1,5 @@
 from dataclasses import FrozenInstanceError, replace
+from pathlib import Path
 
 import pytest
 from beets.library import Album, Item, Library
@@ -179,25 +180,50 @@ def test_review_or_mapping_blocker_prevents_mutation_and_store(
     assert not result.stored
 
 
-def test_stale_mapped_state_prevents_all_assignments_and_store(
-    monkeypatch: pytest.MonkeyPatch, library: Library
+def test_fresh_persisted_state_prevents_concurrent_overwrite(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    original = add_album(library, genres=["Rock"])
+    database = str(tmp_path / "library.db")
+    planning_library = Library(database, set_music_dir=False)
+    original = add_album(planning_library, genres=["Rock"])
     plan = target_plan(
         planned_change("genres", ("Metal",), ("Rock",)),
         planned_change("year", 2005),
     )
-    concurrent = library.get_album(original.id)
+
+    concurrent_library = Library(database, set_music_dir=False)
+    concurrent = concurrent_library.get_album(original.id)
     concurrent.genres = ["Jazz"]
     concurrent.store(inherit=True)
-    stale = library.get_album(original.id)
     monkeypatch.setattr(Album, "store", lambda *args, **kwargs: pytest.fail("stored"))
 
     with pytest.raises(LibraryApplicationError, match="no longer matches"):
-        apply_library_target_plan(stale, plan)
+        apply_library_target_plan(original, plan)
 
-    assert stale.genres == ["Jazz"]
-    assert stale.year == 0
+    assert original.genres == ["Rock"]
+    assert original.year == 0
+    persisted = concurrent_library.get_album(original.id)
+    assert persisted.genres == ["Jazz"]
+    assert persisted.year == 0
+    assert [item.genres for item in persisted.items()] == [["Jazz"]]
+
+
+def test_deleted_album_is_reported_as_library_application_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    database = str(tmp_path / "library.db")
+    planning_library = Library(database, set_music_dir=False)
+    original = add_album(planning_library)
+    plan = target_plan(planned_change("genres", ("Metal",)))
+
+    concurrent_library = Library(database, set_music_dir=False)
+    concurrent_library.get_album(original.id).remove(with_items=False)
+    monkeypatch.setattr(Album, "store", lambda *args, **kwargs: pytest.fail("stored"))
+
+    with pytest.raises(LibraryApplicationError, match="no longer exists in the database"):
+        apply_library_target_plan(original, plan)
+
+    assert original.genres == []
 
 
 def test_preexisting_dirty_album_is_rejected_before_noqlen_mutation(
@@ -206,6 +232,11 @@ def test_preexisting_dirty_album_is_rejected_before_noqlen_mutation(
     album = add_album(library)
     album.album = "Owned by another operation"
     monkeypatch.setattr(Album, "store", lambda *args, **kwargs: pytest.fail("stored"))
+    monkeypatch.setattr(
+        Album,
+        "get_fresh_from_db",
+        lambda *args, **kwargs: pytest.fail("discarded dirty state by refreshing"),
+    )
 
     with pytest.raises(LibraryApplicationError, match="pre-existing dirty"):
         apply_library_target_plan(album, target_plan(planned_change("genres", ("Rock",))))

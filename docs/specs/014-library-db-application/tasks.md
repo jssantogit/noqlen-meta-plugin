@@ -3,6 +3,7 @@
 - [x] Add `--apply` to the existing `noqlenmeta`/`nm` Subcommand.
 - [x] Add immutable prepared-plan and application-result representations.
 - [x] Add strict plan integrity, clean Album, stale state, materialization, and uniqueness guards.
+- [x] Validate stale mapped state against a fresh persisted Album snapshot.
 - [x] Persist mapped Album metadata through `Album.store(inherit=True)` only.
 - [x] Split CLI execution into plan-all and apply-render phases.
 - [x] Render truthful database and unchanged-file-tag status.

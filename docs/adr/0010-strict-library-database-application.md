@@ -18,7 +18,8 @@ stale plans, use normal beets persistence, and distinguish database updates from
 5. Any `LibraryMappingBlocker` blocks that Album.
 6. Only `LibraryTargetPlan.mapped_changes` may mutate persistent Album metadata.
 7. The target plan must equal a fresh canonical mapping of its source before mutation.
-8. Album mapped values must still match each planned `before` value.
+8. Immediately before mutation, Album mapped values from a fresh database snapshot must still match
+   each planned `before` value; the Album object retained from planning is not trusted for this check.
 9. The Album must have no pre-existing dirty metadata before Noqlen mutation.
 10. Every target value is validated and materialized before any assignment.
 11. Duplicate persistent targets are rejected before mutation.
@@ -36,6 +37,9 @@ stale plans, use normal beets persistence, and distinguish database updates from
 22. An unexpected application or store failure aborts later Album writes.
 23. A plan with no reviews, blockers, or mapped changes is a successful no-op and is not stored.
 24. Safe partial CLI application is deferred to a separately reviewed block.
+
+If the fresh lookup shows that the Album no longer exists, application fails with a
+`LibraryApplicationError`. Other database errors propagate unchanged.
 
 ## Consequences
 
