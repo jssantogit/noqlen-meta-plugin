@@ -7,20 +7,21 @@ Noqlen Meta is a beets plugin focused on enriching an already identified release
 ## Project direction
 
 ```text
-beets candidate matching
-        ↓
-selected release
-        ↓
-Noqlen Meta enrichment
-        ↓
-provider candidates
-        ↓
-field authority + resolver
-        ↓
-reviewable metadata changes
-        ↓
-beets database / file write
+providers
+    ↓
+normalized candidates
+    ↓
+Field Authority
+    ↓
+FieldDecision
+    ↓
+ChangePlan
+    ↓
+preview
 ```
+
+`ChangePlan` describes what Noqlen would change and what still requires review. It does not write
+metadata.
 
 The first providers are expected to include MusicBrainz, Discogs, and AcoustID, followed by additional catalog, community, lyrics, and fallback sources where they add clear value.
 
@@ -107,14 +108,20 @@ number, or barcode metadata.
 The pre-release `noqlenmeta.discogs` configuration from Block 004 has been replaced rather than
 retained as a parallel schema. Move its values under `noqlenmeta.providers.discogs`.
 
-The preview is read-only and normal beets metadata application continues unchanged:
+The plan preview is read-only and normal beets metadata application continues unchanged:
 
 ```text
-Noqlen Meta / resolved preview:
+Noqlen Meta / change plan:
+
+  planned changes: 1
+  review required: 0
+  unchanged: 0
+  skipped: 0
+  conflict-free: yes
 
   genres
     PROPOSE
-    candidate: Electronic, Rock
+    proposed: Electronic, Rock
     source: Discogs
     confidence: 0.92
     reason: selected 'discogs' by field authority; current value is missing
@@ -122,8 +129,9 @@ Noqlen Meta / resolved preview:
 
 ## Current status
 
-The plugin resolves Discogs and iTunes candidates against selected-release metadata and previews
-`KEEP`/`PROPOSE`/`REVIEW`/`SKIP` decisions during import. The flow remains read-only; candidate
-application and persistence are not implemented.
+The plugin resolves Discogs and iTunes candidates against selected-release metadata, translates
+`KEEP`/`PROPOSE`/`REVIEW`/`SKIP` decisions into an immutable `ChangePlan`, and previews the plan
+during import. The flow remains read-only; target mapping, application, and persistence are not
+implemented.
 
 See `docs/context/current.md` and `docs/context/handoff.md` before starting a development block.

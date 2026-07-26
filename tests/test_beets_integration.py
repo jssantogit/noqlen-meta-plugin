@@ -11,6 +11,7 @@ from beets.importer.tasks import ImportTask
 
 import beetsplug.noqlenmeta as plugin_module
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
+from beetsplug.noqlenmeta.changeplan import ChangePlanError
 from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
 from beetsplug.noqlenmeta.integration import (
     context_from_album_info,
@@ -397,10 +398,12 @@ def test_discogs_is_not_loaded_or_invoked_for_cover_only_configuration(
 def test_both_providers_feed_one_resolver_pass_and_discogs_authority_wins(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from beetsplug.noqlenmeta.changeplan import build_change_plan as real_build_change_plan
     from beetsplug.noqlenmeta.resolver import resolve_metadata as real_resolve_metadata
 
     provider_calls: list[tuple[str, str | None]] = []
     resolution_calls: list[tuple[MetadataCandidate, ...]] = []
+    plan_calls: list[object] = []
     rendered: list[object] = []
 
     def discogs_candidates(
@@ -425,12 +428,17 @@ def test_both_providers_feed_one_resolver_pass_and_discogs_authority_wins(
         resolution_calls.append(tuple(candidates))  # type: ignore[arg-type]
         return real_resolve_metadata(current_values, candidates, policy)  # type: ignore[arg-type]
 
+    def record_plan(decisions: object) -> object:
+        plan_calls.append(decisions)
+        return real_build_change_plan(decisions)  # type: ignore[arg-type]
+
     monkeypatch.setattr(NoqlenMetaPlugin, "_discogs_candidates", discogs_candidates)
     monkeypatch.setattr(NoqlenMetaPlugin, "_itunes_candidates", itunes_candidates)
     monkeypatch.setattr("beetsplug.noqlenmeta.resolve_metadata", record_resolution)
+    monkeypatch.setattr("beetsplug.noqlenmeta.build_change_plan", record_plan)
     monkeypatch.setattr(
-        "beetsplug.noqlenmeta.render_resolved_preview",
-        lambda decisions: rendered.append(decisions),
+        "beetsplug.noqlenmeta.render_change_plan",
+        lambda plan: rendered.append(plan),
     )
     plugin = NoqlenMetaPlugin()
     configure_enabled(plugin, discogs=True, itunes=True, storefront="gb")
@@ -446,11 +454,13 @@ def test_both_providers_feed_one_resolver_pass_and_discogs_authority_wins(
     assert provider_calls == [("discogs", TOKEN), ("itunes", "gb")]
     assert len(resolution_calls) == 1
     assert [item.provider for item in resolution_calls[0]] == ["discogs", "itunes"]
-    decisions = rendered[0]
-    assert len(decisions) == 1  # type: ignore[arg-type]
+    assert len(plan_calls) == 1
+    decisions = plan_calls[0]
     decision = decisions[0]  # type: ignore[index]
     assert decision.selected.provider == "discogs"
     assert [item.provider for item in decision.alternatives] == ["itunes"]
+    plan = rendered[0]
+    assert plan.changes[0].source is decision.selected  # type: ignore[attr-defined]
     assert dict(info) == info_snapshot
     assert task.choice_flag is choice_snapshot
     assert task.match is match_snapshot
@@ -554,6 +564,23 @@ def test_provider_contract_error_is_not_swallowed(monkeypatch: pytest.MonkeyPatc
     configure_enabled(plugin, discogs=False, itunes=True)
 
     with pytest.raises(ProviderContractError, match="unsupported field 'labels'"):
+        plugin._import_task_choice(None, import_task(album_info()))
+
+
+def test_change_plan_error_is_not_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (candidate(),),
+    )
+    monkeypatch.setattr(
+        "beetsplug.noqlenmeta.build_change_plan",
+        lambda decisions: (_ for _ in ()).throw(ChangePlanError("broken decision contract")),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin)
+
+    with pytest.raises(ChangePlanError, match="broken decision contract"):
         plugin._import_task_choice(None, import_task(album_info()))
 
 
@@ -665,9 +692,14 @@ def test_preview_is_visible_and_selected_info_remains_unchanged(
     assert task.match is match_snapshot
     assert task.items == items_snapshot
     assert len(output) == 1
-    assert "Noqlen Meta / resolved preview:" in output[0]
+    assert "Noqlen Meta / change plan:" in output[0]
+    assert "planned changes: 1" in output[0]
+    assert "review required: 1" in output[0]
+    assert "unchanged: 0" in output[0]
+    assert "skipped: 0" in output[0]
+    assert "conflict-free: no" in output[0]
     assert "genres\n    PROPOSE" in output[0]
-    assert "candidate: Electronic, Rock" in output[0]
+    assert "proposed: Electronic, Rock" in output[0]
     assert "source: Discogs" in output[0]
     assert "confidence: 0.98" in output[0]
     assert "labels\n    REVIEW" in output[0]
@@ -715,7 +747,7 @@ def test_preview_removes_provider_control_characters(monkeypatch: pytest.MonkeyP
     plugin._import_task_choice(None, import_task(album_info()))
 
     assert len(output) == 1
-    assert "candidate: Safe Forged, [31mLabel" in output[0]
+    assert "proposed: Safe Forged, [31mLabel" in output[0]
     assert "\x1b" not in output[0]
 
 
@@ -744,6 +776,9 @@ def test_resolved_integration_produces_keep_and_skip_actions(
     assert "current: Electronic, Rock" in output[0]
     assert "styles\n    SKIP" in output[0]
     assert "field is disabled by policy" in output[0]
+    assert "unchanged: 1" in output[0]
+    assert "skipped: 1" in output[0]
+    assert "conflict-free: yes" in output[0]
 
 
 def test_ambiguous_review_preview_has_no_selected_value(

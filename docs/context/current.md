@@ -10,8 +10,8 @@ Noqlen Meta Plugin - universal multi-provider metadata enrichment for beets.
 
 ## Context level
 
-`standard` for Block 008 because it formalizes the provider contract across policy, adapters, and the
-beets import lifecycle.
+`standard` for Block 009 because it introduces a safety boundary between resolution and any future
+metadata application while integrating that boundary into the beets import lifecycle.
 
 ## Tool Mode
 
@@ -20,11 +20,11 @@ shell commands.
 
 ## Active block
 
-Block 008 - Provider Capabilities and Orchestration Contract.
+Block 009 - Read-Only ChangePlan.
 
 ## Active spec
 
-`docs/specs/008-provider-capabilities/`
+`docs/specs/009-change-plan/`
 
 ## Active ADRs
 
@@ -32,24 +32,23 @@ Block 008 - Provider Capabilities and Orchestration Contract.
 - `docs/adr/0002-python3-discogs-client.md`
 - `docs/adr/0003-field-authority-resolution.md`
 - `docs/adr/0004-provider-capabilities-orchestration.md`
+- `docs/adr/0005-change-plan-boundary.md`
 
 ## Allowed files
 
-Dependency-light provider specs, narrow orchestration helpers, provider contracts, minimal built-in
-provider/integration/resolver changes, focused tests, README, ADR 0004, Block 008 specs, and
-context/handoff documents.
+One dependency-light ChangePlan module, minimal plugin/integration changes, focused tests, README,
+ADR 0005, Block 009 specs, and context/handoff documents.
 
 ## Forbidden files
 
-Candidate application, beets/file/database mutation, CLI, semantic field merging, persistence,
-dynamic provider discovery, caching, concurrency, network behavior changes, additional providers,
-advanced policy YAML, ChangePlan, and beets core.
+Candidate application, beets/file/database mutation, target-field mapping, serialization policy, CLI,
+semantic field merging, persistence, provider/resolver redesign, network behavior changes, additional
+providers, configuration changes, and beets core.
 
 ## Behavior budget
 
-Discogs and iTunes are invoked only when enabled fields, Field Authority, and immutable adapter
-capabilities intersect. Candidate output is contract-validated, expected service failures remain
-isolated, and one resolver pass produces preview decisions that are never applied.
+Existing provider orchestration and one resolver pass remain unchanged. Resolved decisions are
+translated into a deterministic immutable ChangePlan and rendered as a read-only plan preview.
 
 ## Validation
 
@@ -63,11 +62,11 @@ git status --short
 
 ## Done when
 
-Authority and capability remain independent, specs match real adapter output, irrelevant providers do
-no work, contract defects remain visible, optional Discogs loading stays lazy, existing two-provider
-resolution is unchanged, and baseline validation is green.
+PROPOSE/REVIEW/KEEP/SKIP translate correctly, provenance and structured values remain intact,
+inconsistent decisions fail visibly, the real preview consumes the plan, import state remains
+unchanged, and baseline validation is green.
 
 ## Stop condition
 
-Stop after Block 008. Do not begin ChangePlan, apply decisions, or add metadata writes, providers,
-lyrics, artwork, or CLI.
+Stop after Block 009. Do not define beets application mapping, apply decisions, or add metadata
+writes, providers, configuration, CLI, lyrics, or artwork.
