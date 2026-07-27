@@ -2,45 +2,34 @@
 
 ## State
 
-Block 016 adds MusicBrainz as a disabled-by-default enrichment provider anchored exclusively to an
-exact release MBID already known by beets. It activates existing Field Authority without changing
-matching, mapping, application, persistence, or file behavior.
+Block 017 exposes existing field-level resolution controls as optional configuration. Built-in
+`default_resolution_policy()` remains the source of truth, and importer and CLI share one overlay.
 
 ## Completed
 
-- Added `MUSICBRAINZ_SPEC` for labels, catalog numbers, barcodes, country, year, and media.
-- Added canonical UUID validation and deterministic `musicbrainz.release` context identifiers for
-  selected `AlbumInfo` and persistent `Album`; Discogs IDs coexist.
-- Added one direct `MusicBrainzAPI.get_release` lookup with explicit `labels` and `media` includes.
-- Provider and fixture consume the underscore-normalized release mapping returned by beets, including
-  `label_info` and `catalog_number`.
-- Missing, malformed, or conflicting MBIDs return no candidates before network work.
-- Added response-ID integrity, fixed external failure translation, structured normalization,
-  confidence, and public provenance.
-- Added capability-gated orchestration through the shared provider collection and planning path.
-- Added fixture-backed provider and integration coverage plus an opt-in live smoke test.
-- Documented configuration and the anchored-provider decision in ADR 0012.
+- Added empty-by-default authority, confidence, and preservation mappings.
+- Added strict field, provider, authority-sequence, confidence, and boolean validation.
+- Added user-facing configuration errors before provider and library work.
+- Preserved authority/capability separation while making configured authority affect invocation.
+- Proved authority and confidence selection with the real resolver.
+- Proved preservation changes `REVIEW` to `PROPOSE` without granting importer or CLI writes.
+- Documented optional configuration, replacement semantics, capability independence, and safety.
 
 ## Important decisions
 
-- MusicBrainz does not match or search for releases.
-- Beets' supported MusicBrainz client remains the sole HTTP/rate-limit implementation.
-- The provider consumes beets-normalized mappings and does not support raw hyphenated HTTP keys as a
-  parallel payload contract.
-- Release year uses the exact release date, never release-group first release date.
-- Multi-values remain structured and may expose existing singular-target blockers.
-- Existing authority remains unchanged: MusicBrainz leads year; Discogs leads its higher-authority
-  edition fields.
-- No MusicBrainz credentials or copied beets MusicBrainz settings belong to Noqlen configuration.
-- Write and file semantics remain exactly as established through Block 015.
+- Authority overrides replace one field's complete order; omitted fields retain complete defaults.
+- Only current built-in providers are valid in user authority overrides.
+- Capability support is not configuration validation.
+- Confidence remains field-level and post-collection.
+- Resolution configuration never changes mapping, application, persistence, or file behavior.
 
 ## Deferred
 
-- MusicBrainz identity, relationships, credits, recordings, genres/tags, artwork, and search.
-- Additional providers such as Last.fm.
-- Physical file-tag synchronization and media-to-Item mapping.
+- Last.fm community classification and any additional providers.
+- Dynamic provider registration or capability overrides.
+- Physical file-tag synchronization.
 
 ## Recommended next block
 
-Stop for independent Block 016 audit before reassessing provider direction. Do not automatically
-extend MusicBrainz scope or add physical tag writes.
+Stop for independent Block 017 audit. After audit, reassess Last.fm classification for genres,
+styles, and mood as a separate block.

@@ -49,19 +49,21 @@ def configure_enabled(
     discogs: bool = True,
     musicbrainz: bool = False,
     itunes: bool = False,
+    resolution: dict[str, object] | None = None,
 ) -> None:
-    plugin.config.set(
-        {
-            "preview": preview,
-            "apply": apply,
-            "apply_mode": apply_mode,
-            "providers": {
-                "discogs": {"enabled": discogs, "user_token": TOKEN},
-                "musicbrainz": {"enabled": musicbrainz},
-                "itunes": {"enabled": itunes, "storefront": "us"},
-            },
+    settings: dict[str, object] = {
+        "preview": preview,
+        "apply": apply,
+        "apply_mode": apply_mode,
+        "providers": {
+            "discogs": {"enabled": discogs, "user_token": TOKEN},
+            "musicbrainz": {"enabled": musicbrainz},
+            "itunes": {"enabled": itunes, "storefront": "us"},
         }
-    )
+    }
+    if resolution is not None:
+        settings["resolution"] = resolution
+    plugin.config.set(settings)
 
 
 def candidate(
@@ -184,6 +186,25 @@ def test_no_useful_provider_avoids_library_query(monkeypatch: pytest.MonkeyPatch
     assert output == [
         "Noqlen Meta: no enabled provider can contribute to the configured fields"
     ]
+
+
+def test_invalid_resolution_fails_before_provider_and_library_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(
+        plugin,
+        resolution={"authority": {"year": ["musicbraimz"]}},
+    )
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda *args: pytest.fail("invalid resolution invoked provider"),
+    )
+    lib = SimpleNamespace(albums=lambda query: pytest.fail("invalid resolution queried albums"))
+
+    with pytest.raises(ui.UserError, match="invalid resolution configuration.*musicbraimz"):
+        invoke(plugin, lib, ["artist:Gojira"])
 
 
 def test_no_match_reports_without_provider_call(
@@ -380,6 +401,36 @@ def test_cli_preserves_authority_and_provider_failure_fallback(
     assert "source: iTunes" in output[0]
     assert TOKEN not in caplog.text
     assert TOKEN not in output[0]
+
+
+def test_cli_uses_configured_authority_for_selected_provenance(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    output: list[str] = []
+    add_album(library)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(
+        plugin,
+        discogs=True,
+        musicbrainz=True,
+        resolution={"authority": {"year": ["discogs", "musicbrainz"]}},
+    )
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda *args: (candidate("year", 2005, confidence=0.88),),
+    )
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_musicbrainz_candidates",
+        lambda *args: (candidate("year", 2006, confidence=0.99, provider="musicbrainz"),),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.library_integration.ui.print_", output.append)
+
+    invoke(plugin, library, ["artist:Gojira"])
+
+    assert "source: Discogs" in output[0]
+    assert "proposed: 2005" in output[0]
 
 
 def test_cli_internal_contract_and_mapping_errors_propagate(
@@ -584,6 +635,35 @@ def test_importer_config_does_not_authorize_cli_database_writes(
     reloaded = library.get_album(album.id)
     assert reloaded.genres == []
     assert [item.genres for item in reloaded.items()] == [[]]
+
+
+def test_cli_preserve_override_changes_decision_without_granting_write_permission(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    output: list[str] = []
+    album = add_album(library, year=2006)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(
+        plugin,
+        resolution={"preserve_existing": {"year": False}},
+    )
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda *args: (candidate("year", 2005),),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.library_integration.ui.print_", output.append)
+
+    invoke(plugin, library, ["artist:Gojira"])
+
+    assert "year\n    PROPOSE" in output[0]
+    assert library.get_album(album.id).year == 2006
+
+    output.clear()
+    invoke(plugin, library, ["artist:Gojira", "--apply"])
+
+    assert library.get_album(album.id).year == 2005
+    assert "application: stored in library database (1 fields)" in output[0]
 
 
 def test_cli_strict_mapping_blocker_prevents_mapped_database_change(

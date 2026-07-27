@@ -4,7 +4,7 @@ import logging
 from types import SimpleNamespace
 
 import pytest
-from beets import config
+from beets import config, ui
 from beets.autotag import AlbumMatch
 from beets.autotag.hooks import AlbumInfo, TrackInfo
 from beets.importer.actions import Action
@@ -97,6 +97,7 @@ def configure_enabled(
     musicbrainz: bool = False,
     itunes: bool = False,
     storefront: str = "us",
+    resolution: dict[str, object] | None = None,
 ) -> None:
     settings: dict[str, object] = {
         "preview": preview,
@@ -110,6 +111,8 @@ def configure_enabled(
     }
     if apply_mode is not None:
         settings["apply_mode"] = apply_mode
+    if resolution is not None:
+        settings["resolution"] = resolution
     plugin.config.set(settings)
 
 
@@ -126,6 +129,9 @@ def test_configuration_defaults_and_redacts_user_token() -> None:
     assert plugin.config["providers"]["musicbrainz"]["enabled"].get(bool) is False
     assert plugin.config["providers"]["itunes"]["enabled"].get(bool) is False
     assert plugin.config["providers"]["itunes"]["storefront"].as_str() == "us"
+    assert plugin.config["resolution"]["authority"].get(dict) == {}
+    assert plugin.config["resolution"]["min_confidence"].get(dict) == {}
+    assert plugin.config["resolution"]["preserve_existing"].get(dict) == {}
     assert "discogs" not in plugin.config.keys()
     assert plugin._import_task_choice in plugin._raw_listeners["import_task_choice"]
     assert not hasattr(plugin_module, "_ITUNES_FIELDS")
@@ -324,6 +330,36 @@ def test_providers_can_be_enabled_independently(
     assert policy.is_provider_enabled("itunes") is itunes_enabled
 
 
+def test_plugin_config_extracts_all_resolution_sections_as_plain_values() -> None:
+    plugin = NoqlenMetaPlugin()
+    plugin.config.set(
+        {
+            "resolution": {
+                "authority": {"year": [" Discogs ", "MusicBrainz"]},
+                "min_confidence": {"year": 0.9},
+                "preserve_existing": {"year": False},
+            }
+        }
+    )
+
+    policy = plugin._resolution_policy()
+
+    assert policy.field_rules["year"].authority == ("discogs", "musicbrainz")
+    assert policy.field_rules["year"].min_confidence == 0.9
+    assert policy.field_rules["year"].preserve_existing is False
+
+
+def test_unknown_resolution_section_is_a_user_configuration_error() -> None:
+    plugin = NoqlenMetaPlugin()
+    plugin.config.set({"resolution": {"confidence": {"year": 0.9}}})
+
+    with pytest.raises(
+        ui.UserError,
+        match="invalid resolution configuration: unknown resolution section 'confidence'",
+    ):
+        plugin._resolution_policy()
+
+
 @pytest.mark.parametrize("missing", ["artist", "album"])
 def test_missing_required_selected_identity_skips_context(missing: str) -> None:
     assert context_from_album_info(album_info(**{missing: " "})) is None
@@ -408,6 +444,56 @@ def test_itunes_is_not_invoked_when_only_styles_can_be_enriched(
     )
 
     plugin._import_task_choice(None, import_task(album_info()))
+
+
+def test_custom_styles_authority_is_accepted_but_itunes_capability_still_gates_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_itunes_candidates",
+        lambda self, context, storefront: pytest.fail("iTunes cannot emit styles"),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(
+        plugin,
+        fields={field: field == "styles" for field in DISCOGS_FIELDS},
+        discogs=False,
+        itunes=True,
+        resolution={"authority": {"styles": ["itunes"]}},
+    )
+
+    assert plugin._resolution_policy().field_rules["styles"].authority == ("itunes",)
+    plugin._import_task_choice(None, import_task(album_info()))
+
+
+def test_custom_authority_excludes_enabled_provider_before_collection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", lambda output: None)
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: calls.append("discogs") or (),
+    )
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_musicbrainz_candidates",
+        lambda self, context: pytest.fail("MusicBrainz has no configured year authority"),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(
+        plugin,
+        fields={field: field == "year" for field in DISCOGS_FIELDS},
+        discogs=True,
+        musicbrainz=True,
+        resolution={"authority": {"year": ["discogs"]}},
+    )
+
+    plugin._import_task_choice(None, import_task(album_info()))
+
+    assert calls == ["discogs"]
 
 
 @pytest.mark.parametrize("field", ["labels", "catalog_numbers", "country", "media"])
@@ -924,6 +1010,56 @@ def test_preview_is_visible_and_selected_info_remains_unchanged(
     assert "candidate: Listenable Records" in output[0]
     assert "existing conflicting value is preserved" in output[0]
     assert TOKEN not in output[0]
+
+
+def test_importer_uses_preserve_override_but_preview_does_not_mutate_selected_info(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output: list[str] = []
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (candidate("year", 2005),),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(
+        plugin,
+        apply=False,
+        resolution={"preserve_existing": {"year": False}},
+    )
+    info = album_info(year=2006)
+
+    plugin._import_task_choice(None, import_task(info))
+
+    assert info.year == 2006
+    assert "year\n    PROPOSE" in output[0]
+    assert "policy allows replacing the existing value" in output[0]
+
+
+def test_invalid_importer_resolution_fails_before_provider_and_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda *args: pytest.fail("invalid resolution invoked provider"),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(
+        plugin,
+        resolution={"min_confidence": {"yeer": 0.9}},
+    )
+    info = album_info(year=2006)
+    snapshot = copy.deepcopy(dict(info))
+
+    with pytest.raises(
+        ui.UserError,
+        match="invalid resolution configuration.*unknown field 'yeer'",
+    ):
+        plugin._import_task_choice(None, import_task(info))
+
+    assert dict(info) == snapshot
 
 
 def test_multi_label_proposal_is_previewed_as_mapping_blocker_without_mutation(

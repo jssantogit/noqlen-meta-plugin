@@ -10,8 +10,8 @@ Noqlen Meta Plugin - universal multi-provider metadata enrichment for beets.
 
 ## Context level
 
-`standard` for Block 016 because it adds one anchored provider through existing context,
-orchestration, resolver, planning, mapping, and application boundaries without changing writes.
+`standard` for Block 017 because it exposes existing resolver policy through shared importer and CLI
+configuration without changing resolution, application, or persistence architecture.
 
 ## Tool Mode
 
@@ -20,44 +20,34 @@ shell commands.
 
 ## Active block
 
-Block 016 - Anchored MusicBrainz Release Enrichment.
+Block 017 - Configurable Resolution Policy.
 
 ## Active spec
 
-`docs/specs/016-musicbrainz-enrichment/`
+`docs/specs/017-resolution-policy-config/`
 
 ## Active ADRs
 
-- `docs/adr/0001-external-beets-plugin.md`
-- `docs/adr/0002-python3-discogs-client.md`
 - `docs/adr/0003-field-authority-resolution.md`
 - `docs/adr/0004-provider-capabilities-orchestration.md`
-- `docs/adr/0005-change-plan-boundary.md`
-- `docs/adr/0006-beets-target-mapping.md`
-- `docs/adr/0007-strict-selected-release-application.md`
-- `docs/adr/0008-partial-application-policy.md`
-- `docs/adr/0009-library-cli-preview-boundary.md`
-- `docs/adr/0010-strict-library-database-application.md`
-- `docs/adr/0011-partial-library-application-policy.md`
 - `docs/adr/0012-anchored-musicbrainz-enrichment.md`
+- `docs/adr/0013-configurable-resolution-policy.md`
 
 ## Allowed files
 
-MusicBrainz provider/spec, shared release-ID context adapters, provider orchestration/configuration,
-focused tests and fixture, README, ADR 0012, Block 016 specs, and context/handoff documents.
+Shared policy integration, plugin configuration extraction, focused pure/importer/CLI tests, README,
+ADR 0013, Block 017 specs, and context/handoff documents.
 
 ## Forbidden files
 
-MusicBrainz search or matching, release-group/recording/credit/tag/art/lyrics work, authority redesign,
-application or persistence semantics, media-to-Item mapping, CLI flags, caching/concurrency, beets core,
-and physical file operations.
+Resolver redesign, provider modules, mappings, application or persistence semantics, new fields or
+providers, CLI flags, caching/concurrency, beets core, and physical file operations.
 
 ## Behavior budget
 
-An enabled MusicBrainz provider may enrich only an exact validated release MBID already known by
-beets. It consumes the underscore-normalized release mapping returned by beets `MusicBrainzAPI`, not
-raw MusicBrainz HTTP keys. Existing Field Authority decides winners. Mapping, strict/partial
-application, database writes, and file behavior remain unchanged.
+Optional field-level authority, confidence, and preservation overrides may alter resolution decisions
+and existing capability-gated provider invocation. Missing overrides preserve built-in policy exactly.
+No override grants write permission.
 
 ## Validation
 
@@ -71,12 +61,10 @@ git status --short
 
 ## Done when
 
-MusicBrainz is a disabled built-in provider; exact release IDs flow from importer and library
-contexts; direct narrow beets-client lookup emits six normalized fields; missing or ambiguous IDs do
-no I/O; authority becomes operational without redesign; fixture-backed tests and opt-in live smoke
-exist; and baseline validation is green.
+The three optional mappings validate strictly, overlay built-in `FieldRule` values, affect importer
+and CLI through one policy, preserve capability independence and write safety, and all offline
+validation passes.
 
 ## Stop condition
 
-Stop after Block 016. Do not add MusicBrainz matching, deeper canonical fields, another provider, or
-file-tag synchronization.
+Stop after Block 017. Do not add Last.fm or physical tag synchronization.

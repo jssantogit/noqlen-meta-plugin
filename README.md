@@ -101,15 +101,43 @@ noqlenmeta:
     itunes:
       enabled: false
       storefront: "us"
+
+  # Optional advanced resolution overrides. Omitted fields keep built-in defaults.
+  resolution:
+    authority:
+      genres:
+        - discogs
+        - itunes
+      year:
+        - musicbrainz
+        - discogs
+        - itunes
+
+    min_confidence:
+      genres: 0.80
+      year: 0.90
+
+    preserve_existing:
+      genres: true
+      year: false
 ```
 
-`fields` controls what Noqlen may enrich. `providers` controls where Noqlen may obtain metadata. All
-providers are disabled by default and can be enabled independently or simultaneously. Discogs is
-catalog- and edition-oriented. MusicBrainz enriches only from an exact MusicBrainz release MBID
+`fields` controls what metadata Noqlen wants. `providers` controls where metadata may come from.
+`resolution.authority` controls the preferred provider order per field,
+`resolution.min_confidence` controls the field-level eligibility threshold, and
+`resolution.preserve_existing` controls whether an existing conflict requires review. Every advanced
+setting is optional; empty mappings use the built-in defaults.
+
+A configured authority list replaces the default order for that field; it does not merge with or
+prepend to the default. An omitted field keeps its built-in default. The first provider is highest
+authority, and a lower-authority candidate cannot win merely because its numeric confidence is
+higher. Authority does not imply provider capability. A provider listed for a field is queried only
+if it is enabled and its adapter currently declares support for that field.
+
+All providers are disabled by default and can be enabled independently or simultaneously. Discogs
+is catalog- and edition-oriented. MusicBrainz enriches only from an exact MusicBrainz release MBID
 already known by beets; it does not perform fuzzy release matching. iTunes is currently a fallback
-only for the narrow album genre and release year metadata exposed with defensible semantics. Field
-Authority determines the winner when providers return candidates; higher provider-local confidence
-alone does not override a more authoritative source.
+only for the narrow album genre and release year metadata exposed with defensible semantics.
 
 `apply` is `false` by default, and `apply_mode` defaults to `strict`. With `apply: false`, Noqlen
 never mutates the selected release. With `apply: true`, strict mode applies only when the entire
@@ -117,6 +145,11 @@ target plan is lossless and has no resolver `REVIEW`; any review or mapping bloc
 Noqlen mutation. Partial mode requires explicit `apply_mode: partial` and may apply only losslessly
 mapped, already-resolved changes while review and mapping-blocked fields are withheld and remain
 visible in preview.
+
+`preserve_existing: false` can turn a conflicting existing value from `REVIEW` into `PROPOSE`, but
+it never grants write permission by itself. Importer writes still require `apply: true`, and library
+CLI writes still require `--apply`; all existing strict or partial application checks continue to
+apply.
 
 Partial mode never accepts a `REVIEW`, selects a review candidate, serializes or reduces a mapping
 blocker, or continues after an application contract error. All eligible mapped changes remain one

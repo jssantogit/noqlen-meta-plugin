@@ -26,6 +26,7 @@ from beetsplug.noqlenmeta.domain import (
 from beetsplug.noqlenmeta.providers.specs import provider_display_name
 from beetsplug.noqlenmeta.resolver import (
     FieldDecision,
+    FieldRule,
     ResolutionAction,
     ResolutionPolicy,
     default_resolution_policy,
@@ -37,6 +38,10 @@ if TYPE_CHECKING:
 _DISCOGS_RELEASE_NAMESPACE = "discogs.release"
 _MUSICBRAINZ_RELEASE_NAMESPACE = "musicbrainz.release"
 _DISCOGS_TOKEN_ENV = "NOQLENMETA_DISCOGS_TOKEN"
+
+
+class ResolutionSettingsError(ValueError):
+    """An invalid user-facing resolution policy override."""
 
 
 def resolve_discogs_token(configured_token: str) -> str | None:
@@ -128,13 +133,82 @@ def current_values_from_album_info(album_info: AlbumInfo) -> dict[str, MetadataV
 def resolution_policy_from_settings(
     field_settings: Mapping[str, bool],
     provider_settings: Mapping[str, bool],
+    *,
+    authority_settings: Mapping[str, Sequence[str]] | None = None,
+    min_confidence_settings: Mapping[str, float] | None = None,
+    preserve_existing_settings: Mapping[str, bool] | None = None,
 ) -> ResolutionPolicy:
-    """Apply simple user enablement settings to the advanced default policy."""
+    """Overlay user settings on the built-in resolution policy."""
     baseline = default_resolution_policy()
-    field_rules = {
-        field: replace(rule, enabled=field_settings.get(field, rule.enabled))
-        for field, rule in baseline.field_rules.items()
-    }
+    advanced_settings: tuple[tuple[str, Mapping[str, object] | None], ...] = (
+        ("authority", authority_settings),
+        ("min_confidence", min_confidence_settings),
+        ("preserve_existing", preserve_existing_settings),
+    )
+    normalized: dict[str, dict[str, object]] = {}
+    for section, settings in advanced_settings:
+        if settings is None:
+            normalized[section] = {}
+            continue
+        if not isinstance(settings, Mapping):
+            raise ResolutionSettingsError(f"resolution.{section} must be a mapping")
+
+        section_values: dict[str, object] = {}
+        for configured_field, value in settings.items():
+            if not isinstance(configured_field, str) or not configured_field.strip():
+                raise ResolutionSettingsError(
+                    f"resolution.{section} field names must be non-empty strings"
+                )
+            field = configured_field.strip().lower()
+            if field not in baseline.field_rules:
+                raise ResolutionSettingsError(
+                    f"resolution.{section} has unknown field {configured_field!r}"
+                )
+            if field in section_values:
+                raise ResolutionSettingsError(
+                    f"resolution.{section} field names must be unique after normalization"
+                )
+            section_values[field] = value
+        normalized[section] = section_values
+
+    field_rules: dict[str, FieldRule] = {}
+    for field, rule in baseline.field_rules.items():
+        configured_rule = replace(rule, enabled=field_settings.get(field, rule.enabled))
+        changes: dict[str, object] = {}
+        if field in normalized["authority"]:
+            authority = normalized["authority"][field]
+            if isinstance(authority, (str, bytes)) or not isinstance(authority, Sequence):
+                raise ResolutionSettingsError(
+                    f"resolution.authority.{field} must be a sequence of provider names"
+                )
+            if not authority:
+                raise ResolutionSettingsError(
+                    f"resolution.authority.{field} must not be empty; use fields.{field}: false"
+                )
+            changes["authority"] = tuple(authority)
+        if field in normalized["min_confidence"]:
+            changes["min_confidence"] = normalized["min_confidence"][field]
+        if field in normalized["preserve_existing"]:
+            changes["preserve_existing"] = normalized["preserve_existing"][field]
+
+        try:
+            configured_rule = replace(configured_rule, **changes)
+        except (TypeError, ValueError) as error:
+            raise ResolutionSettingsError(f"resolution override for {field!r}: {error}") from None
+
+        if field in normalized["authority"]:
+            unknown_providers = tuple(
+                provider
+                for provider in configured_rule.authority
+                if provider not in baseline.providers
+            )
+            if unknown_providers:
+                raise ResolutionSettingsError(
+                    f"resolution.authority.{field} has unknown provider "
+                    f"{unknown_providers[0]!r}"
+                )
+        field_rules[field] = configured_rule
+
     providers = {
         provider: provider_settings.get(provider, enabled)
         for provider, enabled in baseline.providers.items()

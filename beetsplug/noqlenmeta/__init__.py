@@ -3,6 +3,7 @@
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
+import confuse
 from beets import ui
 from beets.library import Album, Library
 from beets.plugins import BeetsPlugin
@@ -21,6 +22,7 @@ from beetsplug.noqlenmeta.domain import (
     ReleaseEnrichmentContext,
 )
 from beetsplug.noqlenmeta.integration import (
+    ResolutionSettingsError,
     context_from_album_info,
     current_values_from_album_info,
     eligible_album_info,
@@ -71,6 +73,7 @@ _FIELD_DEFAULTS = {
     "synced_lyrics": False,
     "cover": False,
 }
+_RESOLUTION_SECTIONS = frozenset({"authority", "min_confidence", "preserve_existing"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +109,11 @@ class NoqlenMetaPlugin(BeetsPlugin):
                         "enabled": False,
                         "storefront": "us",
                     },
+                },
+                "resolution": {
+                    "authority": {},
+                    "min_confidence": {},
+                    "preserve_existing": {},
                 },
             }
         )
@@ -283,13 +291,30 @@ class NoqlenMetaPlugin(BeetsPlugin):
             )
 
     def _resolution_policy(self) -> ResolutionPolicy:
-        return resolution_policy_from_settings(
-            {field: self.config["fields"][field].get(bool) for field in _FIELD_DEFAULTS},
-            {
-                provider: self.config["providers"][provider]["enabled"].get(bool)
-                for provider in BUILTIN_PROVIDER_SPECS
-            },
-        )
+        field_settings = {
+            field: self.config["fields"][field].get(bool) for field in _FIELD_DEFAULTS
+        }
+        provider_settings = {
+            provider: self.config["providers"][provider]["enabled"].get(bool)
+            for provider in BUILTIN_PROVIDER_SPECS
+        }
+        try:
+            resolution_config = self.config["resolution"]
+            unknown_sections = set(resolution_config.keys()) - _RESOLUTION_SECTIONS
+            if unknown_sections:
+                unknown = sorted(unknown_sections)[0]
+                raise ResolutionSettingsError(f"unknown resolution section {unknown!r}")
+            return resolution_policy_from_settings(
+                field_settings,
+                provider_settings,
+                authority_settings=resolution_config["authority"].get(dict),
+                min_confidence_settings=resolution_config["min_confidence"].get(dict),
+                preserve_existing_settings=resolution_config["preserve_existing"].get(dict),
+            )
+        except (confuse.ConfigError, ResolutionSettingsError) as error:
+            raise ui.UserError(
+                f"noqlenmeta: invalid resolution configuration: {error}"
+            ) from None
 
     @staticmethod
     def _has_contributing_provider(policy: ResolutionPolicy) -> bool:
