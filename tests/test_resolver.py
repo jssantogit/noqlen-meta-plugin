@@ -226,6 +226,56 @@ def test_default_authority_keeps_discogs_ahead_for_labels() -> None:
     assert decision.selected is discogs
 
 
+def test_default_genres_authority_selects_discogs_over_lastfm_and_itunes() -> None:
+    baseline = default_resolution_policy()
+    resolution_policy = ResolutionPolicy(
+        baseline.field_rules,
+        {"discogs": True, "lastfm": True, "itunes": True},
+    )
+    discogs = candidate("discogs", ("Metal",), 0.85, field="genres")
+    lastfm = candidate("lastfm", ("Progressive Metal",), 0.85, field="genres")
+    itunes = candidate("itunes", ("Rock",), 0.99, field="genres")
+
+    decision = resolve_metadata({}, [itunes, lastfm, discogs], resolution_policy)[0]
+
+    assert decision.selected is discogs
+
+
+def test_default_genres_authority_selects_lastfm_when_discogs_has_no_candidate() -> None:
+    baseline = default_resolution_policy()
+    resolution_policy = ResolutionPolicy(
+        baseline.field_rules,
+        {"discogs": True, "lastfm": True, "itunes": True},
+    )
+    lastfm = candidate("lastfm", ("Progressive Metal",), 0.85, field="genres")
+    itunes = candidate("itunes", ("Rock",), 0.99, field="genres")
+
+    decision = resolve_metadata({}, [itunes, lastfm], resolution_policy)[0]
+
+    assert decision.selected is lastfm
+
+
+def test_custom_genres_authority_can_select_lastfm_over_discogs() -> None:
+    baseline = default_resolution_policy()
+    rules = dict(baseline.field_rules)
+    rules["genres"] = FieldRule(
+        enabled=True,
+        authority=("lastfm", "discogs", "itunes"),
+        min_confidence=rules["genres"].min_confidence,
+        preserve_existing=rules["genres"].preserve_existing,
+    )
+    resolution_policy = ResolutionPolicy(
+        rules,
+        {"discogs": True, "lastfm": True, "itunes": True},
+    )
+    discogs = candidate("discogs", ("Metal",), 0.99, field="genres")
+    lastfm = candidate("lastfm", ("Progressive Metal",), 0.85, field="genres")
+
+    decision = resolve_metadata({}, [discogs, lastfm], resolution_policy)[0]
+
+    assert decision.selected is lastfm
+
+
 def test_disabled_or_below_threshold_musicbrainz_year_cannot_win() -> None:
     baseline = default_resolution_policy()
     disabled_policy = ResolutionPolicy(

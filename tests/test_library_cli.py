@@ -48,6 +48,7 @@ def configure_enabled(
     apply_mode: str = "strict",
     discogs: bool = True,
     musicbrainz: bool = False,
+    lastfm: bool = False,
     itunes: bool = False,
     resolution: dict[str, object] | None = None,
 ) -> None:
@@ -58,6 +59,7 @@ def configure_enabled(
         "providers": {
             "discogs": {"enabled": discogs, "user_token": TOKEN},
             "musicbrainz": {"enabled": musicbrainz},
+            "lastfm": {"enabled": lastfm},
             "itunes": {"enabled": itunes, "storefront": "us"},
         }
     }
@@ -81,6 +83,7 @@ def candidate(
         {
             "discogs": "123456",
             "musicbrainz": RELEASE_MBID,
+            "lastfm": "Gojira / From Mars to Sirius",
             "itunes": "1097861387",
         }[provider],
     )
@@ -611,6 +614,46 @@ def test_musicbrainz_candidate_flows_through_shared_cli_plan_and_safe_apply(
     reloaded = library.get_album(album.id)
     assert reloaded.year == 2005
     assert "source: MusicBrainz" in output[0]
+    assert "application: stored in library database (1 fields)" in output[0]
+    assert "file tags: unchanged" in output[0]
+
+
+def test_lastfm_candidate_previews_then_flows_through_existing_cli_apply(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    output: list[str] = []
+    album = add_album(library)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, discogs=False, lastfm=True)
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_lastfm_candidates",
+        lambda *args: (
+            candidate(
+                value=("Progressive Metal", "Death Metal"),
+                confidence=0.85,
+                provider="lastfm",
+            ),
+        ),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.library_integration.ui.print_", output.append)
+
+    invoke(plugin, library, ["artist:Gojira"])
+
+    assert library.get_album(album.id).genres == []
+    assert "genres\n    PROPOSE" in output[0]
+    assert "source: Last.fm" in output[0]
+    assert "application: disabled (preview only)" in output[0]
+
+    output.clear()
+    invoke(plugin, library, ["artist:Gojira", "--apply"])
+
+    reloaded = library.get_album(album.id)
+    assert reloaded.genres == ["Progressive Metal", "Death Metal"]
+    assert [item.genres for item in reloaded.items()] == [
+        ["Progressive Metal", "Death Metal"]
+    ]
+    assert "source: Last.fm" in output[0]
     assert "application: stored in library database (1 fields)" in output[0]
     assert "file tags: unchanged" in output[0]
 

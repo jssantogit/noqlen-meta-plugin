@@ -10,8 +10,8 @@ Noqlen Meta Plugin - universal multi-provider metadata enrichment for beets.
 
 ## Context level
 
-`standard` for Block 017 because it exposes existing resolver policy through shared importer and CLI
-configuration without changing resolution, application, or persistence architecture.
+`standard` for Block 018 because one provider is added through existing provider capability,
+orchestration, resolution, mapping, and application boundaries.
 
 ## Tool Mode
 
@@ -20,34 +20,33 @@ shell commands.
 
 ## Active block
 
-Block 017 - Configurable Resolution Policy.
+Block 018 - Conservative Last.fm Genre Enrichment.
 
 ## Active spec
 
-`docs/specs/017-resolution-policy-config/`
+`docs/specs/018-lastfm-genres/`
 
 ## Active ADRs
 
 - `docs/adr/0003-field-authority-resolution.md`
 - `docs/adr/0004-provider-capabilities-orchestration.md`
-- `docs/adr/0012-anchored-musicbrainz-enrichment.md`
 - `docs/adr/0013-configurable-resolution-policy.md`
+- `docs/adr/0014-lastfm-community-genre-enrichment.md`
 
 ## Allowed files
 
-Shared policy integration, plugin configuration extraction, focused pure/importer/CLI tests, README,
-ADR 0013, Block 017 specs, and context/handoff documents.
+Last.fm provider/spec/config/orchestration wiring, focused provider/resolver/importer/CLI tests,
+sanitized fixtures, README, ADR 0014, Block 018 specs, and context/handoff documents.
 
 ## Forbidden files
 
-Resolver redesign, provider modules, mappings, application or persistence semantics, new fields or
-providers, CLI flags, caching/concurrency, beets core, and physical file operations.
+Resolver redesign, style/mood inference, mappings, application or persistence changes, search/fuzzy
+matching, credentials, dependencies, persistent cache, concurrency, CLI flags, and physical files.
 
 ## Behavior budget
 
-Optional field-level authority, confidence, and preservation overrides may alter resolution decisions
-and existing capability-gated provider invocation. Missing overrides preserve built-in policy exactly.
-No override grants write permission.
+Last.fm may contribute one genres candidate from selected-album top tags only after strict identity,
+weight, and packaged-vocabulary filtering. Existing authority and write semantics remain unchanged.
 
 ## Validation
 
@@ -61,10 +60,9 @@ git status --short
 
 ## Done when
 
-The three optional mappings validate strictly, overlay built-in `FieldRule` values, affect importer
-and CLI through one policy, preserve capability independence and write safety, and all offline
-validation passes.
+The genres-only provider is bounded, paced, cached, identity-validated, secret-safe, capability-gated,
+fixture-tested, documented, and all offline validation passes.
 
 ## Stop condition
 
-Stop after Block 017. Do not add Last.fm or physical tag synchronization.
+Stop after Block 018. Do not add Last.fm styles/mood classification or another provider.

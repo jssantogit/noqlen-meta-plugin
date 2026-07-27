@@ -77,6 +77,16 @@ def test_authority_override_replaces_order_and_drives_the_real_resolver() -> Non
     assert decision.selected == candidate("discogs", 0.81)
 
 
+def test_lastfm_is_valid_in_custom_genres_authority() -> None:
+    policy = resolution_policy_from_settings(
+        {"genres": True},
+        {"discogs": True, "lastfm": True, "itunes": True},
+        authority_settings={"genres": ["lastfm", "discogs", "itunes"]},
+    )
+
+    assert policy.field_rules["genres"].authority == ("lastfm", "discogs", "itunes")
+
+
 def test_authority_override_leaves_every_omitted_field_unchanged() -> None:
     baseline = default_resolution_policy()
     policy = resolution_policy_from_settings(

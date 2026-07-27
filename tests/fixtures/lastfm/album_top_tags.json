@@ -1,0 +1,16 @@
+{
+  "toptags": {
+    "@attr": {
+      "artist": "Gojira",
+      "album": "From Mars to Sirius"
+    },
+    "tag": [
+      {"name": "progressive metal", "count": 100, "url": "https://www.last.fm/tag/progressive+metal"},
+      {"name": "albums I own", "count": 100, "url": "https://www.last.fm/tag/albums+i+own"},
+      {"name": "death metal", "count": "85", "url": "https://www.last.fm/tag/death+metal"},
+      {"name": "seen live", "count": 70, "url": "https://www.last.fm/tag/seen+live"},
+      {"name": "Progressive Metal", "count": 60, "url": "https://www.last.fm/tag/progressive+metal"},
+      {"name": "groove metal", "count": 9, "url": "https://www.last.fm/tag/groove+metal"}
+    ]
+  }
+}

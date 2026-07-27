@@ -98,6 +98,9 @@ noqlenmeta:
     musicbrainz:
       enabled: false
 
+    lastfm:
+      enabled: false
+
     itunes:
       enabled: false
       storefront: "us"
@@ -107,6 +110,7 @@ noqlenmeta:
     authority:
       genres:
         - discogs
+        - lastfm
         - itunes
       year:
         - musicbrainz
@@ -136,8 +140,9 @@ if it is enabled and its adapter currently declares support for that field.
 
 All providers are disabled by default and can be enabled independently or simultaneously. Discogs
 is catalog- and edition-oriented. MusicBrainz enriches only from an exact MusicBrainz release MBID
-already known by beets; it does not perform fuzzy release matching. iTunes is currently a fallback
-only for the narrow album genre and release year metadata exposed with defensible semantics.
+already known by beets; it does not perform fuzzy release matching. Last.fm currently contributes
+album genres only. iTunes is currently a fallback only for the narrow album genre and release year
+metadata exposed with defensible semantics.
 
 `apply` is `false` by default, and `apply_mode` defaults to `strict`. With `apply: false`, Noqlen
 never mutates the selected release. With `apply: true`, strict mode applies only when the entire
@@ -245,6 +250,18 @@ group's first release date, so reissues retain edition-specific year semantics. 
 catalog numbers, and media formats remain structured; existing singular target mappings may report
 mapping blockers rather than discard or join those values.
 
+Set `providers.lastfm.enabled: true` to enrich the selected album identity from Last.fm
+`album.getTopTags`. Last.fm top tags are community-generated and are not typed as
+genre/style/mood. Noqlen therefore filters tags through beets' packaged LastGenre genre vocabulary
+and does not infer styles or moods from arbitrary social tags. Tags below weight 10 are discarded,
+and at most the first three accepted genres are proposed as one structured value. There is no
+Last.fm credential configuration: Noqlen uses the Last.fm key that current beets explicitly shares
+with plugins, without displaying or persisting it.
+
+Under the default genres authority, Discogs is preferred over Last.fm and Last.fm is preferred over
+iTunes. Users can reorder those built-in providers through `resolution.authority.genres`; changing
+authority does not expand Last.fm beyond its current genres-only capability.
+
 Set `providers.itunes.enabled: true` to use Apple's public iTunes Search API for album enrichment.
 `storefront` is a two-letter search territory such as `us`, `br`, `gb`, or `jp`. iTunes requests are
 bounded to at most 10 album search results, and direct collection-ID or UPC lookup is preferred when
@@ -282,11 +299,11 @@ Noqlen Meta / beets target plan:
 
 ## Current status
 
-The plugin resolves Discogs, MusicBrainz, and iTunes candidates through one shared planning path. Importer
-enrichment maps the resulting `ChangePlan` to `BeetsTargetPlan`; the library command maps it to
-`LibraryTargetPlan`. Importer application can mutate only selected `AlbumInfo` under its explicit
-strict or partial policy. CLI application is separately authorized by `--apply`, remains strict by
-default, and permits safe partial database application only with `--apply --partial`. Both modes
-preserve per-Album atomic validation and never touch physical file tags.
+The plugin resolves Discogs, MusicBrainz, Last.fm, and iTunes candidates through one shared planning
+path. Importer enrichment maps the resulting `ChangePlan` to `BeetsTargetPlan`; the library command
+maps it to `LibraryTargetPlan`. Importer application can mutate only selected `AlbumInfo` under its
+explicit strict or partial policy. CLI application is separately authorized by `--apply`, remains
+strict by default, and permits safe partial database application only with `--apply --partial`.
+Both modes preserve per-Album atomic validation and never touch physical file tags.
 
 See `docs/context/current.md` and `docs/context/handoff.md` before starting a development block.

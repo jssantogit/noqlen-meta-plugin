@@ -53,6 +53,7 @@ from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_SPECS,
     DISCOGS_SPEC,
     ITUNES_SPEC,
+    LASTFM_SPEC,
     MUSICBRAINZ_SPEC,
     ProviderSpec,
 )
@@ -105,6 +106,9 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     "musicbrainz": {
                         "enabled": False,
                     },
+                    "lastfm": {
+                        "enabled": False,
+                    },
                     "itunes": {
                         "enabled": False,
                         "storefront": "us",
@@ -118,6 +122,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
             }
         )
         self.config["providers"]["discogs"]["user_token"].redact = True
+        self._lastfm_provider = None
         self.register_listener("import_task_choice", self._import_task_choice)
         self._command = Subcommand(
             "noqlenmeta",
@@ -349,6 +354,14 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 )
             )
 
+        if provider_can_contribute(policy, LASTFM_SPEC):
+            candidates.extend(
+                self._collect_provider_candidates(
+                    LASTFM_SPEC,
+                    lambda: self._lastfm_candidates(context),
+                )
+            )
+
         if provider_can_contribute(policy, ITUNES_SPEC):
             storefront = self.config["providers"]["itunes"]["storefront"].as_str()
             candidates.extend(
@@ -409,3 +422,12 @@ class NoqlenMetaPlugin(BeetsPlugin):
         from beetsplug.noqlenmeta.providers.itunes import ITunesProvider
 
         return tuple(ITunesProvider(storefront=storefront).get_candidates(context))
+
+    def _lastfm_candidates(
+        self, context: ReleaseEnrichmentContext
+    ) -> tuple[MetadataCandidate, ...]:
+        from beetsplug.noqlenmeta.providers.lastfm import LastFmProvider
+
+        if self._lastfm_provider is None:
+            self._lastfm_provider = LastFmProvider()
+        return tuple(self._lastfm_provider.get_candidates(context))

@@ -73,6 +73,12 @@ MUSICBRAINZ_SPEC = ProviderSpec(
     ),
 )
 
+LASTFM_SPEC = ProviderSpec(
+    name="lastfm",
+    display_name="Last.fm",
+    supported_fields=frozenset({"genres"}),
+)
+
 ITUNES_SPEC = ProviderSpec(
     name="itunes",
     display_name="iTunes",
@@ -80,7 +86,10 @@ ITUNES_SPEC = ProviderSpec(
 )
 
 BUILTIN_PROVIDER_SPECS: Mapping[str, ProviderSpec] = MappingProxyType(
-    {spec.name: spec for spec in (DISCOGS_SPEC, MUSICBRAINZ_SPEC, ITUNES_SPEC)}
+    {
+        spec.name: spec
+        for spec in (DISCOGS_SPEC, MUSICBRAINZ_SPEC, LASTFM_SPEC, ITUNES_SPEC)
+    }
 )
 
 

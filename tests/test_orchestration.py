@@ -10,6 +10,7 @@ from beetsplug.noqlenmeta.providers.base import ProviderContractError
 from beetsplug.noqlenmeta.providers.specs import (
     DISCOGS_SPEC,
     ITUNES_SPEC,
+    LASTFM_SPEC,
     MUSICBRAINZ_SPEC,
     ProviderSpec,
 )
@@ -25,7 +26,8 @@ def policy(
             field: FieldRule(enabled=enabled, authority=authority)
             for field, (enabled, authority) in fields.items()
         },
-        providers or {"discogs": True, "musicbrainz": True, "itunes": True},
+        providers
+        or {"discogs": True, "musicbrainz": True, "lastfm": True, "itunes": True},
     )
 
 
@@ -41,6 +43,9 @@ def policy(
         (ITUNES_SPEC, "genres", ("discogs",), False),
         (MUSICBRAINZ_SPEC, "year", ("musicbrainz", "discogs"), True),
         (MUSICBRAINZ_SPEC, "styles", ("musicbrainz",), False),
+        (LASTFM_SPEC, "genres", ("discogs", "lastfm", "itunes"), True),
+        (LASTFM_SPEC, "styles", ("lastfm",), False),
+        (LASTFM_SPEC, "mood", ("lastfm",), False),
     ],
 )
 def test_provider_contribution_intersects_policy_authority_and_capability(
