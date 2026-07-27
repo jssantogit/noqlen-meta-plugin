@@ -96,6 +96,15 @@ def test_album_selected_metadata_uses_beets_merged_application_data() -> None:
     }
 
 
+@pytest.mark.parametrize("value", ["", "   ", None])
+def test_selected_metadata_current_values_omits_noncanonical_values(
+    value: object,
+) -> None:
+    selected = SelectedImportTrack(Item(), _track_info(lyrics=value), None)
+
+    assert selected_metadata_current_values(selected) == {}
+
+
 def test_effective_current_helpers_do_not_change_selected_data() -> None:
     item = Item(lyrics=" local ", synced_lyrics=" local synced ")
     track = _track_info(lyrics=" selected ")
@@ -163,17 +172,83 @@ def test_from_scratch_changes_plain_but_not_flexible_synced_conflict() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("field", "from_scratch", "selected_values"),
+    [
+        ("lyrics", False, {"lyrics": ""}),
+        ("synced_lyrics", True, {"synced_lyrics": ""}),
+    ],
+)
+def test_explicit_empty_selected_value_removes_current_before_resolution(
+    field: str,
+    from_scratch: bool,
+    selected_values: dict[str, object],
+) -> None:
+    selected = SelectedImportTrack(
+        Item(**{field: "local synthetic text"}),
+        _track_info(**selected_values),
+        None,
+    )
+    result = build_import_track_planning_result(
+        selected,
+        TrackEnrichmentContext("Synthetic Artist", "Synthetic Track"),
+        from_scratch=from_scratch,
+        candidates=(
+            MetadataCandidate(field, "remote synthetic text", "lrclib", 0.95, "42"),
+        ),
+        policy=ResolutionPolicy(
+            {field: FieldRule(True, ("lrclib",), 0.8, True)},
+            {"lrclib": True},
+        ),
+    )
+
+    assert result.decisions[0].current_value is None
+    assert result.decisions[0].action is ResolutionAction.PROPOSE
+
+
+def test_absent_selected_synced_value_preserves_flexible_conflict() -> None:
+    field = "synced_lyrics"
+    selected = SelectedImportTrack(
+        Item(synced_lyrics="local synthetic text"),
+        _track_info(),
+        None,
+    )
+    result = build_import_track_planning_result(
+        selected,
+        TrackEnrichmentContext("Synthetic Artist", "Synthetic Track"),
+        from_scratch=True,
+        candidates=(
+            MetadataCandidate(field, "remote synthetic text", "lrclib", 0.95, "42"),
+        ),
+        policy=ResolutionPolicy(
+            {field: FieldRule(True, ("lrclib",), 0.8, True)},
+            {"lrclib": True},
+        ),
+    )
+
+    assert result.decisions[0].current_value == "local synthetic text"
+    assert result.decisions[0].action is ResolutionAction.REVIEW
+
+
 @pytest.mark.parametrize("kind", ["album", "singleton"])
 @pytest.mark.parametrize("from_scratch", [False, True])
 @pytest.mark.parametrize("field", ["lyrics", "synced_lyrics"])
-@pytest.mark.parametrize("selected_has_value", [False, True])
+@pytest.mark.parametrize(
+    "selected_state",
+    ["absent", "nonempty", "empty", "whitespace"],
+)
 def test_effective_current_values_match_actual_beets_application(
     kind: str,
     from_scratch: bool,
     field: str,
-    selected_has_value: bool,
+    selected_state: str,
 ) -> None:
-    selected_values = {field: "selected synthetic text"} if selected_has_value else {}
+    selected_values = {
+        "absent": {},
+        "nonempty": {field: "selected synthetic text"},
+        "empty": {field: ""},
+        "whitespace": {field: "   "},
+    }[selected_state]
     predicted_item = Item(**{field: "local synthetic text"})
     predicted_track = _track_info(**selected_values)
     actual_item = Item(**{field: "local synthetic text"})

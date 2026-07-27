@@ -17,6 +17,9 @@ changing release and library-command behavior.
   media fields while retaining flexible metadata.
 - Record current behavior that omitted selected lyrics are cleared while omitted selected
   `synced_lyrics` survive under `from_scratch: true`.
+- Preserve selected-field presence semantics: an absent field leaves the baseline untouched, while a
+  present empty, blank, or otherwise non-canonical value overwrites the Item and removes the canonical
+  current value.
 - Reuse existing candidate validation, Field Authority, resolver, and `ChangePlan`.
 - Treat `ProviderError` as sanitized per-call fail-open and let contract errors propagate.
 - Render decisions using character/line summaries only; never render raw lyrics.

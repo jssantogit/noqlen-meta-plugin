@@ -20,8 +20,8 @@ complete.
 - Preview exposes plan actions and character/line summaries without raw lyric content.
 - Provider failures fail open with sanitized output, contract errors propagate, and release/track
   plans coexist without track mutation.
-- Focused validation passes 161 tests; the full suite passes 723 tests with 5 opt-in live tests
-  skipped. Lint, repository contamination, and diff-whitespace checks pass.
+- Fix-focused planning and importer validation passes 59 tests; the full suite passes 745 tests with
+  5 opt-in live tests skipped. Lint, repository contamination, and diff-whitespace checks pass.
 
 ## Important decisions
 

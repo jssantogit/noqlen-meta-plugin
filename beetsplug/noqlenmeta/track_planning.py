@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from beets.library import Item
@@ -24,6 +24,8 @@ from beetsplug.noqlenmeta.track_integration import (
     current_values_from_library_item,
 )
 
+_TRACK_CURRENT_FIELDS = ("lyrics", "synced_lyrics")
+
 
 @dataclass(frozen=True, slots=True)
 class ImportTrackPlanningResult:
@@ -40,11 +42,8 @@ class ImportTrackPlanningResult:
 def selected_metadata_current_values(
     selected: SelectedImportTrack,
 ) -> dict[str, MetadataValue]:
-    """Read the exact selected metadata surface normal beets would apply."""
-    if selected.album_info is not None:
-        data = selected.track_info.merge_with_album(selected.album_info)
-    else:
-        data = selected.track_info.item_data
+    """Read canonical non-empty values from beets' selected application mapping."""
+    data = _selected_metadata_application_data(selected)
     return _current_track_values(data.get)
 
 
@@ -58,7 +57,16 @@ def effective_current_values_for_import_track(
         current = _current_values_surviving_beets_clear(selected.item)
     else:
         current = current_values_from_library_item(selected.item)
-    current.update(selected_metadata_current_values(selected))
+
+    selected_data = _selected_metadata_application_data(selected)
+    selected_values = _current_track_values(selected_data.get)
+    for field in _TRACK_CURRENT_FIELDS:
+        if field not in selected_data:
+            continue
+        if field in selected_values:
+            current[field] = selected_values[field]
+        else:
+            current.pop(field, None)
     return current
 
 
@@ -97,3 +105,11 @@ def _current_values_surviving_beets_clear(item: Item) -> dict[str, MetadataValue
         for field, value in current.items()
         if field not in Item._media_tag_fields
     }
+
+
+def _selected_metadata_application_data(
+    selected: SelectedImportTrack,
+) -> Mapping[str, object]:
+    if selected.album_info is not None:
+        return selected.track_info.merge_with_album(selected.album_info)
+    return selected.track_info.item_data

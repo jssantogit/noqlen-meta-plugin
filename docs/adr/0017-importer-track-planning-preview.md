@@ -31,10 +31,12 @@ planning, and expose no lyric content or write authority.
    overlaid.
 7. Consequently, when selected metadata omits both current fields, `from_scratch: true` clears
    `lyrics` but retains flexible `synced_lyrics`. A selected non-empty value overrides the baseline in
-   either mode.
+   either mode. Selected overlay is presence-sensitive: a field absent from beets' application mapping
+   leaves the baseline untouched, while a present empty, blank, or otherwise non-canonical value still
+   overwrites the Item and removes that canonical current value.
 8. Baseline prediction is checked against actual `AlbumMatch.apply_metadata()` and
    `TrackMatch.apply_metadata()` across album/singleton, true/false `from_scratch`, `lyrics`/
-   `synced_lyrics`, and selected-value present/absent cases.
+   `synced_lyrics`, and selected-value absent/non-empty/empty/whitespace cases.
 9. Track candidates use the existing provider capability gate, candidate contract validation, Field
    Authority, resolver, `FieldDecision`, and `ChangePlan`; no track-specific resolver or plan is
    introduced.

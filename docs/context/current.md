@@ -70,9 +70,9 @@ isolation, coexistence, and the no-write boundary are tested and documented; fin
 
 ## Completion state
 
-Implementation, documentation, and final offline validation are complete. The focused Block 021
-suite passes 161 tests; the full suite passes 723 tests with 5 opt-in live tests skipped. Lint,
-repository contamination, and diff-whitespace checks pass.
+Implementation, documentation, and final offline validation are complete. The fix-focused planning
+and importer suites pass 59 tests; the full suite passes 745 tests with 5 opt-in live tests skipped.
+Lint, repository contamination, and diff-whitespace checks pass.
 
 ## Stop condition
 

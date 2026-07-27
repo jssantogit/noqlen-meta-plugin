@@ -20,6 +20,11 @@ comes from `TrackInfo.item_data`. The local baseline is Item-local canonical met
 to mirror `Item.clear()`, flexible fields remain, and selected metadata is overlaid last. Thus current
 beets behavior clears omitted `lyrics` but retains omitted `synced_lyrics`.
 
+The selected overlay is presence-sensitive. Key presence in beets' application mapping determines
+whether an overwrite occurs; canonical normalization determines whether a current value remains. An
+absent key leaves the baseline untouched, while a present empty or non-canonical value removes the
+canonical current value.
+
 The normal provider collector supplies sanitized `ProviderError` fail-open and candidate validation;
 validation contract errors remain outside that catch and propagate. Release planning runs through its
 existing branch and may coexist with track preview. Track rendering exposes identity and plan

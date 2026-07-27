@@ -203,10 +203,12 @@ application will produce before any Noqlen candidate is considered:
   cleared, flexible metadata survives, and selected metadata is then overlaid.
 
 For the current fields, this means `lyrics` is cleared by `from_scratch: true` when selected metadata
-omits it, while the flexible `synced_lyrics` value survives. Selected values override either baseline
-when present. This behavior is covered by parity tests that invoke real `AlbumMatch.apply_metadata()`
-and `TrackMatch.apply_metadata()` for both fields, both `from_scratch` modes, and selected-value
-presence or absence.
+omits it, while the flexible `synced_lyrics` value survives. Selected overlay is presence-sensitive: a
+field absent from beets' application mapping leaves the baseline untouched, while a present empty or
+non-canonical value still overwrites the Item and removes that canonical current value. This behavior
+is covered by parity tests that invoke real `AlbumMatch.apply_metadata()` and
+`TrackMatch.apply_metadata()` for both fields, both `from_scratch` modes, and absent, non-empty, empty,
+or whitespace-only selected values.
 
 Track plans reuse the existing Field Authority, resolver, and `ChangePlan`. They do not have target
 mapping or application: `apply: true` does not mutate `TrackInfo` or Item track metadata, and Noqlen
