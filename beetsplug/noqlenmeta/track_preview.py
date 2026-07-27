@@ -8,12 +8,14 @@ from beetsplug.noqlenmeta.domain import MetadataValue, TrackEnrichmentContext
 from beetsplug.noqlenmeta.integration import _safe_preview_text
 from beetsplug.noqlenmeta.providers.specs import provider_display_name
 from beetsplug.noqlenmeta.resolver import FieldDecision, ResolutionAction
+from beetsplug.noqlenmeta.track_mapping import TrackMappingBlocker, TrackTargetChange
 from beetsplug.noqlenmeta.track_planning import ImportTrackPlanningResult
 
 
 def render_import_track_plan(result: ImportTrackPlanningResult) -> None:
     """Print a deterministic plan without ever exposing lyric content."""
     plan = result.change_plan
+    target_plan = result.target_plan
     lines = [
         "Noqlen Meta / track plan:",
         "",
@@ -22,14 +24,28 @@ def render_import_track_plan(result: ImportTrackPlanningResult) -> None:
         "  application: disabled (track planning only)",
         f"  provider candidates: {result.candidate_count}",
         f"  planned changes: {len(plan.changes)}",
+        f"  mapped changes: {len(target_plan.mapped_changes)}",
+        f"  mapping blockers: {len(target_plan.blocked_changes)}",
         f"  resolution review: {len(plan.reviews)}",
         f"  unchanged: {len(plan.kept)}",
         f"  skipped: {len(plan.skipped)}",
     ]
     if result.candidate_count == 0:
         lines.extend(("", "  no eligible track metadata candidates returned"))
+    mapped_by_field = {
+        change.canonical_field: change for change in target_plan.mapped_changes
+    }
+    blocked_by_field = {
+        blocker.source.field: blocker for blocker in target_plan.blocked_changes
+    }
     for decision in result.decisions:
-        lines.extend(_render_decision(decision))
+        lines.extend(
+            _render_decision(
+                decision,
+                mapped_by_field.get(decision.field),
+                blocked_by_field.get(decision.field),
+            )
+        )
     ui.print_("\n".join(lines))
 
 
@@ -46,7 +62,11 @@ def _track_heading(context: TrackEnrichmentContext) -> str:
     return _safe_preview_text(f"{position}  {context.artist} - {context.title}")
 
 
-def _render_decision(decision: FieldDecision) -> tuple[str, ...]:
+def _render_decision(
+    decision: FieldDecision,
+    mapped: TrackTargetChange | None,
+    blocker: TrackMappingBlocker | None,
+) -> tuple[str, ...]:
     lines = [
         "",
         f"  {_safe_preview_text(decision.field)}",
@@ -73,6 +93,20 @@ def _render_decision(decision: FieldDecision) -> tuple[str, ...]:
             f"    contenders: {len(decision.alternatives)} from {', '.join(providers)}"
         )
     lines.append(f"    reason: {_safe_preview_text(decision.reason)}")
+    if mapped is not None:
+        lines.extend(
+            (
+                f"    target: TrackInfo.{_safe_preview_text(mapped.target_field)}",
+                "    mapping: lossless",
+            )
+        )
+    elif blocker is not None:
+        lines.extend(
+            (
+                "    target: unavailable",
+                f"    mapping blocker: {_safe_preview_text(blocker.reason)}",
+            )
+        )
     return tuple(lines)
 
 

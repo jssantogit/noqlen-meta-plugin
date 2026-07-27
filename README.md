@@ -210,15 +210,28 @@ is covered by parity tests that invoke real `AlbumMatch.apply_metadata()` and
 `TrackMatch.apply_metadata()` for both fields, both `from_scratch` modes, and absent, non-empty, empty,
 or whitespace-only selected values.
 
-Track plans reuse the existing Field Authority, resolver, and `ChangePlan`. They do not have target
-mapping or application: `apply: true` does not mutate `TrackInfo` or Item track metadata, and Noqlen
-does not store database rows or write files for this path. Preview displays only character and line
-counts for current and candidate lyric values; raw plain or synchronized lyrics are never rendered.
-Beets does not model `synced_lyrics` as a standard persistent Item media field. Its Lyrics plugin
-stores canonical synchronized LRC text in `Item.lyrics` and passes native SYLT data separately when
-writing files. A future Noqlen track application block must therefore decide whether
-`synced_lyrics` is a flexible database value, a file-only synchronized tag, a mapping into canonical
-lyrics, or another explicit target before writes are added.
+Track plans reuse the existing Field Authority, resolver, and `ChangePlan`, then analyze already
+proposed canonical changes through a separate `TrackTargetPlan`:
+
+```text
+LRCLIB
+  -> canonical lyrics / synced_lyrics
+  -> ChangePlan
+  -> TrackTargetPlan
+  -> safe preview
+```
+
+Plain `lyrics` has one lossless selected target: `TrackInfo.lyrics`. Canonical lyric content and
+internal newlines are preserved exactly. `synced_lyrics` instead produces a visible mapping blocker
+because normal beets does not model it as an equivalent standard persistent Item field. The beets
+Lyrics plugin stores canonical synchronized LRC text in `Item.lyrics` and passes native SYLT data
+separately during file writing. Synchronized lyrics are not silently collapsed into plain lyrics or
+stored as an arbitrary flexible field.
+
+Track mapping is still preview-only. `apply: true` does not yet authorize track changes: Noqlen does
+not mutate `TrackInfo` or Item track metadata, store database rows, or write files for this path.
+Preview displays only character and line counts for current and candidate lyric values; raw plain or
+synchronized lyrics are never rendered.
 
 ### Execution matrix
 
@@ -365,9 +378,10 @@ Noqlen Meta / beets target plan:
 ## Current status
 
 The plugin resolves release candidates from Discogs, MusicBrainz, Last.fm, and iTunes through one
-shared planning path. During importer preview, LRCLIB can now plan lyrics for selected album-match or
-singleton tracks through the same Field Authority, resolver, and `ChangePlan`. The track branch stops
-there and renders content summaries only. Importer enrichment maps only the release `ChangePlan` to
+shared planning path. During importer preview, LRCLIB can plan lyrics for selected album-match or
+singleton tracks through the same Field Authority, resolver, and `ChangePlan`. A read-only
+`TrackTargetPlan` then maps plain lyrics to `TrackInfo.lyrics` and exposes synchronized lyrics as a
+mapping blocker. Importer release enrichment separately maps its release `ChangePlan` to
 `BeetsTargetPlan`; the album-only library command maps only release plans to `LibraryTargetPlan`.
 Importer application can mutate only selected `AlbumInfo` under its explicit strict or partial
 policy. CLI application is separately authorized by `--apply`, remains strict by default, and permits

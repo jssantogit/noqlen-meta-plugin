@@ -154,6 +154,35 @@ def test_singleton_track_match_produces_one_plan(monkeypatch: pytest.MonkeyPatch
     assert len(calls) == 1
     assert len(output) == 1
     assert "track: 1.1 Synthetic Artist - Singleton" in output[0]
+    assert "mapped changes: 1" in output[0]
+    assert "mapping blockers: 0" in output[0]
+    assert "target: TrackInfo.lyrics" in output[0]
+    assert "mapping: lossless" in output[0]
+    assert PRIVATE_LYRIC not in output[0]
+
+
+def test_synced_only_plan_renders_one_mapping_blocker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = _silence_preview(monkeypatch)
+    private_synced = "[00:01.00] PRIVATE-SYNTHETIC-SYNCED-CONTENT"
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_lrclib_candidates",
+        lambda self, context: (_candidate("synced_lyrics", private_synced),),
+    )
+    plugin = NoqlenMetaPlugin()
+    _configure(plugin, lyrics=False, synced_lyrics=True)
+
+    plugin._import_task_choice(None, _singleton_task(Item(), _track("Singleton", 1)))
+
+    assert len(output) == 1
+    assert "mapped changes: 0" in output[0]
+    assert "mapping blockers: 1" in output[0]
+    assert "target: unavailable" in output[0]
+    assert "synchronized lyrics semantics" in output[0]
+    assert private_synced not in output[0]
+    assert "[00:01.00]" not in output[0]
 
 
 @pytest.mark.parametrize(
@@ -265,22 +294,56 @@ def test_provider_contract_error_propagates(monkeypatch: pytest.MonkeyPatch) -> 
 def test_track_planning_is_read_only_even_when_apply_is_true(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _silence_preview(monkeypatch)
+    output = _silence_preview(monkeypatch)
     monkeypatch.setattr(
         NoqlenMetaPlugin,
         "_lrclib_candidates",
-        lambda self, context: (_candidate(),),
+        lambda self, context: (
+            _candidate(),
+            _candidate("synced_lyrics", "[00:01.00] Synthetic synced line"),
+        ),
     )
-    item = Item(lyrics="local plain", synced_lyrics="local synced")
+    item = Item()
     track = _track("Selected", 1)
     task, album = _album_task([(item, track)])
-    snapshots = (copy.deepcopy(dict(item)), copy.deepcopy(dict(track)), copy.deepcopy(dict(album)))
+    snapshots = (
+        copy.deepcopy(dict(item)),
+        copy.deepcopy(dict(track)),
+        copy.deepcopy(dict(album)),
+    )
     plugin = NoqlenMetaPlugin()
-    _configure(plugin, apply=True)
+    _configure(plugin, apply=True, synced_lyrics=True)
 
     plugin._import_task_choice(None, task)
 
     assert (dict(item), dict(track), dict(album)) == snapshots
+    assert "mapped changes: 1" in output[0]
+    assert "mapping blockers: 1" in output[0]
+
+
+def test_plain_and_synced_plans_render_both_without_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = _silence_preview(monkeypatch)
+    private_synced = "[00:01.00] PRIVATE-SYNTHETIC-SYNCED-CONTENT"
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_lrclib_candidates",
+        lambda self, context: (_candidate(), _candidate("synced_lyrics", private_synced)),
+    )
+    plugin = NoqlenMetaPlugin()
+    _configure(plugin, synced_lyrics=True)
+
+    plugin._import_task_choice(None, _singleton_task(Item(), _track("Singleton", 1)))
+
+    rendered = output[0]
+    assert "planned changes: 2" in rendered
+    assert "mapped changes: 1" in rendered
+    assert "mapping blockers: 1" in rendered
+    assert "target: TrackInfo.lyrics" in rendered
+    assert "target: unavailable" in rendered
+    assert PRIVATE_LYRIC not in rendered
+    assert private_synced not in rendered
 
 
 @pytest.mark.parametrize("apply", [False, True])
@@ -299,7 +362,7 @@ def test_release_and_track_plans_coexist_without_track_mutation(
     monkeypatch.setattr(
         NoqlenMetaPlugin,
         "_lrclib_candidates",
-        lambda self, context: (_candidate(),),
+        lambda self, context: (_candidate("synced_lyrics"),),
     )
     item = Item()
     track = _track("Selected", 1)
@@ -307,13 +370,21 @@ def test_release_and_track_plans_coexist_without_track_mutation(
     item_snapshot = copy.deepcopy(dict(item))
     track_snapshot = copy.deepcopy(dict(track))
     plugin = NoqlenMetaPlugin()
-    _configure(plugin, apply=apply, discogs=True)
+    _configure(
+        plugin,
+        apply=apply,
+        lyrics=False,
+        synced_lyrics=True,
+        discogs=True,
+    )
 
     plugin._import_task_choice(None, task)
 
     rendered = "\n".join(output)
     assert "Noqlen Meta / beets target plan:" in rendered
     assert "Noqlen Meta / track plan:" in rendered
+    assert "mapped changes: 0" in rendered
+    assert "mapping blockers: 1" in rendered
     assert dict(item) == item_snapshot
     assert dict(track) == track_snapshot
     assert album.genres == (["Metal"] if apply else None)

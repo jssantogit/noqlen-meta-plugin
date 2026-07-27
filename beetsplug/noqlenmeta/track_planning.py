@@ -23,6 +23,10 @@ from beetsplug.noqlenmeta.track_integration import (
     _current_track_values,
     current_values_from_library_item,
 )
+from beetsplug.noqlenmeta.track_mapping import (
+    TrackTargetPlan,
+    map_change_plan_to_track_info,
+)
 
 _TRACK_CURRENT_FIELDS = ("lyrics", "synced_lyrics")
 
@@ -37,6 +41,7 @@ class ImportTrackPlanningResult:
     candidate_count: int
     decisions: tuple[FieldDecision, ...]
     change_plan: ChangePlan
+    target_plan: TrackTargetPlan
 
 
 def selected_metadata_current_values(
@@ -88,13 +93,15 @@ def build_import_track_planning_result(
         collected,
         policy,
     )
+    change_plan = build_change_plan(decisions)
     return ImportTrackPlanningResult(
         selected=selected,
         context=context,
         from_scratch=from_scratch,
         candidate_count=len(collected),
         decisions=decisions,
-        change_plan=build_change_plan(decisions),
+        change_plan=change_plan,
+        target_plan=map_change_plan_to_track_info(change_plan),
     )
 
 

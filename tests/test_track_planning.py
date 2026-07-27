@@ -33,6 +33,18 @@ def _track_info(**overrides: object) -> TrackInfo:
     return TrackInfo(**values)  # type: ignore[arg-type]
 
 
+def _lyrics_policy(
+    *fields: str, preserve_existing: bool = True
+) -> ResolutionPolicy:
+    return ResolutionPolicy(
+        {
+            field: FieldRule(True, ("lrclib",), 0.8, preserve_existing)
+            for field in fields
+        },
+        {"lrclib": True},
+    )
+
+
 def test_from_scratch_false_retains_local_canonical_values() -> None:
     selected = SelectedImportTrack(
         Item(lyrics="local plain", synced_lyrics="local synced"),
@@ -170,6 +182,82 @@ def test_from_scratch_changes_plain_but_not_flexible_synced_conflict() -> None:
         "lyrics": ResolutionAction.PROPOSE,
         "synced_lyrics": ResolutionAction.REVIEW,
     }
+
+
+def test_proposed_plain_lyrics_maps_to_track_info() -> None:
+    result = build_import_track_planning_result(
+        SelectedImportTrack(Item(), _track_info(), None),
+        TrackEnrichmentContext("Synthetic Artist", "Synthetic Track"),
+        from_scratch=False,
+        candidates=(MetadataCandidate("lyrics", "Synthetic plain", "lrclib", 0.95, "42"),),
+        policy=_lyrics_policy("lyrics"),
+    )
+
+    assert result.decisions[0].action is ResolutionAction.PROPOSE
+    assert len(result.change_plan.changes) == 1
+    assert len(result.target_plan.mapped_changes) == 1
+    assert result.target_plan.mapped_changes[0].target_field == "lyrics"
+    assert result.target_plan.blocked_changes == ()
+
+
+def test_proposed_synced_lyrics_becomes_mapping_blocker() -> None:
+    result = build_import_track_planning_result(
+        SelectedImportTrack(Item(), _track_info(), None),
+        TrackEnrichmentContext("Synthetic Artist", "Synthetic Track"),
+        from_scratch=False,
+        candidates=(
+            MetadataCandidate(
+                "synced_lyrics", "[00:01.00] Synthetic line", "lrclib", 0.95, "42"
+            ),
+        ),
+        policy=_lyrics_policy("synced_lyrics"),
+    )
+
+    assert result.decisions[0].action is ResolutionAction.PROPOSE
+    assert result.target_plan.mapped_changes == ()
+    assert result.target_plan.blocked_changes[0].source.field == "synced_lyrics"
+
+
+def test_resolver_review_produces_no_track_mapping_consequence() -> None:
+    result = build_import_track_planning_result(
+        SelectedImportTrack(Item(lyrics="Local synthetic"), _track_info(), None),
+        TrackEnrichmentContext("Synthetic Artist", "Synthetic Track"),
+        from_scratch=False,
+        candidates=(MetadataCandidate("lyrics", "Remote synthetic", "lrclib", 0.95, "42"),),
+        policy=_lyrics_policy("lyrics", preserve_existing=True),
+    )
+
+    assert result.decisions[0].action is ResolutionAction.REVIEW
+    assert result.target_plan.mapped_changes == ()
+    assert result.target_plan.blocked_changes == ()
+    assert result.target_plan.requires_review
+
+
+def test_plain_and_synced_lyrics_remain_distinct_target_consequences() -> None:
+    result = build_import_track_planning_result(
+        SelectedImportTrack(Item(), _track_info(), None),
+        TrackEnrichmentContext("Synthetic Artist", "Synthetic Track"),
+        from_scratch=False,
+        candidates=(
+            MetadataCandidate("lyrics", "Synthetic plain", "lrclib", 0.95, "42"),
+            MetadataCandidate(
+                "synced_lyrics", "[00:01.00] Synthetic line", "lrclib", 0.95, "42"
+            ),
+        ),
+        policy=_lyrics_policy("lyrics", "synced_lyrics"),
+    )
+
+    assert [change.field for change in result.change_plan.changes] == [
+        "lyrics",
+        "synced_lyrics",
+    ]
+    assert [change.canonical_field for change in result.target_plan.mapped_changes] == [
+        "lyrics"
+    ]
+    assert [blocker.source.field for blocker in result.target_plan.blocked_changes] == [
+        "synced_lyrics"
+    ]
+    assert result.target_plan.requires_review
 
 
 @pytest.mark.parametrize(
