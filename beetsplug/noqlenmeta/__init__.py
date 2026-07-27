@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import confuse
 from beets import ui
+from beets.autotag import AlbumMatch, TrackMatch
 from beets.library import Album, Library
 from beets.plugins import BeetsPlugin
 from beets.ui import Subcommand
@@ -20,6 +21,7 @@ from beetsplug.noqlenmeta.domain import (
     MetadataCandidate,
     MetadataValue,
     ReleaseEnrichmentContext,
+    TrackEnrichmentContext,
 )
 from beetsplug.noqlenmeta.integration import (
     ResolutionSettingsError,
@@ -52,13 +54,28 @@ from beetsplug.noqlenmeta.providers import ProviderError
 from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_SPECS,
     BUILTIN_RELEASE_PROVIDER_SPECS,
+    BUILTIN_TRACK_PROVIDER_SPECS,
     DISCOGS_SPEC,
     ITUNES_SPEC,
     LASTFM_SPEC,
+    LRCLIB_SPEC,
     MUSICBRAINZ_SPEC,
     ProviderSpec,
 )
 from beetsplug.noqlenmeta.resolver import ResolutionPolicy, resolve_metadata
+from beetsplug.noqlenmeta.track_integration import (
+    SelectedImportTrack,
+    context_from_selected_import_track,
+    selected_import_tracks,
+)
+from beetsplug.noqlenmeta.track_planning import (
+    ImportTrackPlanningResult,
+    build_import_track_planning_result,
+)
+from beetsplug.noqlenmeta.track_preview import (
+    render_import_track_plan,
+    render_incomplete_track_note,
+)
 
 _FIELD_DEFAULTS = {
     "genres": True,
@@ -127,6 +144,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         )
         self.config["providers"]["discogs"]["user_token"].redact = True
         self._lastfm_provider = None
+        self._lrclib_provider = None
         self.register_listener("import_task_choice", self._import_task_choice)
         self._command = Subcommand(
             "noqlenmeta",
@@ -161,75 +179,108 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
     def _import_task_choice(self, session: object, task: object) -> None:
         album_info = eligible_album_info(task)
-        if album_info is None:
+        selected_tracks = selected_import_tracks(task)
+        if album_info is None and not selected_tracks:
             return
 
         apply_enabled = self.config["apply"].get(bool)
         application_mode = BeetsApplicationMode.STRICT
-        if apply_enabled:
+        if album_info is not None and apply_enabled:
             application_mode = parse_application_mode(self.config["apply_mode"].as_str())
 
         policy = self._resolution_policy()
-        if not self._has_contributing_release_provider(policy):
-            return
-
-        context = context_from_album_info(album_info)
-        if context is None:
-            self._log.debug("Noqlen Meta preview skipped: selected release has no album identity")
-            return
-
-        change_plan = self._build_change_plan_for_release(
-            context,
-            current_values_from_album_info(album_info),
-            policy,
+        release_can_contribute = (
+            album_info is not None and self._has_contributing_release_provider(policy)
         )
-        target_plan = map_change_plan_to_beets(change_plan)
-        application_result = None
-        if apply_enabled:
-            application_result = apply_beets_target_plan(
-                album_info,
-                target_plan,
-                mode=application_mode,
-            )
-        if self.config["preview"].get(bool):
-            render_beets_target_plan(target_plan, application_result)
-        elif apply_enabled and application_result is not None:
-            if application_result.is_blocked:
-                self._log.warning(
-                    "Noqlen Meta: application blocked by unresolved review or target mapping"
-                )
-            elif application_result.has_applied_changes:
-                if application_result.has_withheld_fields:
-                    self._log.info(
-                        "Noqlen Meta: prepared {} selected-release metadata field(s) for "
-                        "beets application; {} review and {} mapping blocker withheld",
-                        len(application_result.applied_changes),
-                        application_result.resolution_review_count,
-                        application_result.mapping_blocker_count,
-                    )
-                else:
-                    self._log.info(
-                        "Noqlen Meta: prepared {} selected-release metadata field(s) "
-                        "for beets application",
-                        len(application_result.applied_changes),
-                    )
-            elif (
-                application_result.mode is BeetsApplicationMode.PARTIAL
-                and application_result.has_withheld_fields
-            ):
-                withheld_count = (
-                    application_result.resolution_review_count
-                    + application_result.mapping_blocker_count
-                )
-                self._log.warning(
-                    "Noqlen Meta: no eligible selected-release metadata changes; "
-                    "{} unresolved field(s) withheld",
-                    withheld_count,
+        preview_enabled = self.config["preview"].get(bool)
+        track_can_contribute = (
+            bool(selected_tracks)
+            and preview_enabled
+            and self._has_contributing_track_provider(policy)
+        )
+        if not release_can_contribute and not track_can_contribute:
+            return
+
+        if release_can_contribute and album_info is not None:
+            context = context_from_album_info(album_info)
+            if context is None:
+                self._log.debug(
+                    "Noqlen Meta preview skipped: selected release has no album identity"
                 )
             else:
-                self._log.info(
-                    "Noqlen Meta: no selected-release metadata changes prepared "
-                    "for beets application"
+                change_plan = self._build_change_plan_for_release(
+                    context,
+                    current_values_from_album_info(album_info),
+                    policy,
+                )
+                target_plan = map_change_plan_to_beets(change_plan)
+                application_result = None
+                if apply_enabled:
+                    application_result = apply_beets_target_plan(
+                        album_info,
+                        target_plan,
+                        mode=application_mode,
+                    )
+                if preview_enabled:
+                    render_beets_target_plan(target_plan, application_result)
+                elif apply_enabled and application_result is not None:
+                    if application_result.is_blocked:
+                        self._log.warning(
+                            "Noqlen Meta: application blocked by unresolved review or "
+                            "target mapping"
+                        )
+                    elif application_result.has_applied_changes:
+                        if application_result.has_withheld_fields:
+                            self._log.info(
+                                "Noqlen Meta: prepared {} selected-release metadata "
+                                "field(s) for beets application; {} review and {} mapping "
+                                "blocker withheld",
+                                len(application_result.applied_changes),
+                                application_result.resolution_review_count,
+                                application_result.mapping_blocker_count,
+                            )
+                        else:
+                            self._log.info(
+                                "Noqlen Meta: prepared {} selected-release metadata "
+                                "field(s) for beets application",
+                                len(application_result.applied_changes),
+                            )
+                    elif (
+                        application_result.mode is BeetsApplicationMode.PARTIAL
+                        and application_result.has_withheld_fields
+                    ):
+                        withheld_count = (
+                            application_result.resolution_review_count
+                            + application_result.mapping_blocker_count
+                        )
+                        self._log.warning(
+                            "Noqlen Meta: no eligible selected-release metadata changes; "
+                            "{} unresolved field(s) withheld",
+                            withheld_count,
+                        )
+                    else:
+                        self._log.info(
+                            "Noqlen Meta: no selected-release metadata changes prepared "
+                            "for beets application"
+                        )
+
+        if track_can_contribute:
+            match = getattr(task, "match", None)
+            if not isinstance(match, (AlbumMatch, TrackMatch)):
+                raise TypeError("selected importer tracks require a beets match")
+            from_scratch = match.from_scratch(None)
+            for selected in selected_tracks:
+                context = context_from_selected_import_track(selected)
+                if context is None:
+                    render_incomplete_track_note()
+                    continue
+                render_import_track_plan(
+                    self._build_import_track_plan(
+                        selected,
+                        context,
+                        from_scratch=from_scratch,
+                        policy=policy,
+                    )
                 )
 
     def _command_noqlenmeta(self, lib: Library, opts: object, args: list[str]) -> None:
@@ -330,6 +381,37 @@ class NoqlenMetaPlugin(BeetsPlugin):
         return any(
             provider_can_contribute(policy, spec)
             for spec in BUILTIN_RELEASE_PROVIDER_SPECS.values()
+        )
+
+    @staticmethod
+    def _has_contributing_track_provider(policy: ResolutionPolicy) -> bool:
+        return any(
+            provider_can_contribute(policy, spec)
+            for spec in BUILTIN_TRACK_PROVIDER_SPECS.values()
+        )
+
+    def _build_import_track_plan(
+        self,
+        selected: SelectedImportTrack,
+        context: TrackEnrichmentContext,
+        *,
+        from_scratch: bool,
+        policy: ResolutionPolicy,
+    ) -> ImportTrackPlanningResult:
+        candidates: list[MetadataCandidate] = []
+        if provider_can_contribute(policy, LRCLIB_SPEC):
+            candidates.extend(
+                self._collect_provider_candidates(
+                    LRCLIB_SPEC,
+                    lambda: self._lrclib_candidates(context),
+                )
+            )
+        return build_import_track_planning_result(
+            selected,
+            context,
+            from_scratch=from_scratch,
+            candidates=candidates,
+            policy=policy,
         )
 
     def _build_change_plan_for_release(
@@ -435,3 +517,12 @@ class NoqlenMetaPlugin(BeetsPlugin):
         if self._lastfm_provider is None:
             self._lastfm_provider = LastFmProvider()
         return tuple(self._lastfm_provider.get_candidates(context))
+
+    def _lrclib_candidates(
+        self, context: TrackEnrichmentContext
+    ) -> tuple[MetadataCandidate, ...]:
+        from beetsplug.noqlenmeta.providers.lrclib import LRCLIBProvider
+
+        if self._lrclib_provider is None:
+            self._lrclib_provider = LRCLIBProvider()
+        return tuple(self._lrclib_provider.get_candidates(context))

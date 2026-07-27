@@ -2,38 +2,48 @@
 
 ## State
 
-Block 020 adds LRCLIB as the first real track-scoped provider while stopping before track execution,
-mapping, or application. Existing Discogs, MusicBrainz, Last.fm, and iTunes behavior remains
-release-scoped.
+Block 021 executes read-only planning for selected importer album-match and singleton tracks when
+preview is enabled. It reuses LRCLIB, Field Authority, the resolver, and `ChangePlan`, and stops before
+track target mapping or application. Implementation, documentation, and final offline validation are
+complete.
 
 ## Completed
 
-- Registered disabled-by-default LRCLIB capability for exactly lyrics and synchronized lyrics in the
-  immutable track registry.
-- Added exact HTTPS `/api/get` transport with selected identity, safe versioned User-Agent, timeout,
-  bounded reads, pacing, and Retry-After barriers.
-- Added conservative record ID, identity, duration, instrumental, and lyric-shape validation.
-- Added provider-local successful/404 caching and independent ordered candidates at confidence 0.95.
-- Added synthetic fixture-backed tests, shared resolver/ChangePlan proof, release execution isolation,
-  and an opt-in one-request live smoke.
-- Documented the no-search, no-logging, and deferred track-execution boundary in ADR 0016.
+- Selected `AlbumMatch` mappings are planned in order without extras; singleton `TrackMatch` produces
+  one plan and no matcher call is added.
+- LRCLIB runs only for preview-enabled eligible track fields and uses one lazy retained provider
+  instance across tracks.
+- Effective current values mirror beets 2.12.x: album `TrackInfo.merge_with_album(AlbumInfo)` or
+  singleton `TrackInfo.item_data` overlays the appropriate local/cleared baseline.
+- Actual album and singleton `apply_metadata()` parity tests cover both fields, both `from_scratch`
+  modes, and selected-value presence or absence.
+- Preview exposes plan actions and character/line summaries without raw lyric content.
+- Provider failures fail open with sanitized output, contract errors propagate, and release/track
+  plans coexist without track mutation.
+- Focused validation passes 161 tests; the full suite passes 723 tests with 5 opt-in live tests
+  skipped. Lint, repository contamination, and diff-whitespace checks pass.
 
 ## Important decisions
 
-- LRCLIB enriches only the exact track selected by beets and never searches or rematches.
-- Album title and duration are mandatory for a request; 404 and instrumental are normal no-data.
-- Existing Field Authority and canonical planning remain shared and unchanged.
-- LRCLIB is track-registry only, so current release importer and CLI never execute it.
-- No track mapping, mutation, persistence, or file behavior exists yet.
+- `from_scratch: false` retains Item-local canonical metadata before selected metadata overlays it.
+- `from_scratch: true` mirrors `Item.clear()`: modeled writable media fields clear, flexible metadata
+  survives, and selected metadata overlays last.
+- Current beets behavior therefore clears omitted `lyrics` but retains omitted `synced_lyrics`.
+- Track `apply` authority does not exist. Importer `apply: true` still governs release `AlbumInfo` only.
+- The library CLI remains album-only and does not execute LRCLIB.
+- No track mapping, mutation, database/store operation, tag write, or file behavior exists.
 
 ## Deferred
 
-- Importer precedence among existing Item values, selected TrackInfo values, and `from_scratch`.
-- A first read-only/user-visible track planning path.
-- Track target mapping/application and persistent/file write policy after that boundary is reviewed.
+- Track target mapping/application and persistent/file write policy after this boundary is reviewed.
+- Decide where or whether `synced_lyrics` should apply: beets does not model it as a standard
+  persistent Item media field, and its Lyrics plugin stores canonical LRC text in `Item.lyrics` while
+  passing native SYLT separately for file writes. Block 021 does not choose among a flexible database
+  value, file-only tag, canonical-lyrics mapping, or another explicit target.
 - Fingerprint generation, network identity lookup, cache, concurrency, and track CLI modes.
 
 ## Recommended next block
 
-Stop for independent Block 020 review. Block 021 should decide track current-state composition and
-establish a first read-only/user-visible planning path before any TrackInfo or Item application.
+After independent Block 021 review, a separate Block 022 may design selected-track target mapping and
+strict importer application. It must explicitly resolve synchronized-lyrics target semantics and
+must not conflate persistent library Item or physical-file application with the importer boundary.

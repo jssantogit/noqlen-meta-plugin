@@ -10,21 +10,21 @@ Noqlen Meta Plugin - universal multi-provider metadata enrichment for beets.
 
 ## Context level
 
-`standard` for Block 020 because it adds one track provider and narrow external-service boundary while
-leaving resolver, mapping, application, and user-facing execution behavior unchanged.
+`standard` for Block 021 because it adds a read-only importer execution and preview boundary around
+selected tracks while reusing existing provider, resolver, and `ChangePlan` contracts.
 
 ## Tool Mode
 
 `combo`: OpenCode native capabilities, Serena for targeted symbol/navigation work, and RTK for noisy
-shell commands.
+shell output.
 
 ## Active block
 
-Block 020 - LRCLIB Track Lyrics Provider.
+Block 021 - Importer Track Planning Preview.
 
 ## Active spec
 
-`docs/specs/020-lrclib-track-lyrics/`
+`docs/specs/021-importer-track-planning-preview/`
 
 ## Active ADRs
 
@@ -34,22 +34,24 @@ Block 020 - LRCLIB Track Lyrics Provider.
 - `docs/adr/0014-lastfm-community-genre-enrichment.md`
 - `docs/adr/0015-track-enrichment-boundary.md`
 - `docs/adr/0016-lrclib-track-lyrics-provider.md`
+- `docs/adr/0017-importer-track-planning-preview.md`
 
 ## Allowed files
 
-LRCLIB provider/transport, provider spec and disabled configuration, focused tests and synthetic
-fixtures, README, ADR 0016, Block 020 specs, and context/handoff documents.
+Track integration/planning/preview and importer entry-point code, focused tests, `README.md`, ADR
+0017, Block 021 requirements/design/tasks/review, and the current context/handoff documents.
 
 ## Forbidden files
 
-LRCLIB search or fuzzy matching, resolver/planner duplication, target mapping, track execution,
-application or persistence, fingerprints, persistent cache, concurrency, CLI flags, and file writes.
+Track target mapping, TrackInfo/Item mutation, application, database persistence, tag/file writes,
+library track CLI modes, LRCLIB transport changes, search or rematching, and deciding
+`synced_lyrics` target semantics.
 
 ## Behavior budget
 
-Exact selected-track lyrics may become canonical candidates. Existing release provider results,
-album CLI/importer behavior, authority defaults, mapping, application, persistence, and file semantics
-remain unchanged.
+Eligible LRCLIB candidates may be planned and safely summarized for selected importer tracks when
+preview is enabled. Existing release behavior and album-only library CLI behavior remain unchanged;
+track planning has no write authority even when importer release application is enabled.
 
 ## Validation
 
@@ -63,9 +65,16 @@ git status --short
 
 ## Done when
 
-LRCLIB exact lookup, validation, safety, cache, pacing, and shared planning are tested and documented;
-release execution remains isolated and all offline validation passes.
+Album/singleton selected-track planning, beets `from_scratch` parity, safe summaries, provider failure
+isolation, coexistence, and the no-write boundary are tested and documented; final validation passes.
+
+## Completion state
+
+Implementation, documentation, and final offline validation are complete. The focused Block 021
+suite passes 161 tests; the full suite passes 723 tests with 5 opt-in live tests skipped. Lint,
+repository contamination, and diff-whitespace checks pass.
 
 ## Stop condition
 
-Stop after Block 020. Do not add track execution, current-state precedence, mapping, or application.
+Stop after Block 021 preview planning. Do not add track target mapping, application, persistence, file
+writes, library track modes, or decide future `synced_lyrics` target semantics.

@@ -185,10 +185,49 @@ Noqlen does not fall back to LRCLIB search when the exact track signature is una
 found. Beets decides which track it is; LRCLIB only enriches that selected identity. Raw lyrics are
 never logged by the provider, and fixture/test lyrics are synthetic.
 
-**Current execution limitation:** Block 020 implements and registers the LRCLIB track provider, but
-the existing importer and `beet nm` command remain release-oriented and do not execute track
-providers yet. Track planning/application is a separately reviewed boundary. No track metadata is
-currently mutated, stored, or written to files.
+During an accepted importer match, Noqlen can now build a read-only track plan for each selected
+`AlbumMatch` Item/`TrackInfo` pair or for the selected singleton `TrackMatch`. Album extras and
+unmatched tracks are excluded. Track planning runs only when `preview: true` and an enabled
+track-scoped provider can contribute to an enabled field under the configured authority. LRCLIB is
+currently the only such provider. Its adapter is created lazily and retained by the plugin so its
+in-process cache, pacing, and Retry-After state are shared across selected tracks.
+
+The track resolver baseline predicts the canonical values that normal beets 2.12.x metadata
+application will produce before any Noqlen candidate is considered:
+
+- For an album match, selected metadata is `TrackInfo.merge_with_album(AlbumInfo)`.
+- For a singleton, selected metadata is `TrackInfo.item_data`.
+- With `from_scratch: false`, Item-local canonical values form the baseline and selected metadata is
+  overlaid on it.
+- With `from_scratch: true`, the baseline mirrors `Item.clear()`: modeled writable media fields are
+  cleared, flexible metadata survives, and selected metadata is then overlaid.
+
+For the current fields, this means `lyrics` is cleared by `from_scratch: true` when selected metadata
+omits it, while the flexible `synced_lyrics` value survives. Selected values override either baseline
+when present. This behavior is covered by parity tests that invoke real `AlbumMatch.apply_metadata()`
+and `TrackMatch.apply_metadata()` for both fields, both `from_scratch` modes, and selected-value
+presence or absence.
+
+Track plans reuse the existing Field Authority, resolver, and `ChangePlan`. They do not have target
+mapping or application: `apply: true` does not mutate `TrackInfo` or Item track metadata, and Noqlen
+does not store database rows or write files for this path. Preview displays only character and line
+counts for current and candidate lyric values; raw plain or synchronized lyrics are never rendered.
+Beets does not model `synced_lyrics` as a standard persistent Item media field. Its Lyrics plugin
+stores canonical synchronized LRC text in `Item.lyrics` and passes native SYLT data separately when
+writing files. A future Noqlen track application block must therefore decide whether
+`synced_lyrics` is a flexible database value, a file-only synchronized tag, a mapping into canonical
+lyrics, or another explicit target before writes are added.
+
+### Execution matrix
+
+| Entry point and settings | Release behavior | Track behavior | Noqlen write boundary |
+| --- | --- | --- | --- |
+| Importer, `preview: true`, `apply: false` | Preview eligible release plans | Preview eligible selected-track plans; LRCLIB may run | No mutation |
+| Importer, `preview: true`, `apply: true` | Existing strict/partial selected `AlbumInfo` application plus preview | Same read-only track plans; `apply` grants no track writes | Selected `AlbumInfo` only |
+| Importer, `preview: false`, `apply: true` | Existing release application remains active without preview | LRCLIB is not called and no track plan is built | Selected `AlbumInfo` only |
+| Importer, `preview: false`, `apply: false` | No release work | No track work | No mutation |
+| `beet noqlenmeta` / `beet nm` | Existing album query preview or explicit database application | No singleton or per-track mode; LRCLIB is not called | Existing persistent Album policy only |
+| File tag synchronization | No new behavior | No track synchronization | No new behavior |
 
 ## Library command
 
@@ -324,12 +363,13 @@ Noqlen Meta / beets target plan:
 ## Current status
 
 The plugin resolves release candidates from Discogs, MusicBrainz, Last.fm, and iTunes through one
-shared planning path. LRCLIB is registered as a track-scoped provider and its candidates use the same
-Field Authority, resolver, and `ChangePlan`, but current user-facing execution remains release-only.
-Importer enrichment maps the resulting release `ChangePlan` to `BeetsTargetPlan`; the library command
-maps it to `LibraryTargetPlan`. Importer application can mutate only selected `AlbumInfo` under its
-explicit strict or partial policy. CLI application is separately authorized by `--apply`, remains
-strict by default, and permits safe partial database application only with `--apply --partial`.
-Both modes preserve per-Album atomic validation and never touch physical file tags.
+shared planning path. During importer preview, LRCLIB can now plan lyrics for selected album-match or
+singleton tracks through the same Field Authority, resolver, and `ChangePlan`. The track branch stops
+there and renders content summaries only. Importer enrichment maps only the release `ChangePlan` to
+`BeetsTargetPlan`; the album-only library command maps only release plans to `LibraryTargetPlan`.
+Importer application can mutate only selected `AlbumInfo` under its explicit strict or partial
+policy. CLI application is separately authorized by `--apply`, remains strict by default, and permits
+safe partial database application only with `--apply --partial`. TrackInfo, Items, track database
+metadata, and files remain outside Noqlen track application.
 
 See `docs/context/current.md` and `docs/context/handoff.md` before starting a development block.
