@@ -9,6 +9,7 @@ from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
 from beetsplug.noqlenmeta.domain import MetadataCandidate
 from beetsplug.noqlenmeta.library_application import (
     LibraryApplicationError,
+    LibraryApplicationMode,
     apply_library_target_plan,
 )
 from beetsplug.noqlenmeta.library_mapping import (
@@ -96,9 +97,12 @@ def test_genres_persist_and_inherit_as_a_fresh_list(
     assert isinstance(album.genres, list)
     assert album.genres is not immutable_value
     assert result.applied_changes == plan.mapped_changes
+    assert result.mode is LibraryApplicationMode.STRICT
     assert result.has_applied_changes
     assert result.stored
     assert not result.is_blocked
+    assert not result.has_withheld_fields
+    assert not result.is_partial_application
     reloaded = library.get_album(album.id)
     assert reloaded.genres == ["Rock", "Metal"]
     assert [item.genres for item in reloaded.items()] == [
@@ -180,6 +184,108 @@ def test_review_or_mapping_blocker_prevents_mutation_and_store(
     assert not result.stored
 
 
+def test_explicit_strict_mode_matches_default(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    default_album = add_album(library, album="Default")
+    explicit_album = add_album(library, album="Explicit", title="Track 2")
+    plan = target_plan(
+        planned_change("genres", ("Rock",)),
+        planned_change("media", ("CD",)),
+    )
+    monkeypatch.setattr(Album, "store", lambda *args, **kwargs: pytest.fail("stored"))
+
+    default = apply_library_target_plan(default_album, plan)
+    explicit = apply_library_target_plan(
+        explicit_album, plan, mode=LibraryApplicationMode.STRICT
+    )
+
+    assert default == explicit
+    assert default.is_blocked
+
+
+def test_partial_review_and_blocker_store_mapped_subset_once(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    album = add_album(library, tracks=2, label="Existing")
+    plan = target_plan(
+        planned_change("genres", ("Rock", "Metal")),
+        planned_change("year", 2005),
+        planned_change("media", ("CD",)),
+        reviews=(review(),),
+    )
+    original_store = Album.store
+    store_calls: list[bool] = []
+
+    def track_store(self: Album, fields: object = None, inherit: bool = True) -> None:
+        store_calls.append(inherit)
+        original_store(self, fields=fields, inherit=inherit)
+
+    monkeypatch.setattr(Album, "store", track_store)
+
+    result = apply_library_target_plan(
+        album, plan, mode=LibraryApplicationMode.PARTIAL
+    )
+
+    assert store_calls == [True]
+    assert result.mode is LibraryApplicationMode.PARTIAL
+    assert result.applied_changes == plan.mapped_changes
+    assert result.resolution_review_count == 1
+    assert result.mapping_blocker_count == 1
+    assert result.has_withheld_fields
+    assert not result.is_blocked
+    assert result.is_partial_application
+    reloaded = library.get_album(album.id)
+    assert reloaded.genres == ["Rock", "Metal"]
+    assert reloaded.year == 2005
+    assert reloaded.label == "Existing"
+    assert [item.genres for item in reloaded.items()] == [
+        ["Rock", "Metal"],
+        ["Rock", "Metal"],
+    ]
+
+
+def test_partial_review_preserves_existing_field(
+    library: Library,
+) -> None:
+    album = add_album(library, label="Existing")
+    plan = target_plan(
+        planned_change("genres", ("Rock",)),
+        reviews=(review(),),
+    )
+
+    result = apply_library_target_plan(
+        album, plan, mode=LibraryApplicationMode.PARTIAL
+    )
+
+    assert result.stored
+    assert result.resolution_review_count == 1
+    assert result.mapping_blocker_count == 0
+    reloaded = library.get_album(album.id)
+    assert reloaded.genres == ["Rock"]
+    assert reloaded.label == "Existing"
+
+
+def test_partial_only_withheld_is_valid_noop(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    album = add_album(library, label="Existing")
+    plan = target_plan(planned_change("media", ("CD",)), reviews=(review(),))
+    monkeypatch.setattr(Album, "store", lambda *args, **kwargs: pytest.fail("stored"))
+
+    result = apply_library_target_plan(
+        album, plan, mode=LibraryApplicationMode.PARTIAL
+    )
+
+    assert result.mode is LibraryApplicationMode.PARTIAL
+    assert result.has_withheld_fields
+    assert not result.is_blocked
+    assert not result.has_applied_changes
+    assert not result.is_partial_application
+    assert not result.stored
+    assert album.label == "Existing"
+
+
 def test_fresh_persisted_state_prevents_concurrent_overwrite(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -206,6 +312,36 @@ def test_fresh_persisted_state_prevents_concurrent_overwrite(
     assert persisted.genres == ["Jazz"]
     assert persisted.year == 0
     assert [item.genres for item in persisted.items()] == [["Jazz"]]
+
+
+def test_partial_stale_mapped_subset_is_atomic(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    database = str(tmp_path / "library.db")
+    planning_library = Library(database, set_music_dir=False)
+    original = add_album(planning_library, genres=["Rock"])
+    plan = target_plan(
+        planned_change("genres", ("Metal",), ("Rock",)),
+        planned_change("year", 2005),
+        planned_change("media", ("CD",)),
+    )
+
+    concurrent_library = Library(database, set_music_dir=False)
+    concurrent = concurrent_library.get_album(original.id)
+    concurrent.genres = ["Jazz"]
+    concurrent.store(inherit=True)
+    monkeypatch.setattr(Album, "store", lambda *args, **kwargs: pytest.fail("stored"))
+
+    with pytest.raises(LibraryApplicationError, match="no longer matches"):
+        apply_library_target_plan(
+            original, plan, mode=LibraryApplicationMode.PARTIAL
+        )
+
+    assert original.genres == ["Rock"]
+    assert original.year == 0
+    persisted = concurrent_library.get_album(original.id)
+    assert persisted.genres == ["Jazz"]
+    assert persisted.year == 0
 
 
 def test_deleted_album_is_reported_as_library_application_error(
@@ -239,7 +375,14 @@ def test_preexisting_dirty_album_is_rejected_before_noqlen_mutation(
     )
 
     with pytest.raises(LibraryApplicationError, match="pre-existing dirty"):
-        apply_library_target_plan(album, target_plan(planned_change("genres", ("Rock",))))
+        apply_library_target_plan(
+            album,
+            target_plan(
+                planned_change("genres", ("Rock",)),
+                planned_change("media", ("CD",)),
+            ),
+            mode=LibraryApplicationMode.PARTIAL,
+        )
 
     assert album.genres == []
     assert album.album == "Owned by another operation"
@@ -255,7 +398,7 @@ def test_forged_plan_is_rejected_without_mutation_or_store(
     monkeypatch.setattr(Album, "store", lambda *args, **kwargs: pytest.fail("stored"))
 
     with pytest.raises(LibraryApplicationError, match="canonical source mapping"):
-        apply_library_target_plan(album, forged)
+        apply_library_target_plan(album, forged, mode=LibraryApplicationMode.PARTIAL)
 
     assert album.genres == []
 
@@ -288,7 +431,10 @@ def test_malformed_target_shape_is_rejected_before_mutation(
     monkeypatch: pytest.MonkeyPatch, library: Library
 ) -> None:
     album = add_album(library)
-    plan = target_plan(planned_change("genres", ("Rock",)))
+    plan = target_plan(
+        planned_change("genres", ("Rock",)),
+        planned_change("media", ("CD",)),
+    )
     malformed_change = replace(plan.mapped_changes[0], target_value="Rock")
     malformed = replace(plan, mapped_changes=(malformed_change,))
     monkeypatch.setattr(
@@ -299,7 +445,9 @@ def test_malformed_target_shape_is_rejected_before_mutation(
     monkeypatch.setattr(Album, "store", lambda *args, **kwargs: pytest.fail("stored"))
 
     with pytest.raises(LibraryApplicationError, match="string-list target"):
-        apply_library_target_plan(album, malformed)
+        apply_library_target_plan(
+            album, malformed, mode=LibraryApplicationMode.PARTIAL
+        )
 
     assert album.genres == []
 
@@ -323,8 +471,13 @@ def test_database_application_never_invokes_file_operations(
 
     result = apply_library_target_plan(
         album,
-        target_plan(planned_change("genres", ("Rock", "Metal"))),
+        target_plan(
+            planned_change("genres", ("Rock", "Metal")),
+            planned_change("media", ("CD",)),
+        ),
+        mode=LibraryApplicationMode.PARTIAL,
     )
 
     assert result.stored
+    assert result.is_partial_application
     assert library.get_album(album.id).genres == ["Rock", "Metal"]

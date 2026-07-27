@@ -134,12 +134,14 @@ beet nm album:"From Mars to Sirius"
 beet nm --all
 ```
 
-Explicit application persists eligible metadata to the beets library database under strict
-per-album safety:
+Explicit application persists eligible metadata to the beets library database. Strict mode remains
+the default, while partial mode must be explicitly requested:
 
 ```bash
 beet nm artist:Gojira --apply
+beet nm artist:Gojira --apply --partial
 beet nm --all --apply
+beet nm --all --apply --partial
 ```
 
 The canonical command name is `beet noqlenmeta ...`; `nm` is its preferred short alias. A non-empty
@@ -151,13 +153,24 @@ importer enrichment, then analyzes the result against an explicit persistent `Al
 Without `--apply`, it displays losslessly representable changes, resolver reviews, and mapping
 blockers without changing database rows, Items, tags, or files.
 
-`--apply` is the only CLI write permission. Importer `noqlenmeta.apply` and `apply_mode` settings do
-not authorize CLI writes, and importer `apply: false` does not override an explicit CLI `--apply`.
-The first CLI policy is strict only: any resolver `REVIEW` or library mapping blocker prevents all
-Noqlen mutation for that Album. Strictness is evaluated independently per Album, so another safe
-Album selected by the same query may still be stored. Persistent `Album` has no supported
-album-level `media` field, so media remains blocking rather than being inferred from or applied to
-Items.
+`--apply` is the only CLI write permission, and `--partial` is invalid without it. Importer
+`noqlenmeta.apply` and `apply_mode` settings do not authorize or select CLI writes: command mode
+comes only from `--apply` and `--partial`. Importer `apply: true` cannot make a preview command write,
+and importer `apply: false` does not override explicit CLI application.
+
+With `--apply` alone, strict mode prevents every Noqlen database change for an Album when any
+resolver `REVIEW` or library mapping blocker exists. With `--apply --partial`, losslessly mapped and
+resolved fields may persist together while review and mapping-blocked fields remain unchanged and
+visible. Partial mode is classification before application, not best-effort exception recovery. The
+entire mapped subset is atomically validated for canonical plan integrity, local dirty state, fresh
+persisted before-state, target shape, and target uniqueness before any mutation. Stale or malformed
+mapped data aborts that whole Album subset.
+
+Application policy is evaluated independently per Album. Another eligible Album selected by the
+same query may still be stored, but an unexpected application or store failure stops later Albums.
+There is no command-wide rollback. Persistent `Album` has no supported album-level `media` field, so
+media remains withheld in partial mode and blocking in strict mode; it is never inferred from or
+applied to Items.
 
 Successful application mutates only mapped persistent Album fields and calls
 `Album.store(inherit=True)` once. Normal beets behavior propagates inheritable Album fields to Item
@@ -227,7 +240,8 @@ Noqlen Meta / beets target plan:
 The plugin resolves Discogs and iTunes candidates through one shared planning path. Importer
 enrichment maps the resulting `ChangePlan` to `BeetsTargetPlan`; the library command maps it to
 `LibraryTargetPlan`. Importer application can mutate only selected `AlbumInfo` under its explicit
-strict or partial policy. CLI application is separately authorized by `--apply`, uses strict
-per-Album safety, and persists database metadata without touching physical file tags.
+strict or partial policy. CLI application is separately authorized by `--apply`, remains strict by
+default, and permits safe partial database application only with `--apply --partial`. Both modes
+preserve per-Album atomic validation and never touch physical file tags.
 
 See `docs/context/current.md` and `docs/context/handoff.md` before starting a development block.

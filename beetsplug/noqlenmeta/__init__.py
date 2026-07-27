@@ -29,6 +29,7 @@ from beetsplug.noqlenmeta.integration import (
     resolve_discogs_token,
 )
 from beetsplug.noqlenmeta.library_application import (
+    LibraryApplicationMode,
     LibraryApplicationResult,
     apply_library_target_plan,
 )
@@ -125,6 +126,13 @@ class NoqlenMetaPlugin(BeetsPlugin):
             default=False,
             help="strictly persist eligible metadata to the library database",
         )
+        self._command.parser.add_option(
+            "--partial",
+            dest="partial",
+            action="store_true",
+            default=False,
+            help="with --apply, persist mapped fields and withhold unresolved fields",
+        )
         self._command.func = self._command_noqlenmeta
 
     def commands(self) -> list[Subcommand]:
@@ -206,6 +214,14 @@ class NoqlenMetaPlugin(BeetsPlugin):
     def _command_noqlenmeta(self, lib: Library, opts: object, args: list[str]) -> None:
         all_albums = bool(getattr(opts, "all", False))
         apply_enabled = bool(getattr(opts, "apply", False))
+        partial_enabled = bool(getattr(opts, "partial", False))
+        if partial_enabled and not apply_enabled:
+            raise ui.UserError("noqlenmeta: --partial requires --apply")
+        application_mode = (
+            LibraryApplicationMode.PARTIAL
+            if partial_enabled
+            else LibraryApplicationMode.STRICT
+        )
         has_query = any(isinstance(argument, str) and argument.strip() for argument in args)
         if not has_query and not all_albums:
             raise ui.UserError("noqlenmeta: provide an album query or use --all")
@@ -252,6 +268,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 application_result = apply_library_target_plan(
                     album_plan.album,
                     album_plan.target_plan,
+                    mode=application_mode,
                 )
             render_library_target_plan(
                 album_plan.album,

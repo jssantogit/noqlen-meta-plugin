@@ -107,16 +107,27 @@ def render_library_target_plan(
         application_status = "disabled (preview only)"
     elif application_result.is_blocked:
         application_status = "blocked"
+    elif application_result.is_partial_application:
+        application_status = (
+            "partially stored in library database "
+            f"({len(application_result.applied_changes)} fields)"
+        )
     elif application_result.stored:
         application_status = (
             "stored in library database "
             f"({len(application_result.applied_changes)} fields)"
         )
+    elif application_result.has_withheld_fields:
+        application_status = "no eligible changes stored"
     else:
         application_status = "no changes"
+    application_lines = []
+    if application_result is not None:
+        application_lines.append(f"  application mode: {application_result.mode.value}")
+    application_lines.append(f"  application: {application_status}")
     lines.extend(
         (
-            f"  application: {application_status}",
+            *application_lines,
             "  file tags: unchanged",
             f"  planned changes: {len(source.changes)}",
             f"  losslessly mapped: {len(plan.mapped_changes)}",

@@ -1,8 +1,9 @@
-"""Strict database application of persistent library Album target plans."""
+"""Safe database application of persistent library Album target plans."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 
 from beets.dbcore.db import NotFoundError
@@ -22,18 +23,38 @@ class LibraryApplicationError(RuntimeError):
     """An internal or safety contract failure during library application."""
 
 
+class LibraryApplicationMode(Enum):
+    """Explicit persistent library application policies."""
+
+    STRICT = "strict"
+    PARTIAL = "partial"
+
+
 @dataclass(frozen=True, slots=True)
 class LibraryApplicationResult:
-    """Immutable outcome of one strict persistent Album application attempt."""
+    """Immutable outcome of one persistent Album application attempt."""
 
+    mode: LibraryApplicationMode = LibraryApplicationMode.STRICT
     applied_changes: tuple[LibraryTargetChange, ...] = ()
     resolution_review_count: int = 0
     mapping_blocker_count: int = 0
     stored: bool = False
 
     @property
-    def is_blocked(self) -> bool:
+    def has_withheld_fields(self) -> bool:
         return self.resolution_review_count > 0 or self.mapping_blocker_count > 0
+
+    @property
+    def is_blocked(self) -> bool:
+        return self.mode is LibraryApplicationMode.STRICT and self.has_withheld_fields
+
+    @property
+    def is_partial_application(self) -> bool:
+        return (
+            self.mode is LibraryApplicationMode.PARTIAL
+            and self.stored
+            and self.has_withheld_fields
+        )
 
     @property
     def has_applied_changes(self) -> bool:
@@ -43,12 +64,15 @@ class LibraryApplicationResult:
 def apply_library_target_plan(
     album: Album,
     plan: LibraryTargetPlan,
+    mode: LibraryApplicationMode = LibraryApplicationMode.STRICT,
 ) -> LibraryApplicationResult:
-    """Strictly apply one canonical target plan to the beets library database."""
+    """Atomically apply the mapped subset permitted by the explicit policy."""
     if not isinstance(album, Album):
         raise LibraryApplicationError("application target must be a library Album")
     if not isinstance(plan, LibraryTargetPlan):
         raise LibraryApplicationError("application plan must be a LibraryTargetPlan")
+    if not isinstance(mode, LibraryApplicationMode):
+        raise LibraryApplicationError("application mode must be a LibraryApplicationMode")
 
     try:
         expected = map_change_plan_to_library_album(plan.source)
@@ -58,6 +82,7 @@ def apply_library_target_plan(
         raise LibraryApplicationError("target plan does not match its canonical source mapping")
 
     result = LibraryApplicationResult(
+        mode=mode,
         resolution_review_count=len(plan.source.reviews),
         mapping_blocker_count=len(plan.blocked_changes),
     )
@@ -100,6 +125,7 @@ def apply_library_target_plan(
 
     album.store(inherit=True)
     return LibraryApplicationResult(
+        mode=mode,
         applied_changes=plan.mapped_changes,
         resolution_review_count=result.resolution_review_count,
         mapping_blocker_count=result.mapping_blocker_count,
