@@ -51,6 +51,7 @@ from beetsplug.noqlenmeta.orchestration import (
 from beetsplug.noqlenmeta.providers import ProviderError
 from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_SPECS,
+    BUILTIN_RELEASE_PROVIDER_SPECS,
     DISCOGS_SPEC,
     ITUNES_SPEC,
     LASTFM_SPEC,
@@ -166,7 +167,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
             application_mode = parse_application_mode(self.config["apply_mode"].as_str())
 
         policy = self._resolution_policy()
-        if not self._has_contributing_provider(policy):
+        if not self._has_contributing_release_provider(policy):
             return
 
         context = context_from_album_info(album_info)
@@ -246,7 +247,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
             raise ui.UserError("noqlenmeta: use an album query or --all, not both")
 
         policy = self._resolution_policy()
-        if not self._has_contributing_provider(policy):
+        if not self._has_contributing_release_provider(policy):
             ui.print_("Noqlen Meta: no enabled provider can contribute to the configured fields")
             return
 
@@ -322,10 +323,10 @@ class NoqlenMetaPlugin(BeetsPlugin):
             ) from None
 
     @staticmethod
-    def _has_contributing_provider(policy: ResolutionPolicy) -> bool:
+    def _has_contributing_release_provider(policy: ResolutionPolicy) -> bool:
         return any(
             provider_can_contribute(policy, spec)
-            for spec in BUILTIN_PROVIDER_SPECS.values()
+            for spec in BUILTIN_RELEASE_PROVIDER_SPECS.values()
         )
 
     def _build_change_plan_for_release(

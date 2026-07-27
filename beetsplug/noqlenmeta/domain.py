@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from math import isfinite
 from typing import TypeAlias
@@ -21,6 +22,22 @@ def canonical_uuid(value: object) -> str | None:
         return None
 
 
+_ISRC_PATTERN = re.compile(
+    r"(?:[A-Za-z]{2}[A-Za-z0-9]{3}[0-9]{7}|"
+    r"[A-Za-z]{2}-[A-Za-z0-9]{3}-[0-9]{2}-[0-9]{5})"
+)
+
+
+def canonical_isrc(value: object) -> str | None:
+    """Return canonical ISRC text or ``None`` for malformed stored metadata."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if _ISRC_PATTERN.fullmatch(text) is None:
+        return None
+    return text.replace("-", "").upper()
+
+
 def _text(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{label} must be a non-empty string")
@@ -35,7 +52,7 @@ def _optional_text(value: object, label: str) -> str | None:
 
 @dataclass(frozen=True, slots=True)
 class ExternalIdentifier:
-    """A provider-independent, namespaced identifier for a release."""
+    """A provider-independent, namespaced identifier for a musical entity."""
 
     namespace: str
     value: str
@@ -73,6 +90,54 @@ class ReleaseEnrichmentContext:
             "catalog_number",
             _optional_text(self.catalog_number, "catalog number"),
         )
+
+        external_ids = tuple(self.external_ids)
+        if not all(isinstance(identifier, ExternalIdentifier) for identifier in external_ids):
+            raise TypeError("external_ids must contain ExternalIdentifier values")
+        object.__setattr__(self, "external_ids", external_ids)
+
+
+@dataclass(frozen=True, slots=True)
+class TrackEnrichmentContext:
+    """Identity and provider input for a track already identified by beets."""
+
+    artist: str
+    title: str
+    album_title: str | None = None
+    duration: float | None = None
+    track_number: int | None = None
+    disc_number: int | None = None
+    external_ids: tuple[ExternalIdentifier, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "artist", _text(self.artist, "track artist"))
+        object.__setattr__(self, "title", _text(self.title, "track title"))
+        object.__setattr__(
+            self,
+            "album_title",
+            _optional_text(self.album_title, "album title"),
+        )
+
+        duration = self.duration
+        if duration is not None:
+            if (
+                isinstance(duration, bool)
+                or not isinstance(duration, (int, float))
+                or not isfinite(duration)
+                or duration <= 0
+            ):
+                raise ValueError("duration must be a finite positive number of seconds")
+            object.__setattr__(self, "duration", float(duration))
+
+        for field, label in (
+            ("track_number", "track number"),
+            ("disc_number", "disc number"),
+        ):
+            value = getattr(self, field)
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, int) or value <= 0
+            ):
+                raise ValueError(f"{label} must be a positive integer")
 
         external_ids = tuple(self.external_ids)
         if not all(isinstance(identifier, ExternalIdentifier) for identifier in external_ids):

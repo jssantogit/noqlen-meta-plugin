@@ -5,7 +5,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
-from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
+from beetsplug.noqlenmeta.domain import (
+    MetadataCandidate,
+    ReleaseEnrichmentContext,
+    TrackEnrichmentContext,
+)
 
 
 class ProviderError(RuntimeError):
@@ -17,8 +21,8 @@ class ProviderContractError(RuntimeError):
 
 
 @runtime_checkable
-class MetadataProvider(Protocol):
-    """Synchronous contract for a normalized metadata provider adapter."""
+class ReleaseMetadataProvider(Protocol):
+    """Synchronous contract for a normalized release metadata provider."""
 
     name: str
     supported_fields: frozenset[str]
@@ -27,4 +31,18 @@ class MetadataProvider(Protocol):
         self, context: ReleaseEnrichmentContext
     ) -> Sequence[MetadataCandidate]:
         """Return normalized field candidates for an identified release."""
+        ...
+
+
+@runtime_checkable
+class TrackMetadataProvider(Protocol):
+    """Synchronous contract for a normalized track metadata provider."""
+
+    name: str
+    supported_fields: frozenset[str]
+
+    def get_candidates(
+        self, context: TrackEnrichmentContext
+    ) -> Sequence[MetadataCandidate]:
+        """Return normalized field candidates for an identified track."""
         ...

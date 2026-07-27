@@ -25,6 +25,7 @@ from beetsplug.noqlenmeta.integration import (
 )
 from beetsplug.noqlenmeta.providers import ProviderError
 from beetsplug.noqlenmeta.providers.base import ProviderContractError
+from beetsplug.noqlenmeta.providers.specs import BUILTIN_RELEASE_PROVIDER_SPECS
 from beetsplug.noqlenmeta.resolver import default_resolution_policy
 
 TOKEN = "test-personal-token"
@@ -311,6 +312,15 @@ def test_policy_provider_map_includes_all_production_providers_disabled_by_defau
         "lastfm": False,
         "itunes": False,
     }
+
+
+def test_release_orchestration_registry_contains_only_current_album_providers() -> None:
+    assert tuple(BUILTIN_RELEASE_PROVIDER_SPECS) == (
+        "discogs",
+        "musicbrainz",
+        "lastfm",
+        "itunes",
+    )
 
 
 @pytest.mark.parametrize(

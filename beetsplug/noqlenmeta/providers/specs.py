@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import Enum
 from types import MappingProxyType
 
 
@@ -16,6 +17,13 @@ def _canonical_name(value: object, label: str) -> str:
     return normalized
 
 
+class ProviderScope(Enum):
+    """The musical entity supplied to a provider adapter."""
+
+    RELEASE = "release"
+    TRACK = "track"
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderSpec:
     """Static identity and current output capabilities of one provider adapter."""
@@ -23,6 +31,7 @@ class ProviderSpec:
     name: str
     display_name: str
     supported_fields: frozenset[str]
+    scope: ProviderScope = ProviderScope.RELEASE
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "name", _canonical_name(self.name, "provider name"))
@@ -38,6 +47,8 @@ class ProviderSpec:
         if len(fields) != len(set(fields)):
             raise ValueError("supported field names must be unique after normalization")
         object.__setattr__(self, "supported_fields", frozenset(fields))
+        if not isinstance(self.scope, ProviderScope):
+            raise TypeError("provider scope must be a ProviderScope")
 
 
 DISCOGS_SPEC = ProviderSpec(
@@ -56,6 +67,7 @@ DISCOGS_SPEC = ProviderSpec(
             "format_descriptions",
         }
     ),
+    scope=ProviderScope.RELEASE,
 )
 
 MUSICBRAINZ_SPEC = ProviderSpec(
@@ -71,24 +83,41 @@ MUSICBRAINZ_SPEC = ProviderSpec(
             "media",
         }
     ),
+    scope=ProviderScope.RELEASE,
 )
 
 LASTFM_SPEC = ProviderSpec(
     name="lastfm",
     display_name="Last.fm",
     supported_fields=frozenset({"genres"}),
+    scope=ProviderScope.RELEASE,
 )
 
 ITUNES_SPEC = ProviderSpec(
     name="itunes",
     display_name="iTunes",
     supported_fields=frozenset({"genres", "year"}),
+    scope=ProviderScope.RELEASE,
 )
 
 BUILTIN_PROVIDER_SPECS: Mapping[str, ProviderSpec] = MappingProxyType(
     {
         spec.name: spec
         for spec in (DISCOGS_SPEC, MUSICBRAINZ_SPEC, LASTFM_SPEC, ITUNES_SPEC)
+    }
+)
+BUILTIN_RELEASE_PROVIDER_SPECS: Mapping[str, ProviderSpec] = MappingProxyType(
+    {
+        name: spec
+        for name, spec in BUILTIN_PROVIDER_SPECS.items()
+        if spec.scope is ProviderScope.RELEASE
+    }
+)
+BUILTIN_TRACK_PROVIDER_SPECS: Mapping[str, ProviderSpec] = MappingProxyType(
+    {
+        name: spec
+        for name, spec in BUILTIN_PROVIDER_SPECS.items()
+        if spec.scope is ProviderScope.TRACK
     }
 )
 

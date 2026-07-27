@@ -4,10 +4,13 @@ import pytest
 
 from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_SPECS,
+    BUILTIN_RELEASE_PROVIDER_SPECS,
+    BUILTIN_TRACK_PROVIDER_SPECS,
     DISCOGS_SPEC,
     ITUNES_SPEC,
     LASTFM_SPEC,
     MUSICBRAINZ_SPEC,
+    ProviderScope,
     ProviderSpec,
 )
 
@@ -66,6 +69,33 @@ def test_builtin_provider_mapping_is_immutable() -> None:
     }
     with pytest.raises(TypeError):
         BUILTIN_PROVIDER_SPECS["other"] = ITUNES_SPEC  # type: ignore[index]
+
+
+def test_builtin_provider_scopes_and_filtered_registries_are_explicit() -> None:
+    assert all(spec.scope is ProviderScope.RELEASE for spec in BUILTIN_PROVIDER_SPECS.values())
+    assert dict(BUILTIN_RELEASE_PROVIDER_SPECS) == {
+        "discogs": DISCOGS_SPEC,
+        "musicbrainz": MUSICBRAINZ_SPEC,
+        "lastfm": LASTFM_SPEC,
+        "itunes": ITUNES_SPEC,
+    }
+    assert dict(BUILTIN_TRACK_PROVIDER_SPECS) == {}
+    with pytest.raises(TypeError):
+        BUILTIN_RELEASE_PROVIDER_SPECS["other"] = ITUNES_SPEC  # type: ignore[index]
+    with pytest.raises(TypeError):
+        BUILTIN_TRACK_PROVIDER_SPECS["other"] = ITUNES_SPEC  # type: ignore[index]
+
+
+def test_test_only_track_provider_spec_retains_scope() -> None:
+    spec = ProviderSpec("lyrics", "Lyrics", frozenset({"lyrics"}), ProviderScope.TRACK)
+
+    assert spec.scope is ProviderScope.TRACK
+    assert "lyrics" not in BUILTIN_PROVIDER_SPECS
+
+
+def test_provider_spec_rejects_arbitrary_scope_strings() -> None:
+    with pytest.raises(TypeError, match="ProviderScope"):
+        ProviderSpec("provider", "Provider", frozenset(), "track")  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("name", ["", " ", "not a provider", "provider!"])

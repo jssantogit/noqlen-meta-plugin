@@ -166,6 +166,17 @@ blocker. Strict mode applies zero fields. Partial mode applies genres and withho
 not discard or serialize the label values. `preview` and `apply` are independent, so preview can be
 disabled without disabling application and preview output never implies application.
 
+## Track-level foundation
+
+Noqlen distinguishes release and track enrichment contexts internally. Existing Discogs,
+MusicBrainz, Last.fm, and iTunes providers remain release-scoped. Read-only track identity adapters
+can represent selected `TrackInfo` and persistent `Item` metadata, including duration, track/disc
+position, MusicBrainz recording and release-track IDs, ISRCs, and AcoustID track IDs.
+
+Future track providers reuse `MetadataCandidate`, Field Authority, `FieldDecision`, and `ChangePlan`
+rather than introducing a separate resolver or planner. No track provider is currently enabled, and
+`beet nm` remains album-oriented. No track metadata is queried, mutated, stored, or written to files.
+
 ## Library command
 
 Noqlen Meta previews enrichment for albums already stored in the beets library by default:

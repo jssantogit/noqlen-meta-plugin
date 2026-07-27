@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 
 from beetsplug.noqlenmeta.domain import ExternalIdentifier, ReleaseEnrichmentContext
-from beetsplug.noqlenmeta.providers import MetadataProvider, ProviderError
+from beetsplug.noqlenmeta.providers import ProviderError, ReleaseMetadataProvider
 from beetsplug.noqlenmeta.providers.itunes import ITunesProvider
 from beetsplug.noqlenmeta.providers.specs import ITUNES_SPEC
 
@@ -269,6 +269,6 @@ def test_storefront_must_be_two_ascii_letters(storefront: str) -> None:
 def test_itunes_provider_satisfies_metadata_provider_contract() -> None:
     provider = ITunesProvider(request_json=Requests())
 
-    assert isinstance(provider, MetadataProvider)
+    assert isinstance(provider, ReleaseMetadataProvider)
     assert provider.name == ITUNES_SPEC.name
     assert provider.supported_fields is ITUNES_SPEC.supported_fields

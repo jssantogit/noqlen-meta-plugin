@@ -10,8 +10,8 @@ Noqlen Meta Plugin - universal multi-provider metadata enrichment for beets.
 
 ## Context level
 
-`standard` for Block 018 because one provider is added through existing provider capability,
-orchestration, resolution, mapping, and application boundaries.
+`standard` for Block 019 because it adds one domain/integration boundary and provider scope while
+leaving resolver, mapping, application, and execution behavior unchanged.
 
 ## Tool Mode
 
@@ -20,11 +20,11 @@ shell commands.
 
 ## Active block
 
-Block 018 - Conservative Last.fm Genre Enrichment.
+Block 019 - Track-Level Enrichment Foundation.
 
 ## Active spec
 
-`docs/specs/018-lastfm-genres/`
+`docs/specs/019-track-enrichment-foundation/`
 
 ## Active ADRs
 
@@ -32,21 +32,22 @@ Block 018 - Conservative Last.fm Genre Enrichment.
 - `docs/adr/0004-provider-capabilities-orchestration.md`
 - `docs/adr/0013-configurable-resolution-policy.md`
 - `docs/adr/0014-lastfm-community-genre-enrichment.md`
+- `docs/adr/0015-track-enrichment-boundary.md`
 
 ## Allowed files
 
-Last.fm provider/spec/config/orchestration wiring, focused provider/resolver/importer/CLI tests,
-sanitized fixtures, README, ADR 0014, Block 018 specs, and context/handoff documents.
+Track domain and read-only integration, provider contracts/spec scope, release availability gate,
+focused tests, README, ADR 0015, Block 019 specs, and context/handoff documents.
 
 ## Forbidden files
 
-Resolver redesign, style/mood inference, mappings, application or persistence changes, search/fuzzy
-matching, credentials, dependencies, persistent cache, concurrency, CLI flags, and physical files.
+Track providers, network calls, track matching, resolver/planner duplication, target mapping,
+application or persistence, fingerprints, cache, concurrency, CLI flags, and physical files.
 
 ## Behavior budget
 
-Last.fm may contribute one genres candidate from selected-album top tags only after strict identity,
-weight, and packaged-vocabulary filtering. Existing authority and write semantics remain unchanged.
+Track identity and provider scope may be represented read-only. Existing release provider results,
+album CLI behavior, authority, mapping, application, persistence, and file semantics remain unchanged.
 
 ## Validation
 
@@ -60,9 +61,9 @@ git status --short
 
 ## Done when
 
-The genres-only provider is bounded, paced, cached, identity-validated, secret-safe, capability-gated,
-fixture-tested, documented, and all offline validation passes.
+Track identity/adapters and scoped provider contracts are validated and documented, current providers
+remain release-scoped, the track registry is empty, and all offline validation passes.
 
 ## Stop condition
 
-Stop after Block 018. Do not add Last.fm styles/mood classification or another provider.
+Stop after Block 019. Do not add LRCLIB, track execution, target mapping, or application.

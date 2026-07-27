@@ -11,7 +11,7 @@ import beets.plugins
 import pytest
 
 from beetsplug.noqlenmeta.domain import ReleaseEnrichmentContext
-from beetsplug.noqlenmeta.providers import MetadataProvider, ProviderError
+from beetsplug.noqlenmeta.providers import ProviderError, ReleaseMetadataProvider
 from beetsplug.noqlenmeta.providers.lastfm import (
     LastFmProvider,
     _LastFmTransport,
@@ -407,7 +407,7 @@ def test_supported_beets_vocabulary_loads_without_importing_pylast(
 def test_lastfm_provider_satisfies_metadata_provider_contract() -> None:
     lastfm = provider()
 
-    assert isinstance(lastfm, MetadataProvider)
+    assert isinstance(lastfm, ReleaseMetadataProvider)
     assert lastfm.name == LASTFM_SPEC.name
     assert lastfm.supported_fields is LASTFM_SPEC.supported_fields
 

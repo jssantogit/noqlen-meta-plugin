@@ -12,6 +12,7 @@ from beetsplug.noqlenmeta.providers.specs import (
     ITUNES_SPEC,
     LASTFM_SPEC,
     MUSICBRAINZ_SPEC,
+    ProviderScope,
     ProviderSpec,
 )
 from beetsplug.noqlenmeta.resolver import FieldRule, ResolutionPolicy
@@ -99,6 +100,18 @@ def test_unknown_provider_is_safely_ineligible() -> None:
     unknown = ProviderSpec("unknown", "Unknown", frozenset({"genres"}))
 
     assert not provider_can_contribute(policy({"genres": (True, ("unknown",))}), unknown)
+
+
+def test_generic_orchestration_helpers_accept_track_scoped_specs() -> None:
+    spec = ProviderSpec(
+        "track-provider", "Track Provider", frozenset({"lyrics"}), ProviderScope.TRACK
+    )
+    resolution_policy = policy(
+        {"lyrics": (True, ("track-provider",))}, {"track-provider": True}
+    )
+
+    assert provider_can_contribute(resolution_policy, spec)
+    assert eligible_provider_fields(resolution_policy, spec) == frozenset({"lyrics"})
 
 
 def candidate(field: str = "genres", provider: str = "itunes") -> MetadataCandidate:

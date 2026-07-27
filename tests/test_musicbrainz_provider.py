@@ -8,7 +8,7 @@ import pytest
 from requests.exceptions import HTTPError, Timeout
 
 from beetsplug.noqlenmeta.domain import ExternalIdentifier, ReleaseEnrichmentContext
-from beetsplug.noqlenmeta.providers import MetadataProvider, ProviderError
+from beetsplug.noqlenmeta.providers import ProviderError, ReleaseMetadataProvider
 from beetsplug.noqlenmeta.providers.musicbrainz import MusicBrainzProvider
 from beetsplug.noqlenmeta.providers.specs import MUSICBRAINZ_SPEC
 
@@ -228,7 +228,7 @@ def test_production_boundary_uses_one_exact_lookup_with_narrow_includes(
 def test_musicbrainz_provider_satisfies_metadata_provider_contract() -> None:
     provider = MusicBrainzProvider(fetch_release=FetchRelease())
 
-    assert isinstance(provider, MetadataProvider)
+    assert isinstance(provider, ReleaseMetadataProvider)
     assert provider.name == MUSICBRAINZ_SPEC.name
     assert provider.supported_fields is MUSICBRAINZ_SPEC.supported_fields
 
