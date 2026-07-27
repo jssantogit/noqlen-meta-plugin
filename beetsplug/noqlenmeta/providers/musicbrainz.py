@@ -85,7 +85,7 @@ def _normalize_release(
     payload: Mapping[str, object], release_mbid: str
 ) -> tuple[MetadataCandidate, ...]:
     fields: list[tuple[str, str | int | tuple[str, ...]]] = []
-    labels, catalog_numbers = _label_info(payload.get("label-info"))
+    labels, catalog_numbers = _label_info(payload.get("label_info"))
     if labels:
         fields.append(("labels", labels))
     if catalog_numbers:
@@ -128,7 +128,7 @@ def _label_info(value: object) -> tuple[tuple[str, ...], tuple[str, ...]]:
         label = entry.get("label")
         if isinstance(label, Mapping):
             _append_unique(labels, _optional_string(label.get("name")))
-        _append_unique(catalog_numbers, _optional_string(entry.get("catalog-number")))
+        _append_unique(catalog_numbers, _optional_string(entry.get("catalog_number")))
     return tuple(labels), tuple(catalog_numbers)
 
 

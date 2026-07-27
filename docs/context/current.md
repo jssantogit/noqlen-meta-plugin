@@ -55,8 +55,9 @@ and physical file operations.
 ## Behavior budget
 
 An enabled MusicBrainz provider may enrich only an exact validated release MBID already known by
-beets. Existing Field Authority decides winners. Mapping, strict/partial application, database writes,
-and file behavior remain unchanged.
+beets. It consumes the underscore-normalized release mapping returned by beets `MusicBrainzAPI`, not
+raw MusicBrainz HTTP keys. Existing Field Authority decides winners. Mapping, strict/partial
+application, database writes, and file behavior remain unchanged.
 
 ## Validation
 

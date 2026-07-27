@@ -3,13 +3,17 @@
   "date": "2005-09-27",
   "country": "FR",
   "barcode": "3760053840745",
-  "label-info": [
+  "label_info": [
     {
-      "catalog-number": "POSH 074",
-      "label": {"name": "Listenable Records"}
+      "catalog_number": "POSH 074",
+      "label": {
+        "name": "Listenable Records"
+      }
     }
   ],
   "media": [
-    {"format": "CD"}
+    {
+      "format": "CD"
+    }
   ]
 }

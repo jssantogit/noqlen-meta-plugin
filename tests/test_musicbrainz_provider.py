@@ -70,6 +70,13 @@ def test_exact_release_normalization_emits_supported_fields_and_provenance() -> 
     )
 
 
+def test_normalized_beets_release_shape_emits_labels_and_catalog_numbers() -> None:
+    fields = fields_for(fixture())
+
+    assert fields["labels"] == ("Listenable Records",)
+    assert fields["catalog_numbers"] == ("POSH 074",)
+
+
 @pytest.mark.parametrize("identifiers", [(), ("invalid",)])
 def test_missing_or_malformed_mbid_performs_no_fetch(identifiers: tuple[str, ...]) -> None:
     fetch = FetchRelease()
@@ -154,11 +161,11 @@ def test_malformed_release_date_omits_year(date: object) -> None:
 
 def test_multi_values_are_preserved_and_stably_deduplicated() -> None:
     payload = fixture()
-    payload["label-info"] = [
-        {"label": {"name": "Label A"}, "catalog-number": "CAT A"},
-        {"label": {"name": "Label B"}, "catalog-number": "CAT B"},
-        {"label": {"name": "Label A"}, "catalog-number": "CAT A"},
-        {"catalog-number": "CAT C"},
+    payload["label_info"] = [
+        {"label": {"name": "Label A"}, "catalog_number": "CAT A"},
+        {"label": {"name": "Label B"}, "catalog_number": "CAT B"},
+        {"label": {"name": "Label A"}, "catalog_number": "CAT A"},
+        {"catalog_number": "CAT C"},
     ]
     payload["media"] = [
         {"format": "CD"},
@@ -175,11 +182,11 @@ def test_multi_values_are_preserved_and_stably_deduplicated() -> None:
 
 def test_null_and_malformed_nested_values_are_skipped_individually() -> None:
     payload = fixture()
-    payload["label-info"] = [
+    payload["label_info"] = [
         None,
         "invalid",
-        {"label": None, "catalog-number": " STANDALONE "},
-        {"label": {"name": 123}, "catalog-number": []},
+        {"label": None, "catalog_number": " STANDALONE "},
+        {"label": {"name": 123}, "catalog_number": []},
         {"label": {"name": " Valid Label "}},
     ]
     payload["media"] = [None, "CD", {"format": None}, {"format": " DVD "}]
@@ -211,7 +218,10 @@ def test_production_boundary_uses_one_exact_lookup_with_narrow_includes(
 
     candidates = MusicBrainzProvider().get_candidates(context(RELEASE_MBID))
 
-    assert candidates
+    fields = {candidate.field: candidate.value for candidate in candidates}
+
+    assert fields["labels"] == ("Listenable Records",)
+    assert fields["catalog_numbers"] == ("POSH 074",)
     assert calls == [(RELEASE_MBID, ["labels", "media"])]
 
 

@@ -12,6 +12,8 @@ matching, mapping, application, persistence, or file behavior.
 - Added canonical UUID validation and deterministic `musicbrainz.release` context identifiers for
   selected `AlbumInfo` and persistent `Album`; Discogs IDs coexist.
 - Added one direct `MusicBrainzAPI.get_release` lookup with explicit `labels` and `media` includes.
+- Provider and fixture consume the underscore-normalized release mapping returned by beets, including
+  `label_info` and `catalog_number`.
 - Missing, malformed, or conflicting MBIDs return no candidates before network work.
 - Added response-ID integrity, fixed external failure translation, structured normalization,
   confidence, and public provenance.
@@ -23,6 +25,8 @@ matching, mapping, application, persistence, or file behavior.
 
 - MusicBrainz does not match or search for releases.
 - Beets' supported MusicBrainz client remains the sole HTTP/rate-limit implementation.
+- The provider consumes beets-normalized mappings and does not support raw hyphenated HTTP keys as a
+  parallel payload contract.
 - Release year uses the exact release date, never release-group first release date.
 - Multi-values remain structured and may expose existing singular-target blockers.
 - Existing authority remains unchanged: MusicBrainz leads year; Discogs leads its higher-authority
