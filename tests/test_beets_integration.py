@@ -877,6 +877,28 @@ def test_lastfm_failure_hides_key_detail_and_itunes_continues(
     assert fake_key not in output[0]
 
 
+def test_lastfm_missing_album_is_quiet_and_itunes_continues(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    output: list[str] = []
+    monkeypatch.setattr(NoqlenMetaPlugin, "_lastfm_candidates", lambda *args: ())
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_itunes_candidates",
+        lambda *args: (candidate(provider="itunes"),),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, discogs=False, lastfm=True, itunes=True)
+
+    with caplog.at_level(logging.WARNING, logger="beets.noqlenmeta"):
+        plugin._import_task_choice(None, import_task(album_info()))
+
+    assert "Last.fm enrichment unavailable" not in caplog.text
+    assert "source: iTunes" in output[0]
+
+
 def test_itunes_failure_does_not_suppress_discogs(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,

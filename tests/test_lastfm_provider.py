@@ -23,6 +23,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "lastfm"
 TEST_VOCABULARY = frozenset(
     {"progressive metal", "death metal", "groove metal", "thrash metal", "rock"}
 )
+FAKE_KEY = "fake-test-key"
 
 
 def fixture() -> dict[str, Any]:
@@ -135,14 +136,14 @@ def test_malformed_structural_payload_is_provider_error(payload: object) -> None
         provider(FetchTopTags(payload)).get_candidates(context())
 
 
-@pytest.mark.parametrize("code", [7, "7"])
+@pytest.mark.parametrize("code", [6, "6", 7, "7"])
 def test_no_resource_api_errors_return_empty(code: object) -> None:
     payload = {"error": code, "message": "unsafe raw service detail"}
 
     assert provider(FetchTopTags(payload)).get_candidates(context()) == ()
 
 
-@pytest.mark.parametrize("code", [6, 8, 10, 11, 16, 26, 29, 999, "invalid"])
+@pytest.mark.parametrize("code", [8, 10, 11, 16, 26, 29, 999, "invalid"])
 def test_service_and_key_api_errors_are_fixed_provider_errors(code: object) -> None:
     payload = {"error": code, "message": "unsafe raw service detail"}
 
@@ -233,7 +234,7 @@ def test_distinct_transport_requests_are_paced_without_real_sleep() -> None:
         return payload
 
     transport = _LastFmTransport(
-        api_key="fake-test-key",
+        api_key=FAKE_KEY,
         request_json=request_json,
         monotonic=clock.monotonic,
         sleep=clock.sleep,
@@ -250,7 +251,7 @@ def test_distinct_transport_requests_are_paced_without_real_sleep() -> None:
 def test_cache_hit_does_not_trigger_transport_pacing_sleep() -> None:
     clock = FakeClock()
     transport = _LastFmTransport(
-        api_key="fake-test-key",
+        api_key=FAKE_KEY,
         request_json=lambda url: fixture(),
         monotonic=clock.monotonic,
         sleep=clock.sleep,
@@ -279,7 +280,7 @@ def test_expected_transport_failures_hide_underlying_details(error: Exception) -
     def fail_request(url: str) -> dict[str, Any]:
         raise error
 
-    transport = _LastFmTransport(api_key="fake-test-key", request_json=fail_request)
+    transport = _LastFmTransport(api_key=FAKE_KEY, request_json=fail_request)
 
     with pytest.raises(ProviderError) as raised:
         LastFmProvider(
@@ -294,7 +295,7 @@ def test_programming_error_is_not_disguised_as_provider_error() -> None:
     def fail_request(url: str) -> dict[str, Any]:
         raise AttributeError("programming defect")
 
-    transport = _LastFmTransport(api_key="fake-test-key", request_json=fail_request)
+    transport = _LastFmTransport(api_key=FAKE_KEY, request_json=fail_request)
 
     with pytest.raises(AttributeError, match="programming defect"):
         LastFmProvider(
