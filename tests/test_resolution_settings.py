@@ -87,6 +87,18 @@ def test_lastfm_is_valid_in_custom_genres_authority() -> None:
     assert policy.field_rules["genres"].authority == ("lastfm", "discogs", "itunes")
 
 
+@pytest.mark.parametrize("field", ["lyrics", "synced_lyrics"])
+def test_lrclib_is_valid_in_custom_lyrics_authority(field: str) -> None:
+    policy = resolution_policy_from_settings(
+        {field: True},
+        {"lrclib": True},
+        authority_settings={field: ["lrclib"]},
+    )
+
+    assert policy.field_rules[field].authority == ("lrclib",)
+    assert policy.is_provider_enabled("lrclib")
+
+
 def test_authority_override_leaves_every_omitted_field_unchanged() -> None:
     baseline = default_resolution_policy()
     policy = resolution_policy_from_settings(

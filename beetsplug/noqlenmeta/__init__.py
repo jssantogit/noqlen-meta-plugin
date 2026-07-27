@@ -114,6 +114,9 @@ class NoqlenMetaPlugin(BeetsPlugin):
                         "enabled": False,
                         "storefront": "us",
                     },
+                    "lrclib": {
+                        "enabled": False,
+                    },
                 },
                 "resolution": {
                     "authority": {},

@@ -9,6 +9,7 @@ from beetsplug.noqlenmeta.providers.specs import (
     DISCOGS_SPEC,
     ITUNES_SPEC,
     LASTFM_SPEC,
+    LRCLIB_SPEC,
     MUSICBRAINZ_SPEC,
     ProviderScope,
     ProviderSpec,
@@ -53,6 +54,13 @@ def test_lastfm_spec_describes_exact_current_adapter_capabilities() -> None:
     assert LASTFM_SPEC.supported_fields == frozenset({"genres"})
 
 
+def test_lrclib_spec_describes_exact_track_adapter_capabilities() -> None:
+    assert LRCLIB_SPEC.name == "lrclib"
+    assert LRCLIB_SPEC.display_name == "LRCLIB"
+    assert LRCLIB_SPEC.supported_fields == frozenset({"lyrics", "synced_lyrics"})
+    assert LRCLIB_SPEC.scope is ProviderScope.TRACK
+
+
 def test_provider_spec_and_supported_fields_are_immutable() -> None:
     with pytest.raises(FrozenInstanceError):
         ITUNES_SPEC.name = "changed"  # type: ignore[misc]
@@ -66,20 +74,20 @@ def test_builtin_provider_mapping_is_immutable() -> None:
         "musicbrainz": MUSICBRAINZ_SPEC,
         "lastfm": LASTFM_SPEC,
         "itunes": ITUNES_SPEC,
+        "lrclib": LRCLIB_SPEC,
     }
     with pytest.raises(TypeError):
         BUILTIN_PROVIDER_SPECS["other"] = ITUNES_SPEC  # type: ignore[index]
 
 
 def test_builtin_provider_scopes_and_filtered_registries_are_explicit() -> None:
-    assert all(spec.scope is ProviderScope.RELEASE for spec in BUILTIN_PROVIDER_SPECS.values())
     assert dict(BUILTIN_RELEASE_PROVIDER_SPECS) == {
         "discogs": DISCOGS_SPEC,
         "musicbrainz": MUSICBRAINZ_SPEC,
         "lastfm": LASTFM_SPEC,
         "itunes": ITUNES_SPEC,
     }
-    assert dict(BUILTIN_TRACK_PROVIDER_SPECS) == {}
+    assert dict(BUILTIN_TRACK_PROVIDER_SPECS) == {"lrclib": LRCLIB_SPEC}
     with pytest.raises(TypeError):
         BUILTIN_RELEASE_PROVIDER_SPECS["other"] = ITUNES_SPEC  # type: ignore[index]
     with pytest.raises(TypeError):

@@ -10,8 +10,8 @@ Noqlen Meta Plugin - universal multi-provider metadata enrichment for beets.
 
 ## Context level
 
-`standard` for Block 019 because it adds one domain/integration boundary and provider scope while
-leaving resolver, mapping, application, and execution behavior unchanged.
+`standard` for Block 020 because it adds one track provider and narrow external-service boundary while
+leaving resolver, mapping, application, and user-facing execution behavior unchanged.
 
 ## Tool Mode
 
@@ -20,11 +20,11 @@ shell commands.
 
 ## Active block
 
-Block 019 - Track-Level Enrichment Foundation.
+Block 020 - LRCLIB Track Lyrics Provider.
 
 ## Active spec
 
-`docs/specs/019-track-enrichment-foundation/`
+`docs/specs/020-lrclib-track-lyrics/`
 
 ## Active ADRs
 
@@ -33,21 +33,23 @@ Block 019 - Track-Level Enrichment Foundation.
 - `docs/adr/0013-configurable-resolution-policy.md`
 - `docs/adr/0014-lastfm-community-genre-enrichment.md`
 - `docs/adr/0015-track-enrichment-boundary.md`
+- `docs/adr/0016-lrclib-track-lyrics-provider.md`
 
 ## Allowed files
 
-Track domain and read-only integration, provider contracts/spec scope, release availability gate,
-focused tests, README, ADR 0015, Block 019 specs, and context/handoff documents.
+LRCLIB provider/transport, provider spec and disabled configuration, focused tests and synthetic
+fixtures, README, ADR 0016, Block 020 specs, and context/handoff documents.
 
 ## Forbidden files
 
-Track providers, network calls, track matching, resolver/planner duplication, target mapping,
-application or persistence, fingerprints, cache, concurrency, CLI flags, and physical files.
+LRCLIB search or fuzzy matching, resolver/planner duplication, target mapping, track execution,
+application or persistence, fingerprints, persistent cache, concurrency, CLI flags, and file writes.
 
 ## Behavior budget
 
-Track identity and provider scope may be represented read-only. Existing release provider results,
-album CLI behavior, authority, mapping, application, persistence, and file semantics remain unchanged.
+Exact selected-track lyrics may become canonical candidates. Existing release provider results,
+album CLI/importer behavior, authority defaults, mapping, application, persistence, and file semantics
+remain unchanged.
 
 ## Validation
 
@@ -61,9 +63,9 @@ git status --short
 
 ## Done when
 
-Track identity/adapters and scoped provider contracts are validated and documented, current providers
-remain release-scoped, the track registry is empty, and all offline validation passes.
+LRCLIB exact lookup, validation, safety, cache, pacing, and shared planning are tested and documented;
+release execution remains isolated and all offline validation passes.
 
 ## Stop condition
 
-Stop after Block 019. Do not add LRCLIB, track execution, target mapping, or application.
+Stop after Block 020. Do not add track execution, current-state precedence, mapping, or application.

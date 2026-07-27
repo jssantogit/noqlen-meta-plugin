@@ -99,6 +99,7 @@ def configure_enabled(
     musicbrainz: bool = False,
     lastfm: bool = False,
     itunes: bool = False,
+    lrclib: bool = False,
     storefront: str = "us",
     resolution: dict[str, object] | None = None,
 ) -> None:
@@ -111,6 +112,7 @@ def configure_enabled(
             "musicbrainz": {"enabled": musicbrainz},
             "lastfm": {"enabled": lastfm},
             "itunes": {"enabled": itunes, "storefront": storefront},
+            "lrclib": {"enabled": lrclib},
         },
     }
     if apply_mode is not None:
@@ -134,6 +136,7 @@ def test_configuration_defaults_and_redacts_user_token() -> None:
     assert plugin.config["providers"]["lastfm"]["enabled"].get(bool) is False
     assert plugin.config["providers"]["itunes"]["enabled"].get(bool) is False
     assert plugin.config["providers"]["itunes"]["storefront"].as_str() == "us"
+    assert plugin.config["providers"]["lrclib"]["enabled"].get(bool) is False
     assert plugin.config["resolution"]["authority"].get(dict) == {}
     assert plugin.config["resolution"]["min_confidence"].get(dict) == {}
     assert plugin.config["resolution"]["preserve_existing"].get(dict) == {}
@@ -311,6 +314,7 @@ def test_policy_provider_map_includes_all_production_providers_disabled_by_defau
         "musicbrainz": False,
         "lastfm": False,
         "itunes": False,
+        "lrclib": False,
     }
 
 
@@ -321,6 +325,43 @@ def test_release_orchestration_registry_contains_only_current_album_providers() 
         "lastfm",
         "itunes",
     )
+
+
+def test_actual_plugin_policy_accepts_enabled_lrclib_and_custom_authority() -> None:
+    plugin = NoqlenMetaPlugin()
+    plugin.config.set(
+        {
+            "providers": {"lrclib": {"enabled": True}},
+            "fields": {"lyrics": True, "synced_lyrics": True},
+            "resolution": {"authority": {"lyrics": ["lrclib"]}},
+        }
+    )
+
+    policy = plugin._resolution_policy()
+
+    assert policy.is_provider_enabled("lrclib")
+    assert policy.is_field_enabled("lyrics")
+    assert policy.is_field_enabled("synced_lyrics")
+    assert policy.field_rules["lyrics"].authority == ("lrclib",)
+    assert not plugin._has_contributing_release_provider(policy)
+
+
+def test_release_importer_does_not_execute_lrclib_when_it_is_only_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "beetsplug.noqlenmeta.providers.lrclib.urlopen",
+        lambda *args, **kwargs: pytest.fail("release importer must not call LRCLIB"),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(
+        plugin,
+        fields={field: False for field in DISCOGS_FIELDS} | {"lyrics": True},
+        discogs=False,
+        lrclib=True,
+    )
+
+    plugin._import_task_choice(None, import_task(album_info()))
 
 
 @pytest.mark.parametrize(

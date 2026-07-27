@@ -100,10 +100,23 @@ ITUNES_SPEC = ProviderSpec(
     scope=ProviderScope.RELEASE,
 )
 
+LRCLIB_SPEC = ProviderSpec(
+    name="lrclib",
+    display_name="LRCLIB",
+    supported_fields=frozenset({"lyrics", "synced_lyrics"}),
+    scope=ProviderScope.TRACK,
+)
+
 BUILTIN_PROVIDER_SPECS: Mapping[str, ProviderSpec] = MappingProxyType(
     {
         spec.name: spec
-        for spec in (DISCOGS_SPEC, MUSICBRAINZ_SPEC, LASTFM_SPEC, ITUNES_SPEC)
+        for spec in (
+            DISCOGS_SPEC,
+            MUSICBRAINZ_SPEC,
+            LASTFM_SPEC,
+            ITUNES_SPEC,
+            LRCLIB_SPEC,
+        )
     }
 )
 BUILTIN_RELEASE_PROVIDER_SPECS: Mapping[str, ProviderSpec] = MappingProxyType(

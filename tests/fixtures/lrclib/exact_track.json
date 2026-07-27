@@ -1,0 +1,10 @@
+{
+  "id": 12345,
+  "trackName": "Synthetic Track",
+  "artistName": "Synthetic Artist",
+  "albumName": "Synthetic Album",
+  "duration": 240.0,
+  "instrumental": false,
+  "plainLyrics": "Synthetic line one\nSynthetic line two",
+  "syncedLyrics": "[00:01.00] Synthetic line one\n[00:04.00] Synthetic line two"
+}

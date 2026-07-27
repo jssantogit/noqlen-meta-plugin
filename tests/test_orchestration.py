@@ -11,6 +11,7 @@ from beetsplug.noqlenmeta.providers.specs import (
     DISCOGS_SPEC,
     ITUNES_SPEC,
     LASTFM_SPEC,
+    LRCLIB_SPEC,
     MUSICBRAINZ_SPEC,
     ProviderScope,
     ProviderSpec,
@@ -28,7 +29,13 @@ def policy(
             for field, (enabled, authority) in fields.items()
         },
         providers
-        or {"discogs": True, "musicbrainz": True, "lastfm": True, "itunes": True},
+        or {
+            "discogs": True,
+            "musicbrainz": True,
+            "lastfm": True,
+            "itunes": True,
+            "lrclib": True,
+        },
     )
 
 
@@ -47,6 +54,9 @@ def policy(
         (LASTFM_SPEC, "genres", ("discogs", "lastfm", "itunes"), True),
         (LASTFM_SPEC, "styles", ("lastfm",), False),
         (LASTFM_SPEC, "mood", ("lastfm",), False),
+        (LRCLIB_SPEC, "lyrics", ("local", "lrclib"), True),
+        (LRCLIB_SPEC, "synced_lyrics", ("lrclib",), True),
+        (LRCLIB_SPEC, "genres", ("lrclib",), False),
     ],
 )
 def test_provider_contribution_intersects_policy_authority_and_capability(
@@ -112,6 +122,18 @@ def test_generic_orchestration_helpers_accept_track_scoped_specs() -> None:
 
     assert provider_can_contribute(resolution_policy, spec)
     assert eligible_provider_fields(resolution_policy, spec) == frozenset({"lyrics"})
+
+
+def test_lrclib_cannot_contribute_when_both_lyrics_fields_are_disabled() -> None:
+    resolution_policy = policy(
+        {
+            "lyrics": (False, ("lrclib",)),
+            "synced_lyrics": (False, ("lrclib",)),
+        },
+        {"lrclib": True},
+    )
+
+    assert not provider_can_contribute(resolution_policy, LRCLIB_SPEC)
 
 
 def candidate(field: str = "genres", provider: str = "itunes") -> MetadataCandidate:

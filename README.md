@@ -105,6 +105,9 @@ noqlenmeta:
       enabled: false
       storefront: "us"
 
+    lrclib:
+      enabled: false
+
   # Optional advanced resolution overrides. Omitted fields keep built-in defaults.
   resolution:
     authority:
@@ -166,16 +169,26 @@ blocker. Strict mode applies zero fields. Partial mode applies genres and withho
 not discard or serialize the label values. `preview` and `apply` are independent, so preview can be
 disabled without disabling application and preview output never implies application.
 
-## Track-level foundation
+## Track-level lyrics
 
 Noqlen distinguishes release and track enrichment contexts internally. Existing Discogs,
 MusicBrainz, Last.fm, and iTunes providers remain release-scoped. Read-only track identity adapters
 can represent selected `TrackInfo` and persistent `Item` metadata, including duration, track/disc
 position, MusicBrainz recording and release-track IDs, ISRCs, and AcoustID track IDs.
 
-Future track providers reuse `MetadataCandidate`, Field Authority, `FieldDecision`, and `ChangePlan`
-rather than introducing a separate resolver or planner. No track provider is currently enabled, and
-`beet nm` remains album-oriented. No track metadata is queried, mutated, stored, or written to files.
+LRCLIB is the first track-scoped Noqlen provider and supports plain and synchronized lyrics. It uses
+the selected track title, artist, album, and duration for an exact-signature `GET /api/get` lookup.
+Album title and duration must be available before a request is made, and LRCLIB applies approximately
+a +/-2 second duration matching tolerance. No API key is required.
+
+Noqlen does not fall back to LRCLIB search when the exact track signature is unavailable or not
+found. Beets decides which track it is; LRCLIB only enriches that selected identity. Raw lyrics are
+never logged by the provider, and fixture/test lyrics are synthetic.
+
+**Current execution limitation:** Block 020 implements and registers the LRCLIB track provider, but
+the existing importer and `beet nm` command remain release-oriented and do not execute track
+providers yet. Track planning/application is a separately reviewed boundary. No track metadata is
+currently mutated, stored, or written to files.
 
 ## Library command
 
@@ -310,8 +323,10 @@ Noqlen Meta / beets target plan:
 
 ## Current status
 
-The plugin resolves Discogs, MusicBrainz, Last.fm, and iTunes candidates through one shared planning
-path. Importer enrichment maps the resulting `ChangePlan` to `BeetsTargetPlan`; the library command
+The plugin resolves release candidates from Discogs, MusicBrainz, Last.fm, and iTunes through one
+shared planning path. LRCLIB is registered as a track-scoped provider and its candidates use the same
+Field Authority, resolver, and `ChangePlan`, but current user-facing execution remains release-only.
+Importer enrichment maps the resulting release `ChangePlan` to `BeetsTargetPlan`; the library command
 maps it to `LibraryTargetPlan`. Importer application can mutate only selected `AlbumInfo` under its
 explicit strict or partial policy. CLI application is separately authorized by `--apply`, remains
 strict by default, and permits safe partial database application only with `--apply --partial`.

@@ -50,6 +50,7 @@ def configure_enabled(
     musicbrainz: bool = False,
     lastfm: bool = False,
     itunes: bool = False,
+    lrclib: bool = False,
     resolution: dict[str, object] | None = None,
 ) -> None:
     settings: dict[str, object] = {
@@ -61,6 +62,7 @@ def configure_enabled(
             "musicbrainz": {"enabled": musicbrainz},
             "lastfm": {"enabled": lastfm},
             "itunes": {"enabled": itunes, "storefront": "us"},
+            "lrclib": {"enabled": lrclib},
         }
     }
     if resolution is not None:
@@ -189,6 +191,23 @@ def test_no_useful_provider_avoids_library_query(monkeypatch: pytest.MonkeyPatch
     assert output == [
         "Noqlen Meta: no enabled provider can contribute to the configured fields"
     ]
+
+
+def test_album_cli_does_not_execute_lrclib_when_it_is_only_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "beetsplug.noqlenmeta.providers.lrclib.urlopen",
+        lambda *args, **kwargs: pytest.fail("album CLI must not call LRCLIB"),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, discogs=False, lrclib=True)
+    plugin.config["fields"]["lyrics"].set(True)
+    lib = SimpleNamespace(
+        albums=lambda query: pytest.fail("track-only provider must not query albums")
+    )
+
+    invoke(plugin, lib, ["--all"])
 
 
 def test_invalid_resolution_fails_before_provider_and_library_query(
