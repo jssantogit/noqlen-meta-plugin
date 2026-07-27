@@ -6,6 +6,7 @@ from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_SPECS,
     DISCOGS_SPEC,
     ITUNES_SPEC,
+    MUSICBRAINZ_SPEC,
     ProviderSpec,
 )
 
@@ -34,6 +35,14 @@ def test_itunes_spec_describes_exact_current_adapter_capabilities() -> None:
     assert ITUNES_SPEC.supported_fields == frozenset({"genres", "year"})
 
 
+def test_musicbrainz_spec_describes_exact_current_adapter_capabilities() -> None:
+    assert MUSICBRAINZ_SPEC.name == "musicbrainz"
+    assert MUSICBRAINZ_SPEC.display_name == "MusicBrainz"
+    assert MUSICBRAINZ_SPEC.supported_fields == frozenset(
+        {"labels", "catalog_numbers", "barcodes", "country", "year", "media"}
+    )
+
+
 def test_provider_spec_and_supported_fields_are_immutable() -> None:
     with pytest.raises(FrozenInstanceError):
         ITUNES_SPEC.name = "changed"  # type: ignore[misc]
@@ -44,6 +53,7 @@ def test_provider_spec_and_supported_fields_are_immutable() -> None:
 def test_builtin_provider_mapping_is_immutable() -> None:
     assert dict(BUILTIN_PROVIDER_SPECS) == {
         "discogs": DISCOGS_SPEC,
+        "musicbrainz": MUSICBRAINZ_SPEC,
         "itunes": ITUNES_SPEC,
     }
     with pytest.raises(TypeError):

@@ -51,6 +51,7 @@ from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_SPECS,
     DISCOGS_SPEC,
     ITUNES_SPEC,
+    MUSICBRAINZ_SPEC,
     ProviderSpec,
 )
 from beetsplug.noqlenmeta.resolver import ResolutionPolicy, resolve_metadata
@@ -97,6 +98,9 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     "discogs": {
                         "enabled": False,
                         "user_token": "",
+                    },
+                    "musicbrainz": {
+                        "enabled": False,
                     },
                     "itunes": {
                         "enabled": False,
@@ -312,6 +316,14 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 )
             )
 
+        if provider_can_contribute(policy, MUSICBRAINZ_SPEC):
+            candidates.extend(
+                self._collect_provider_candidates(
+                    MUSICBRAINZ_SPEC,
+                    lambda: self._musicbrainz_candidates(context),
+                )
+            )
+
         if provider_can_contribute(policy, ITUNES_SPEC):
             storefront = self.config["providers"]["itunes"]["storefront"].as_str()
             candidates.extend(
@@ -358,6 +370,13 @@ class NoqlenMetaPlugin(BeetsPlugin):
             raise
 
         return tuple(DiscogsProvider(token=token).get_candidates(context))
+
+    def _musicbrainz_candidates(
+        self, context: ReleaseEnrichmentContext
+    ) -> tuple[MetadataCandidate, ...]:
+        from beetsplug.noqlenmeta.providers.musicbrainz import MusicBrainzProvider
+
+        return tuple(MusicBrainzProvider().get_candidates(context))
 
     def _itunes_candidates(
         self, context: ReleaseEnrichmentContext, storefront: str

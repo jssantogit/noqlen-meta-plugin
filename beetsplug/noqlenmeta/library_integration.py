@@ -11,6 +11,7 @@ from beetsplug.noqlenmeta.domain import (
     ExternalIdentifier,
     MetadataValue,
     ReleaseEnrichmentContext,
+    canonical_uuid,
 )
 from beetsplug.noqlenmeta.integration import (
     _optional_text,
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     from beetsplug.noqlenmeta.library_application import LibraryApplicationResult
 
 _DISCOGS_RELEASE_NAMESPACE = "discogs.release"
+_MUSICBRAINZ_RELEASE_NAMESPACE = "musicbrainz.release"
 
 
 def context_from_library_album(album: Album) -> ReleaseEnrichmentContext | None:
@@ -41,10 +43,17 @@ def context_from_library_album(album: Album) -> ReleaseEnrichmentContext | None:
     if artist is None or title is None:
         return None
 
-    external_ids: tuple[ExternalIdentifier, ...] = ()
-    release_id = _positive_release_id(album.discogs_albumid)
-    if release_id is not None:
-        external_ids = (ExternalIdentifier(_DISCOGS_RELEASE_NAMESPACE, release_id),)
+    external_ids: list[ExternalIdentifier] = []
+    discogs_release_id = _positive_release_id(album.discogs_albumid)
+    if discogs_release_id is not None:
+        external_ids.append(
+            ExternalIdentifier(_DISCOGS_RELEASE_NAMESPACE, discogs_release_id)
+        )
+    musicbrainz_release_id = canonical_uuid(album.mb_albumid)
+    if musicbrainz_release_id is not None:
+        external_ids.append(
+            ExternalIdentifier(_MUSICBRAINZ_RELEASE_NAMESPACE, musicbrainz_release_id)
+        )
 
     return ReleaseEnrichmentContext(
         album_artist=artist,
@@ -52,7 +61,7 @@ def context_from_library_album(album: Album) -> ReleaseEnrichmentContext | None:
         year=_valid_year(album.year),
         barcode=_optional_text(album.barcode),
         catalog_number=_optional_text(album.catalognum),
-        external_ids=external_ids,
+        external_ids=tuple(external_ids),
     )
 
 

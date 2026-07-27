@@ -95,17 +95,21 @@ noqlenmeta:
       enabled: false
       user_token: ""
 
+    musicbrainz:
+      enabled: false
+
     itunes:
       enabled: false
       storefront: "us"
 ```
 
-`fields` controls what Noqlen may enrich. `providers` controls where Noqlen may obtain metadata. Both
+`fields` controls what Noqlen may enrich. `providers` controls where Noqlen may obtain metadata. All
 providers are disabled by default and can be enabled independently or simultaneously. Discogs is
-catalog- and edition-oriented. iTunes is currently a fallback only for the narrow album genre and
-release year metadata exposed with defensible semantics. Field Authority determines the winner when
-both providers return a candidate; higher provider-local confidence alone does not override a more
-authoritative source.
+catalog- and edition-oriented. MusicBrainz enriches only from an exact MusicBrainz release MBID
+already known by beets; it does not perform fuzzy release matching. iTunes is currently a fallback
+only for the narrow album genre and release year metadata exposed with defensible semantics. Field
+Authority determines the winner when providers return candidates; higher provider-local confidence
+alone does not override a more authoritative source.
 
 `apply` is `false` by default, and `apply_mode` defaults to `strict`. With `apply: false`, Noqlen
 never mutates the selected release. With `apply: true`, strict mode applies only when the entire
@@ -200,6 +204,14 @@ match. A non-empty `NOQLENMETA_DISCOGS_TOKEN` takes precedence over
 `providers.discogs.user_token`; direct Discogs release-ID lookups do not require a token. Tokens are
 redacted and never included in preview output.
 
+Set `providers.musicbrainz.enabled: true` to enrich releases for which beets already knows an exact
+MusicBrainz release MBID. No MusicBrainz credentials are required or stored by Noqlen. The provider
+performs one direct release lookup and supports labels, catalog numbers, barcode, release country,
+release year, and media format. Release year comes from the selected release date, not the release
+group's first release date, so reissues retain edition-specific year semantics. Multiple labels,
+catalog numbers, and media formats remain structured; existing singular target mappings may report
+mapping blockers rather than discard or join those values.
+
 Set `providers.itunes.enabled: true` to use Apple's public iTunes Search API for album enrichment.
 `storefront` is a two-letter search territory such as `us`, `br`, `gb`, or `jp`. iTunes requests are
 bounded to at most 10 album search results, and direct collection-ID or UPC lookup is preferred when
@@ -237,7 +249,7 @@ Noqlen Meta / beets target plan:
 
 ## Current status
 
-The plugin resolves Discogs and iTunes candidates through one shared planning path. Importer
+The plugin resolves Discogs, MusicBrainz, and iTunes candidates through one shared planning path. Importer
 enrichment maps the resulting `ChangePlan` to `BeetsTargetPlan`; the library command maps it to
 `LibraryTargetPlan`. Importer application can mutate only selected `AlbumInfo` under its explicit
 strict or partial policy. CLI application is separately authorized by `--apply`, remains strict by

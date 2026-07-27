@@ -5,9 +5,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import isfinite
 from typing import TypeAlias
+from uuid import UUID
 
 ScalarMetadataValue: TypeAlias = str | int | float | bool
 MetadataValue: TypeAlias = ScalarMetadataValue | tuple[str, ...]
+
+
+def canonical_uuid(value: object) -> str | None:
+    """Return canonical UUID text without allowing malformed stored IDs to escape."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return str(UUID(value.strip()))
+    except (AttributeError, ValueError):
+        return None
 
 
 def _text(value: object, label: str) -> str:

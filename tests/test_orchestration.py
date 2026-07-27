@@ -7,7 +7,12 @@ from beetsplug.noqlenmeta.orchestration import (
     validate_provider_candidates,
 )
 from beetsplug.noqlenmeta.providers.base import ProviderContractError
-from beetsplug.noqlenmeta.providers.specs import DISCOGS_SPEC, ITUNES_SPEC, ProviderSpec
+from beetsplug.noqlenmeta.providers.specs import (
+    DISCOGS_SPEC,
+    ITUNES_SPEC,
+    MUSICBRAINZ_SPEC,
+    ProviderSpec,
+)
 from beetsplug.noqlenmeta.resolver import FieldRule, ResolutionPolicy
 
 
@@ -20,7 +25,7 @@ def policy(
             field: FieldRule(enabled=enabled, authority=authority)
             for field, (enabled, authority) in fields.items()
         },
-        providers or {"discogs": True, "itunes": True},
+        providers or {"discogs": True, "musicbrainz": True, "itunes": True},
     )
 
 
@@ -34,6 +39,8 @@ def policy(
         (ITUNES_SPEC, "styles", ("itunes",), False),
         (ITUNES_SPEC, "labels", ("discogs", "itunes"), False),
         (ITUNES_SPEC, "genres", ("discogs",), False),
+        (MUSICBRAINZ_SPEC, "year", ("musicbrainz", "discogs"), True),
+        (MUSICBRAINZ_SPEC, "styles", ("musicbrainz",), False),
     ],
 )
 def test_provider_contribution_intersects_policy_authority_and_capability(
@@ -70,6 +77,17 @@ def test_disabled_provider_or_field_cannot_contribute() -> None:
 
     assert not provider_can_contribute(disabled_provider, ITUNES_SPEC)
     assert not provider_can_contribute(disabled_field, ITUNES_SPEC)
+
+
+def test_musicbrainz_requires_enablement_authority_and_declared_capability() -> None:
+    styles_only = policy({"styles": (True, ("musicbrainz",))})
+    disabled = policy(
+        {"year": (True, ("musicbrainz",))},
+        {"musicbrainz": False},
+    )
+
+    assert not provider_can_contribute(styles_only, MUSICBRAINZ_SPEC)
+    assert not provider_can_contribute(disabled, MUSICBRAINZ_SPEC)
 
 
 def test_unknown_provider_is_safely_ineligible() -> None:

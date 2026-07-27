@@ -193,6 +193,56 @@ def test_field_authority_outranks_higher_confidence() -> None:
     assert "field authority" in decision.reason
 
 
+@pytest.mark.parametrize("musicbrainz_confidence", [0.9, 0.99])
+def test_default_authority_selects_musicbrainz_for_release_year(
+    musicbrainz_confidence: float,
+) -> None:
+    resolution_policy = default_resolution_policy()
+    resolution_policy = ResolutionPolicy(
+        resolution_policy.field_rules,
+        {"discogs": True, "musicbrainz": True, "itunes": False},
+    )
+    musicbrainz = candidate(
+        "musicbrainz", 2005, musicbrainz_confidence, field="year"
+    )
+    discogs = candidate("discogs", 2005, 0.99, field="year")
+
+    decision = resolve_metadata({}, [discogs, musicbrainz], resolution_policy)[0]
+
+    assert decision.selected is musicbrainz
+
+
+def test_default_authority_keeps_discogs_ahead_for_labels() -> None:
+    resolution_policy = default_resolution_policy()
+    resolution_policy = ResolutionPolicy(
+        resolution_policy.field_rules,
+        {"discogs": True, "musicbrainz": True, "itunes": False},
+    )
+    musicbrainz = candidate("musicbrainz", ("MB Label",), 0.99, field="labels")
+    discogs = candidate("discogs", ("Discogs Label",), 0.9, field="labels")
+
+    decision = resolve_metadata({}, [musicbrainz, discogs], resolution_policy)[0]
+
+    assert decision.selected is discogs
+
+
+def test_disabled_or_below_threshold_musicbrainz_year_cannot_win() -> None:
+    baseline = default_resolution_policy()
+    disabled_policy = ResolutionPolicy(
+        baseline.field_rules,
+        {"discogs": True, "musicbrainz": False, "itunes": False},
+    )
+    enabled_policy = ResolutionPolicy(
+        baseline.field_rules,
+        {"discogs": True, "musicbrainz": True, "itunes": False},
+    )
+    musicbrainz = candidate("musicbrainz", 2005, 0.79, field="year")
+    discogs = candidate("discogs", 2006, 0.9, field="year")
+
+    assert resolve_metadata({}, [musicbrainz, discogs], disabled_policy)[0].selected is discogs
+    assert resolve_metadata({}, [musicbrainz, discogs], enabled_policy)[0].selected is discogs
+
+
 def test_lower_authority_wins_without_eligible_higher_authority() -> None:
     fallback = candidate("community", "Ambient", 0.9)
 

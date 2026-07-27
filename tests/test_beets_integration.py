@@ -28,6 +28,7 @@ from beetsplug.noqlenmeta.providers.base import ProviderContractError
 from beetsplug.noqlenmeta.resolver import default_resolution_policy
 
 TOKEN = "test-personal-token"
+RELEASE_MBID = "6ea45c08-3cfa-461a-aa4d-4cc404fcfa86"
 DISCOGS_FIELDS = (
     "genres",
     "styles",
@@ -77,7 +78,11 @@ def candidate(
         value=value,  # type: ignore[arg-type]
         provider=provider,
         confidence=confidence,
-        source_id="123456" if provider == "discogs" else "1097861387",
+        source_id={
+            "discogs": "123456",
+            "musicbrainz": RELEASE_MBID,
+            "itunes": "1097861387",
+        }[provider],
     )
 
 
@@ -89,6 +94,7 @@ def configure_enabled(
     apply_mode: str | None = None,
     fields: dict[str, bool] | None = None,
     discogs: bool = True,
+    musicbrainz: bool = False,
     itunes: bool = False,
     storefront: str = "us",
 ) -> None:
@@ -98,6 +104,7 @@ def configure_enabled(
         "fields": fields or {},
         "providers": {
             "discogs": {"enabled": discogs, "user_token": TOKEN},
+            "musicbrainz": {"enabled": musicbrainz},
             "itunes": {"enabled": itunes, "storefront": storefront},
         },
     }
@@ -116,6 +123,7 @@ def test_configuration_defaults_and_redacts_user_token() -> None:
     assert all(not plugin.config["fields"][field].get(bool) for field in FUTURE_FIELDS)
     assert plugin.config["providers"]["discogs"]["enabled"].get(bool) is False
     assert plugin.config["providers"]["discogs"]["user_token"].redact is True
+    assert plugin.config["providers"]["musicbrainz"]["enabled"].get(bool) is False
     assert plugin.config["providers"]["itunes"]["enabled"].get(bool) is False
     assert plugin.config["providers"]["itunes"]["storefront"].as_str() == "us"
     assert "discogs" not in plugin.config.keys()
@@ -173,7 +181,41 @@ def test_context_uses_discogs_source_album_id_without_duplicate() -> None:
 
 
 def test_context_does_not_invent_source_for_arbitrary_album_id() -> None:
-    context = context_from_album_info(album_info(data_source="MusicBrainz", album_id="123456"))
+    context = context_from_album_info(album_info(data_source="Discogs", album_id=RELEASE_MBID))
+
+    assert context is not None
+    assert context.external_ids == ()
+
+
+def test_context_maps_musicbrainz_source_album_id_without_duplicate() -> None:
+    info = album_info(
+        data_source="musicbrainz",
+        album_id=f" {RELEASE_MBID.upper()} ",
+        mb_albumid=RELEASE_MBID,
+    )
+
+    context = context_from_album_info(info)
+
+    assert context is not None
+    assert [(item.namespace, item.value) for item in context.external_ids] == [
+        ("musicbrainz.release", RELEASE_MBID)
+    ]
+
+
+def test_context_maps_explicit_musicbrainz_mbid_for_other_source() -> None:
+    context = context_from_album_info(
+        album_info(data_source="Discogs", mb_albumid=RELEASE_MBID)
+    )
+
+    assert context is not None
+    assert [(item.namespace, item.value) for item in context.external_ids] == [
+        ("musicbrainz.release", RELEASE_MBID)
+    ]
+
+
+@pytest.mark.parametrize("value", [None, "", "invalid", 123])
+def test_context_omits_malformed_explicit_musicbrainz_mbid(value: object) -> None:
+    context = context_from_album_info(album_info(mb_albumid=value))
 
     assert context is not None
     assert context.external_ids == ()
@@ -250,26 +292,35 @@ def test_settings_can_enable_provider_and_future_field_without_granting_authorit
     assert policy.authority_rank("mood", "discogs") is None
 
 
-def test_policy_provider_map_includes_both_production_providers_disabled_by_default() -> None:
+def test_policy_provider_map_includes_all_production_providers_disabled_by_default() -> None:
     policy = default_resolution_policy()
 
-    assert dict(policy.providers) == {"discogs": False, "itunes": False}
+    assert dict(policy.providers) == {
+        "discogs": False,
+        "musicbrainz": False,
+        "itunes": False,
+    }
 
 
 @pytest.mark.parametrize(
-    ("provider_settings", "discogs_enabled", "itunes_enabled"),
+    ("provider_settings", "discogs_enabled", "musicbrainz_enabled", "itunes_enabled"),
     [
-        ({"discogs": True, "itunes": False}, True, False),
-        ({"discogs": False, "itunes": True}, False, True),
-        ({"discogs": True, "itunes": True}, True, True),
+        ({"discogs": True}, True, False, False),
+        ({"musicbrainz": True}, False, True, False),
+        ({"itunes": True}, False, False, True),
+        ({"discogs": True, "musicbrainz": True, "itunes": True}, True, True, True),
     ],
 )
 def test_providers_can_be_enabled_independently(
-    provider_settings: dict[str, bool], discogs_enabled: bool, itunes_enabled: bool
+    provider_settings: dict[str, bool],
+    discogs_enabled: bool,
+    musicbrainz_enabled: bool,
+    itunes_enabled: bool,
 ) -> None:
     policy = resolution_policy_from_settings({}, provider_settings)
 
     assert policy.is_provider_enabled("discogs") is discogs_enabled
+    assert policy.is_provider_enabled("musicbrainz") is musicbrainz_enabled
     assert policy.is_provider_enabled("itunes") is itunes_enabled
 
 
@@ -375,6 +426,66 @@ def test_itunes_is_not_invoked_for_authoritative_fields_it_does_not_emit(
         discogs=False,
         itunes=True,
     )
+
+    plugin._import_task_choice(None, import_task(album_info()))
+
+
+def test_musicbrainz_is_not_invoked_when_only_styles_is_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_musicbrainz_candidates",
+        lambda self, context: pytest.fail("MusicBrainz cannot emit styles"),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(
+        plugin,
+        fields={field: field == "styles" for field in DISCOGS_FIELDS},
+        discogs=False,
+        musicbrainz=True,
+    )
+
+    plugin._import_task_choice(None, import_task(album_info()))
+
+
+def test_selected_musicbrainz_release_joins_shared_importer_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output: list[str] = []
+    contexts: list[ReleaseEnrichmentContext] = []
+
+    def musicbrainz_candidates(
+        self: NoqlenMetaPlugin, context: ReleaseEnrichmentContext
+    ) -> tuple[MetadataCandidate, ...]:
+        contexts.append(context)
+        return (candidate("year", 2005, provider="musicbrainz"),)
+
+    monkeypatch.setattr(NoqlenMetaPlugin, "_musicbrainz_candidates", musicbrainz_candidates)
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, discogs=False, musicbrainz=True)
+
+    plugin._import_task_choice(
+        None,
+        import_task(album_info(data_source="MusicBrainz", album_id=RELEASE_MBID)),
+    )
+
+    assert contexts[0].external_ids[0].value == RELEASE_MBID
+    assert "source: MusicBrainz" in output[0]
+    assert "year\n    PROPOSE" in output[0]
+
+
+def test_enabled_musicbrainz_without_mbid_performs_no_release_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "beetsplug._utils.musicbrainz.MusicBrainzAPI.get_release",
+        lambda *args, **kwargs: pytest.fail("release lookup without MBID"),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", lambda output: None)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, discogs=False, musicbrainz=True)
 
     plugin._import_task_choice(None, import_task(album_info()))
 
@@ -576,6 +687,47 @@ def test_itunes_failure_does_not_suppress_discogs(
 
     assert "iTunes enrichment unavailable" in caplog.text
     assert "source: Discogs" in output[0]
+
+
+def test_musicbrainz_failure_warns_and_discogs_continues(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    output: list[str] = []
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda *args: (candidate("year", 2005),),
+    )
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_musicbrainz_candidates",
+        lambda *args: (_ for _ in ()).throw(ProviderError("raw failure")),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, discogs=True, musicbrainz=True)
+
+    with caplog.at_level(logging.WARNING, logger="beets.noqlenmeta"):
+        plugin._import_task_choice(None, import_task(album_info(mb_albumid=RELEASE_MBID)))
+
+    assert "MusicBrainz enrichment unavailable" in caplog.text
+    assert "source: Discogs" in output[0]
+
+
+def test_musicbrainz_contract_error_is_not_swallowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_musicbrainz_candidates",
+        lambda *args: (candidate("styles", ("Invalid",), provider="musicbrainz"),),
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, discogs=False, musicbrainz=True)
+
+    with pytest.raises(ProviderContractError, match="unsupported field 'styles'"):
+        plugin._import_task_choice(None, import_task(album_info(mb_albumid=RELEASE_MBID)))
 
 
 def test_provider_contract_error_is_not_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:

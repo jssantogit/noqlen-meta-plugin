@@ -21,6 +21,7 @@ from beetsplug.noqlenmeta.domain import (
     ExternalIdentifier,
     MetadataValue,
     ReleaseEnrichmentContext,
+    canonical_uuid,
 )
 from beetsplug.noqlenmeta.providers.specs import provider_display_name
 from beetsplug.noqlenmeta.resolver import (
@@ -34,6 +35,7 @@ if TYPE_CHECKING:
     from beetsplug.noqlenmeta.beets_application import BeetsApplicationResult
 
 _DISCOGS_RELEASE_NAMESPACE = "discogs.release"
+_MUSICBRAINZ_RELEASE_NAMESPACE = "musicbrainz.release"
 _DISCOGS_TOKEN_ENV = "NOQLENMETA_DISCOGS_TOKEN"
 
 
@@ -54,16 +56,33 @@ def context_from_album_info(album_info: AlbumInfo) -> ReleaseEnrichmentContext |
         return None
 
     external_ids: list[ExternalIdentifier] = []
-    seen_ids: set[str] = set()
+    seen_ids: set[tuple[str, str]] = set()
     discogs_ids = [album_info.discogs_albumid]
     data_source = _optional_text(album_info.data_source)
     if data_source is not None and data_source.casefold() == "discogs":
         discogs_ids.append(album_info.album_id)
     for value in discogs_ids:
         release_id = _positive_release_id(value)
-        if release_id is not None and release_id not in seen_ids:
-            seen_ids.add(release_id)
+        if release_id is not None:
+            key = (_DISCOGS_RELEASE_NAMESPACE, release_id)
+        else:
+            continue
+        if key not in seen_ids:
+            seen_ids.add(key)
             external_ids.append(ExternalIdentifier(_DISCOGS_RELEASE_NAMESPACE, release_id))
+
+    musicbrainz_ids = [getattr(album_info, "mb_albumid", None)]
+    if data_source is not None and data_source.casefold() == "musicbrainz":
+        musicbrainz_ids.append(album_info.album_id)
+    for value in musicbrainz_ids:
+        release_id = canonical_uuid(value)
+        if release_id is not None:
+            key = (_MUSICBRAINZ_RELEASE_NAMESPACE, release_id)
+        else:
+            continue
+        if key not in seen_ids:
+            seen_ids.add(key)
+            external_ids.append(ExternalIdentifier(_MUSICBRAINZ_RELEASE_NAMESPACE, release_id))
 
     return ReleaseEnrichmentContext(
         album_artist=artist,

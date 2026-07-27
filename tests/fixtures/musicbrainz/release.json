@@ -1,0 +1,15 @@
+{
+  "id": "6ea45c08-3cfa-461a-aa4d-4cc404fcfa86",
+  "date": "2005-09-27",
+  "country": "FR",
+  "barcode": "3760053840745",
+  "label-info": [
+    {
+      "catalog-number": "POSH 074",
+      "label": {"name": "Listenable Records"}
+    }
+  ],
+  "media": [
+    {"format": "CD"}
+  ]
+}

@@ -23,6 +23,7 @@ from beetsplug.noqlenmeta.providers import ProviderError
 from beetsplug.noqlenmeta.providers.base import ProviderContractError
 
 TOKEN = "test-personal-token"
+RELEASE_MBID = "6ea45c08-3cfa-461a-aa4d-4cc404fcfa86"
 
 
 @pytest.fixture(autouse=True)
@@ -46,6 +47,7 @@ def configure_enabled(
     apply: bool = False,
     apply_mode: str = "strict",
     discogs: bool = True,
+    musicbrainz: bool = False,
     itunes: bool = False,
 ) -> None:
     plugin.config.set(
@@ -55,6 +57,7 @@ def configure_enabled(
             "apply_mode": apply_mode,
             "providers": {
                 "discogs": {"enabled": discogs, "user_token": TOKEN},
+                "musicbrainz": {"enabled": musicbrainz},
                 "itunes": {"enabled": itunes, "storefront": "us"},
             },
         }
@@ -73,7 +76,11 @@ def candidate(
         value,  # type: ignore[arg-type]
         provider,
         confidence,
-        "123456" if provider == "discogs" else "1097861387",
+        {
+            "discogs": "123456",
+            "musicbrainz": RELEASE_MBID,
+            "itunes": "1097861387",
+        }[provider],
     )
 
 
@@ -205,6 +212,7 @@ def test_library_album_adapters_preserve_canonical_shapes_without_splitting() ->
         barcode=" 0123456789012 ",
         catalognum=" RR-123 ",
         discogs_albumid=123456,
+        mb_albumid=RELEASE_MBID.upper(),
         genres=["Progressive Metal", "", " Groove Metal "],
         style="Progressive Metal / Groove Metal",
         label="Label A / Label B",
@@ -222,7 +230,8 @@ def test_library_album_adapters_preserve_canonical_shapes_without_splitting() ->
         external_ids=context.external_ids,
     )
     assert [(item.namespace, item.value) for item in context.external_ids] == [
-        ("discogs.release", "123456")
+        ("discogs.release", "123456"),
+        ("musicbrainz.release", RELEASE_MBID),
     ]
     assert current_values_from_library_album(album) == {
         "genres": ("Progressive Metal", "Groove Metal"),
@@ -528,6 +537,29 @@ def test_cli_apply_persists_even_when_importer_apply_is_false(
     reloaded = library.get_album(album.id)
     assert reloaded.genres == ["Rock", "Metal"]
     assert [item.genres for item in reloaded.items()] == [["Rock", "Metal"]]
+    assert "application: stored in library database (1 fields)" in output[0]
+    assert "file tags: unchanged" in output[0]
+
+
+def test_musicbrainz_candidate_flows_through_shared_cli_plan_and_safe_apply(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    output: list[str] = []
+    album = add_album(library, mb_albumid=RELEASE_MBID)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, discogs=False, musicbrainz=True)
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_musicbrainz_candidates",
+        lambda *args: (candidate("year", 2005, provider="musicbrainz"),),
+    )
+    monkeypatch.setattr("beetsplug.noqlenmeta.library_integration.ui.print_", output.append)
+
+    invoke(plugin, library, ["artist:Gojira", "--apply"])
+
+    reloaded = library.get_album(album.id)
+    assert reloaded.year == 2005
+    assert "source: MusicBrainz" in output[0]
     assert "application: stored in library database (1 fields)" in output[0]
     assert "file tags: unchanged" in output[0]
 
