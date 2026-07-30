@@ -12,6 +12,8 @@ context and hydrated release candidates.
 - Normalize text conservatively without removing semantic edition markers.
 - Assign tracks globally with title, duration, artist, and multidisc position evidence.
 - Score structural evidence from 0 to 100 without consuming existing IDs.
+- Aggregate release duration only across assigned pairs with comparable local and candidate lengths;
+  remove unavailable duration weight and renormalize remaining structural evidence.
 - Require conservative score, margin, pair, completeness, and uniqueness policy checks.
 - Return confirmed, missing, conflict, or ambiguous with deterministic findings and rankings.
 - Acquire bounded hydrated candidates through injectable beets MusicBrainz facilities, preserving

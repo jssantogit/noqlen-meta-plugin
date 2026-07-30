@@ -6,6 +6,8 @@
 - Global assignment replaces positional mapping and supports reordered multidisc releases.
 - Candidate IDs are complete canonical UUIDs with no double assignment.
 - Scores, ordering, score thresholds, margins, and singleton strictness are deterministic.
+- Release duration uses only comparable assigned pairs; missing duration is neither match nor mismatch,
+  while available disagreement remains a penalty.
 - Weak, tied, malformed-source, duplicate-identity, and unmatched-local cases fail conservatively.
 - Conflict supersedes missing and all four MBID categories are compared.
 - Source acquisition uses beets facilities, is bounded and injectable, and exposes sanitized errors.
@@ -16,7 +18,7 @@
 
 ## Validation
 
-- Focused identity tests: 62 passed.
-- Full offline suite: 862 passed, 5 opt-in live tests skipped.
+- Focused identity tests: 66 passed.
+- Full offline suite: 866 passed, 5 opt-in live tests skipped.
 - Ruff, repository contamination, and diff-whitespace checks: passed.
 - Staged scope and diff review: passed.

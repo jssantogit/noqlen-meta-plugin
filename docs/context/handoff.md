@@ -16,9 +16,11 @@ and compares all four v1.0 identity fields only after unique strong selection.
 - Pure beets 2.12 AlbumInfo normalization and bounded injectable MusicBrainz acquisition.
 - Relevance-preserving source bounding: sorted exact IDs, primary search order, then singleton
   alternate-query order, with first-occurrence deduplication and no ranking contribution.
+- Release duration aggregation includes only comparable assigned pairs; unavailable duration removes
+  its weight, while available disagreement remains penalized.
 - Offline synthetic regression coverage, including Forge positional-mapping and wrong-existing-ID
   weaknesses.
-- Focused validation passes 62 tests; the full suite passes 862 tests with 5 opt-in live tests
+- Focused validation passes 66 tests; the full suite passes 866 tests with 5 opt-in live tests
   skipped. Ruff, repository contamination, and diff-whitespace checks pass.
 
 ## Important Decisions

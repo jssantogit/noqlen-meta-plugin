@@ -63,13 +63,13 @@ def evaluate_identity_candidate(
         "track_durations": None,
         "track_order": None,
     }
-    duration_tracks = [track for track in context.tracks if track.length is not None]
-    if duration_tracks:
-        duration_quality = sum(
-            assignment_item.duration_score or 0.0
-            for track in duration_tracks
-            if (assignment_item := by_key.get(track.local_key)) is not None
-        ) / (100.0 * len(duration_tracks))
+    duration_scores = tuple(
+        item.duration_score
+        for item in assignment.assignments
+        if item.duration_score is not None
+    )
+    if duration_scores:
+        duration_quality = sum(duration_scores) / (100.0 * len(duration_scores))
         qualities["track_durations"] = (TRACK_DURATIONS_WEIGHT, duration_quality)
     positioned_tracks = [
         track

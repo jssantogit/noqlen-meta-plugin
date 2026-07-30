@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from beetsplug.noqlenmeta.identity import (
@@ -34,6 +36,43 @@ def test_wrong_tracklist_and_duration_lower_score() -> None:
     exact = evaluate_identity_candidate(context(), candidate()).score.total
     assert evaluate_identity_candidate(context(), wrong_titles).score.total < 90
     assert evaluate_identity_candidate(context(), wrong_duration).score.total < exact
+
+
+def test_missing_candidate_durations_are_unavailable_and_remaining_score_renormalizes() -> None:
+    without_durations = candidate(
+        tracks=tuple(
+            replace(candidate_track(index), length=None) for index in range(1, 4)
+        )
+    )
+
+    score = evaluate_identity_candidate(context(), without_durations).score
+
+    assert score.track_durations == 0
+    assert score.total == pytest.approx(100.0)
+
+
+def test_partial_duration_quality_uses_only_comparable_assigned_pairs() -> None:
+    partial = candidate(
+        tracks=(
+            candidate_track(1),
+            candidate_track(2, length=500),
+            replace(candidate_track(3), length=None),
+        )
+    )
+
+    score = evaluate_identity_candidate(context(), partial).score
+
+    assert score.track_durations == pytest.approx(5.0)
+    assert score.total == pytest.approx(95.0)
+
+
+def test_missing_local_duration_is_unavailable_not_a_match_or_mismatch() -> None:
+    local = context(tracks=(replace(local_track(1), length=None),))
+
+    score = evaluate_identity_candidate(local, candidate(1)).score
+
+    assert score.track_durations == 0
+    assert score.total == pytest.approx(100.0)
 
 
 def test_edition_markers_are_not_stripped() -> None:

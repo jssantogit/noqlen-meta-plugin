@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from beetsplug.noqlenmeta.identity import (
     IdentityFieldStatus,
     IdentityVerdict,
@@ -140,6 +142,16 @@ def test_singleton_strictness_accepts_unique_exact_but_rejects_near_tie() -> Non
     assert unique.verdict is IdentityVerdict.MISSING
     assert tied.verdict is IdentityVerdict.AMBIGUOUS
     assert tied.reason == "insufficient_margin"
+
+
+def test_exact_singleton_without_candidate_duration_remains_repair_ready() -> None:
+    remote = candidate(1, tracks=(replace(candidate_track(1), length=None),))
+
+    result = audit_musicbrainz_identity(context(1), (remote,))
+
+    assert result.verdict is IdentityVerdict.MISSING
+    assert result.reason == "identity_missing"
+    assert result.repair_ready
 
 
 def test_unmatched_local_track_prevents_repair_ready_result() -> None:

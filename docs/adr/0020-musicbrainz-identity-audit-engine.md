@@ -28,7 +28,10 @@ Field Authority, resolver, and ChangePlan contracts must not decide or repair id
 10. Pair assignment uses title, duration, artist, and explicit medium/position evidence.
 11. Titles and album-wide track structure dominate scoring; optional release metadata cannot rescue a
     weak candidate.
-12. Pair and release scores have explicit weights and remain bounded from 0 to 100.
+12. Pair and release scores have explicit weights and remain bounded from 0 to 100. Release-level
+    duration evidence includes only assigned pairs with both local and candidate durations. If none
+    are comparable, its weight is removed and remaining structural evidence is renormalized; missing
+    duration is neither a match nor a mismatch.
 13. Selection requires both a minimum score and a unique minimum margin.
 14. Near ties remain ambiguous; lexical release-ID ordering provides determinism only.
 15. Audit verdicts are confirmed, missing, conflict, or ambiguous.

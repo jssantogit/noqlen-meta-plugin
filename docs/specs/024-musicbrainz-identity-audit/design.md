@@ -29,3 +29,8 @@ release MBID used only as the final deterministic tie-breaker.
 Existing MBIDs do not enter assignment or score functions. Candidate extras reduce count coverage;
 unmatched local tracks block default eligibility. Repeated recording IDs are allowed only as separate
 release-track occurrences. No function mutates its inputs or performs application.
+
+Release duration quality averages only assigned pairs whose pair score contains comparable local and
+candidate durations. Missing duration on either side contributes neither zero nor full evidence. When
+no comparable pair exists, the duration weight is unavailable and the remaining release components
+are renormalized over their available weights.
