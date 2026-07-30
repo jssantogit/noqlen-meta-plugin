@@ -1,4 +1,4 @@
-"""Safe user-visible rendering for read-only importer track plans."""
+"""Safe user-visible rendering for importer track plans."""
 
 from __future__ import annotations
 
@@ -8,11 +8,15 @@ from beetsplug.noqlenmeta.domain import MetadataValue, TrackEnrichmentContext
 from beetsplug.noqlenmeta.integration import _safe_preview_text
 from beetsplug.noqlenmeta.providers.specs import provider_display_name
 from beetsplug.noqlenmeta.resolver import FieldDecision, ResolutionAction
+from beetsplug.noqlenmeta.track_application import TrackApplicationResult
 from beetsplug.noqlenmeta.track_mapping import TrackMappingBlocker, TrackTargetChange
 from beetsplug.noqlenmeta.track_planning import ImportTrackPlanningResult
 
 
-def render_import_track_plan(result: ImportTrackPlanningResult) -> None:
+def render_import_track_plan(
+    result: ImportTrackPlanningResult,
+    application_result: TrackApplicationResult | None = None,
+) -> None:
     """Print a deterministic plan without ever exposing lyric content."""
     plan = result.change_plan
     target_plan = result.target_plan
@@ -21,7 +25,7 @@ def render_import_track_plan(result: ImportTrackPlanningResult) -> None:
         "",
         f"  track: {_track_heading(result.context)}",
         f"  from_scratch: {'yes' if result.from_scratch else 'no'}",
-        "  application: disabled (track planning only)",
+        *_application_lines(application_result),
         f"  provider candidates: {result.candidate_count}",
         f"  planned changes: {len(plan.changes)}",
         f"  mapped changes: {len(target_plan.mapped_changes)}",
@@ -47,6 +51,26 @@ def render_import_track_plan(result: ImportTrackPlanningResult) -> None:
             )
         )
     ui.print_("\n".join(lines))
+
+
+def _application_lines(result: TrackApplicationResult | None) -> tuple[str, ...]:
+    if result is None:
+        return ("  application: disabled (track planning only)",)
+    if result.is_blocked:
+        status = "blocked"
+    elif result.is_partial_application:
+        status = "partial"
+    elif result.has_applied_changes:
+        status = "applied"
+    else:
+        status = "no changes"
+    return (
+        f"  application mode: {result.mode.value}",
+        f"  applied changes: {len(result.applied_changes)}",
+        f"  withheld resolution reviews: {result.resolution_review_count}",
+        f"  withheld mapping blockers: {result.mapping_blocker_count}",
+        f"  application status: {status}",
+    )
 
 
 def render_incomplete_track_note() -> None:

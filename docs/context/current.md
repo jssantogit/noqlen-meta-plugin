@@ -8,74 +8,50 @@ Noqlen Meta Plugin - universal multi-provider metadata enrichment for beets.
 
 `core-lib`
 
-## Context level
+## Context Level
 
-`standard` for Block 022 because it adds a pure target-representation boundary after the existing
-canonical selected-track `ChangePlan` while retaining the read-only importer boundary.
+`standard` for Block 023 because it adds one guarded mutation boundary after the existing pure
+selected-track target plan while preserving downstream beets ownership.
 
 ## Tool Mode
 
 `combo`: OpenCode native capabilities, Serena for targeted symbol/navigation work, and RTK for noisy
 shell output.
 
-## Active block
+## Active Block
 
-Block 022 - Lossless Track Target Mapping.
+Block 023 - Safe Selected-Track Application.
 
-## Active spec
+## Active Spec
 
-`docs/specs/022-track-target-mapping/`
+`docs/specs/023-safe-selected-track-application/`
 
 ## Active ADRs
 
-- `docs/adr/0003-field-authority-resolution.md`
-- `docs/adr/0004-provider-capabilities-orchestration.md`
-- `docs/adr/0013-configurable-resolution-policy.md`
-- `docs/adr/0014-lastfm-community-genre-enrichment.md`
+- `docs/adr/0007-strict-selected-release-application.md`
+- `docs/adr/0008-partial-application-policy.md`
 - `docs/adr/0015-track-enrichment-boundary.md`
-- `docs/adr/0016-lrclib-track-lyrics-provider.md`
 - `docs/adr/0017-importer-track-planning-preview.md`
 - `docs/adr/0018-track-target-mapping.md`
+- `docs/adr/0019-safe-selected-track-application.md`
 
-## Allowed files
+## Allowed Files
 
-Track mapping/planning/preview code, focused tests, `README.md`, ADR 0018, Block 022
-requirements/design/tasks/review, and the current context/handoff documents.
+Track application and preview code, importer integration, focused tests, README, ADR 0019, Block 023
+specs, and context/handoff documents.
 
-## Forbidden files
+## Forbidden Behavior
 
-TrackInfo/Item mutation, track application modes or policy, database persistence, tag/file writes,
-native SYLT application, library track CLI modes, LRCLIB transport changes, search or rematching,
-and MusicBrainz identity repair.
+Direct Item/Album mutation, match application calls, database persistence, tag/file writes, native
+SYLT or synchronized-lyrics persistence, library track CLI, provider redesign, identity repair, and
+album-wide rollback.
 
-## Behavior budget
+## Completion State
 
-Already-proposed canonical track changes may be analyzed against an explicit `TrackInfo` target map.
-Plain lyrics map losslessly; synchronized lyrics and unknown fields block visibly. Existing release
-and album-only CLI behavior remain unchanged, and track mapping grants no write authority.
+Implementation and final offline validation are complete. Focused validation passes 176 tests; the
+full suite passes 798 tests with 5 opt-in live tests skipped. Lint, repository contamination, and
+diff-whitespace checks pass.
 
-## Validation
+## Stop Condition
 
-```bash
-ruff check .
-pytest
-python scripts/check_repo_contamination.py
-git diff --check
-git status --short
-```
-
-## Done when
-
-Immutable lossless track mapping, synchronized blockers, safe target-aware preview, beets contract
-evidence, coexistence, and the no-write boundary are tested and documented; final validation passes.
-
-## Completion state
-
-Implementation, documentation, and final offline validation are complete. Focused validation passes
-85 tests; the full suite passes 766 tests with 5 opt-in live tests skipped. Lint, repository
-contamination, and diff-whitespace checks pass.
-
-## Stop condition
-
-Stop after Block 022 target mapping. Do not add track application, persistence, file writes, native
-SYLT support, library track modes, or identity repair.
+Stop after Block 023. Do not add further lyrics persistence or identity audit/repair in this block.

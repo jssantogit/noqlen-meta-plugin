@@ -8,7 +8,7 @@ from beets.autotag.distance import Distance
 from beets.autotag.hooks import AlbumInfo, TrackInfo
 from beets.importer.actions import Action
 from beets.importer.tasks import ImportTask, SingletonImportTask
-from beets.library import Item
+from beets.library import Album, Item
 
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.domain import MetadataCandidate, TrackEnrichmentContext
@@ -81,11 +81,13 @@ def _configure(
     synced_lyrics: bool = False,
     lrclib: bool = True,
     discogs: bool = False,
+    apply_mode: str = "strict",
 ) -> None:
     plugin.config.set(
         {
             "preview": preview,
             "apply": apply,
+            "apply_mode": apply_mode,
             "fields": {"lyrics": lyrics, "synced_lyrics": synced_lyrics},
             "providers": {
                 "discogs": {"enabled": discogs, "user_token": ""},
@@ -254,11 +256,11 @@ def test_provider_error_is_sanitized_and_later_tracks_continue(
         return (_candidate(),)
 
     monkeypatch.setattr(NoqlenMetaPlugin, "_lrclib_candidates", candidates)
-    task, _ = _album_task(
-        [(Item(), _track("First", 1)), (Item(), _track("Second", 2))]
-    )
+    first_track = _track("First", 1)
+    second_track = _track("Second", 2)
+    task, _ = _album_task([(Item(), first_track), (Item(), second_track)])
     plugin = NoqlenMetaPlugin()
-    _configure(plugin)
+    _configure(plugin, apply=True)
 
     with caplog.at_level(logging.WARNING, logger="beets.noqlenmeta"):
         plugin._import_task_choice(None, task)
@@ -270,6 +272,8 @@ def test_provider_error_is_sanitized_and_later_tracks_continue(
     assert "lyrics" in rendered
     assert "PROPOSE" in rendered
     assert "source: LRCLIB" in rendered
+    assert first_track.get("lyrics") is None
+    assert second_track.lyrics == PRIVATE_LYRIC
     assert PRIVATE_LYRIC not in rendered
     assert PRIVATE_LYRIC not in caplog.text
 
@@ -291,7 +295,7 @@ def test_provider_contract_error_propagates(monkeypatch: pytest.MonkeyPatch) -> 
         plugin._import_task_choice(None, task)
 
 
-def test_track_planning_is_read_only_even_when_apply_is_true(
+def test_strict_track_application_blocks_plain_when_synced_is_unwritable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     output = _silence_preview(monkeypatch)
@@ -319,6 +323,9 @@ def test_track_planning_is_read_only_even_when_apply_is_true(
     assert (dict(item), dict(track), dict(album)) == snapshots
     assert "mapped changes: 1" in output[0]
     assert "mapping blockers: 1" in output[0]
+    assert "application mode: strict" in output[0]
+    assert "applied changes: 0" in output[0]
+    assert "application status: blocked" in output[0]
 
 
 def test_plain_and_synced_plans_render_both_without_precedence(
@@ -390,7 +397,7 @@ def test_release_and_track_plans_coexist_without_track_mutation(
     assert album.genres == (["Metal"] if apply else None)
 
 
-def test_preview_false_keeps_release_application_but_never_calls_lrclib(
+def test_preview_false_applies_release_and_executes_track_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[object] = []
@@ -404,16 +411,149 @@ def test_preview_false_keeps_release_application_but_never_calls_lrclib(
     monkeypatch.setattr(
         NoqlenMetaPlugin,
         "_lrclib_candidates",
-        lambda self, context: calls.append(context) or (),
+        lambda self, context: calls.append(context) or (_candidate(),),
     )
-    task, album = _album_task([(Item(), _track("Selected", 1))])
+    item = Item()
+    track = _track("Selected", 1)
+    task, album = _album_task([(item, track)])
     plugin = NoqlenMetaPlugin()
     _configure(plugin, preview=False, apply=True, discogs=True)
 
     plugin._import_task_choice(None, task)
 
-    assert calls == []
+    assert len(calls) == 1
     assert album.genres == ["Metal"]
+    assert track.lyrics == PRIVATE_LYRIC
+    assert item.lyrics == ""
+
+
+def test_partial_track_application_applies_plain_and_withholds_synced(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = _silence_preview(monkeypatch)
+    private_synced = "[00:01.00] PRIVATE-SYNTHETIC-SYNCED-CONTENT"
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_lrclib_candidates",
+        lambda self, context: (_candidate(), _candidate("synced_lyrics", private_synced)),
+    )
+    item = Item()
+    track = _track("Selected", 1)
+    plugin = NoqlenMetaPlugin()
+    _configure(plugin, apply=True, apply_mode="partial", synced_lyrics=True)
+
+    plugin._import_task_choice(None, _singleton_task(item, track))
+
+    assert track.lyrics == PRIVATE_LYRIC
+    assert track.get("synced_lyrics") is None
+    assert item.lyrics == ""
+    assert "application mode: partial" in output[0]
+    assert "applied changes: 1" in output[0]
+    assert "withheld mapping blockers: 1" in output[0]
+    assert "application status: partial" in output[0]
+    assert PRIVATE_LYRIC not in output[0]
+    assert private_synced not in output[0]
+
+
+def test_apply_false_remains_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    _silence_preview(monkeypatch)
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_lrclib_candidates",
+        lambda self, context: (_candidate(),),
+    )
+    item = Item()
+    track = _track("Selected", 1)
+    plugin = NoqlenMetaPlugin()
+    _configure(plugin, apply=False)
+
+    plugin._import_task_choice(None, _singleton_task(item, track))
+
+    assert track.get("lyrics") is None
+    assert item.lyrics == ""
+
+
+def test_invalid_singleton_apply_mode_fails_before_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[object] = []
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_lrclib_candidates",
+        lambda self, context: calls.append(context) or (_candidate(),),
+    )
+    plugin = NoqlenMetaPlugin()
+    _configure(plugin, apply=True, apply_mode="best-effort")
+
+    with pytest.raises(RuntimeError, match="application mode"):
+        plugin._import_task_choice(None, _singleton_task(Item(), _track("Selected", 1)))
+
+    assert calls == []
+
+
+def test_track_application_never_calls_downstream_or_persistence_apis(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _silence_preview(monkeypatch)
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError("Noqlen called a downstream beets write API")
+
+    for owner, name in (
+        (AlbumMatch, "apply_metadata"),
+        (TrackMatch, "apply_metadata"),
+        (Item, "store"),
+        (Item, "write"),
+        (Item, "try_write"),
+        (Item, "try_sync"),
+        (Album, "store"),
+    ):
+        monkeypatch.setattr(owner, name, forbidden)
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_lrclib_candidates",
+        lambda self, context: (_candidate(),),
+    )
+    item = Item()
+    track = _track("Selected", 1)
+    plugin = NoqlenMetaPlugin()
+    _configure(plugin, apply=True)
+
+    plugin._import_task_choice(None, _singleton_task(item, track))
+
+    assert track.lyrics == PRIVATE_LYRIC
+    assert item.lyrics == ""
+
+
+def test_release_blocker_does_not_block_clean_track_application(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _silence_preview(monkeypatch)
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_discogs_candidates",
+        lambda self, context, token: (
+            MetadataCandidate(
+                "labels", ("Synthetic Label A", "Synthetic Label B"), "discogs", 0.95, "7"
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        NoqlenMetaPlugin,
+        "_lrclib_candidates",
+        lambda self, context: (_candidate(),),
+    )
+    item = Item()
+    track = _track("Selected", 1)
+    task, album = _album_task([(item, track)])
+    plugin = NoqlenMetaPlugin()
+    _configure(plugin, apply=True, discogs=True)
+
+    plugin._import_task_choice(None, task)
+
+    assert album.label is None
+    assert track.lyrics == PRIVATE_LYRIC
+    assert item.lyrics == ""
 
 
 def test_one_lrclib_provider_instance_is_retained_for_multiple_tracks(

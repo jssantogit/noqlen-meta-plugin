@@ -185,12 +185,12 @@ Noqlen does not fall back to LRCLIB search when the exact track signature is una
 found. Beets decides which track it is; LRCLIB only enriches that selected identity. Raw lyrics are
 never logged by the provider, and fixture/test lyrics are synthetic.
 
-During an accepted importer match, Noqlen can now build a read-only track plan for each selected
+During an accepted importer match, Noqlen can build a track plan for each selected
 `AlbumMatch` Item/`TrackInfo` pair or for the selected singleton `TrackMatch`. Album extras and
-unmatched tracks are excluded. Track planning runs only when `preview: true` and an enabled
-track-scoped provider can contribute to an enabled field under the configured authority. LRCLIB is
-currently the only such provider. Its adapter is created lazily and retained by the plugin so its
-in-process cache, pacing, and Retry-After state are shared across selected tracks.
+unmatched tracks are excluded. Track planning runs when preview or application is enabled and an
+enabled track-scoped provider can contribute to an enabled field under the configured authority.
+LRCLIB is currently the only such provider. Its adapter is created lazily and retained by the plugin
+so its in-process cache, pacing, and Retry-After state are shared across selected tracks.
 
 The track resolver baseline predicts the canonical values that normal beets 2.12.x metadata
 application will produce before any Noqlen candidate is considered:
@@ -228,18 +228,31 @@ Lyrics plugin stores canonical synchronized LRC text in `Item.lyrics` and passes
 separately during file writing. Synchronized lyrics are not silently collapsed into plain lyrics or
 stored as an arbitrary flexible field.
 
-Track mapping is still preview-only. `apply: true` does not yet authorize track changes: Noqlen does
-not mutate `TrackInfo` or Item track metadata, store database rows, or write files for this path.
-Preview displays only character and line counts for current and candidate lyric values; raw plain or
-synchronized lyrics are never rendered.
+With importer `apply: true`, Noqlen may now mutate only losslessly mapped selected `TrackInfo`
+fields. It does not directly update Items, store database rows, or write files; normal beets applies
+the selected metadata later in its importer lifecycle. The current writable mapping is only
+`lyrics -> TrackInfo.lyrics`. `synced_lyrics` remains unsupported and mapping-blocked.
+
+Strict mode is the default and prevents every Noqlen change for one selected track when that track
+has any resolver review or mapping blocker. Explicit partial mode may prepare already-resolved,
+losslessly mapped fields while reviews and blockers are withheld. It never accepts a review or
+converts synchronized lyrics. Each selected track is validated and applied independently, including
+target-plan integrity, effective-current stale state, target shape, and target uniqueness. Cached
+`TrackInfo.raw_data` and `TrackInfo.item_data` views are invalidated after successful mutation so
+normal later beets application observes the new metadata.
+
+Noqlen does not call `AlbumMatch.apply_metadata()` or `TrackMatch.apply_metadata()`. Downstream beets
+may later persist or write plain lyrics as part of normal import; Noqlen itself does not call Item
+storage or file-writing APIs. Preview displays only character and line counts for current and
+candidate lyric values; raw plain or synchronized lyrics are never rendered.
 
 ### Execution matrix
 
 | Entry point and settings | Release behavior | Track behavior | Noqlen write boundary |
 | --- | --- | --- | --- |
 | Importer, `preview: true`, `apply: false` | Preview eligible release plans | Preview eligible selected-track plans; LRCLIB may run | No mutation |
-| Importer, `preview: true`, `apply: true` | Existing strict/partial selected `AlbumInfo` application plus preview | Same read-only track plans; `apply` grants no track writes | Selected `AlbumInfo` only |
-| Importer, `preview: false`, `apply: true` | Existing release application remains active without preview | LRCLIB is not called and no track plan is built | Selected `AlbumInfo` only |
+| Importer, `preview: true`, `apply: true` | Guarded strict/partial selected `AlbumInfo` application plus preview | Guarded strict/partial selected `TrackInfo` application plus preview | Selected `AlbumInfo` and selected `TrackInfo` only |
+| Importer, `preview: false`, `apply: true` | Guarded release application without preview | Guarded track application without preview; LRCLIB may run | Selected `AlbumInfo` and selected `TrackInfo` only |
 | Importer, `preview: false`, `apply: false` | No release work | No track work | No mutation |
 | `beet noqlenmeta` / `beet nm` | Existing album query preview or explicit database application | No singleton or per-track mode; LRCLIB is not called | Existing persistent Album policy only |
 | File tag synchronization | No new behavior | No track synchronization | No new behavior |
@@ -383,9 +396,10 @@ singleton tracks through the same Field Authority, resolver, and `ChangePlan`. A
 `TrackTargetPlan` then maps plain lyrics to `TrackInfo.lyrics` and exposes synchronized lyrics as a
 mapping blocker. Importer release enrichment separately maps its release `ChangePlan` to
 `BeetsTargetPlan`; the album-only library command maps only release plans to `LibraryTargetPlan`.
-Importer application can mutate only selected `AlbumInfo` under its explicit strict or partial
-policy. CLI application is separately authorized by `--apply`, remains strict by default, and permits
-safe partial database application only with `--apply --partial`. TrackInfo, Items, track database
-metadata, and files remain outside Noqlen track application.
+Importer application can mutate selected `AlbumInfo` and losslessly mapped fields on selected
+`TrackInfo` through separate guarded strict or partial boundaries. CLI application is separately
+authorized by `--apply`, remains strict by default, and permits safe partial database application
+only with `--apply --partial`. Items, track database metadata, and files remain outside Noqlen track
+application.
 
 See `docs/context/current.md` and `docs/context/handoff.md` before starting a development block.

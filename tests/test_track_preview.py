@@ -4,6 +4,10 @@ from beets.library import Item
 
 from beetsplug.noqlenmeta.domain import MetadataCandidate, TrackEnrichmentContext
 from beetsplug.noqlenmeta.resolver import FieldRule, ResolutionPolicy
+from beetsplug.noqlenmeta.track_application import (
+    TrackApplicationMode,
+    apply_track_target_plan,
+)
 from beetsplug.noqlenmeta.track_integration import SelectedImportTrack
 from beetsplug.noqlenmeta.track_planning import build_import_track_planning_result
 from beetsplug.noqlenmeta.track_preview import render_import_track_plan
@@ -171,3 +175,85 @@ def test_track_preview_reports_empty_candidate_plan(monkeypatch: pytest.MonkeyPa
     assert "mapped changes: 0" in rendered
     assert "mapping blockers: 0" in rendered
     assert "no eligible track metadata candidates returned" in rendered
+
+
+def test_strict_blocked_preview_distinguishes_mapped_from_applied(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output: list[str] = []
+    monkeypatch.setattr("beetsplug.noqlenmeta.track_preview.ui.print_", output.append)
+    item = Item()
+    track = TrackInfo(
+        artist="Synthetic Artist",
+        title="Synthetic Track",
+        album="Synthetic Album",
+        length=180.0,
+    )
+    selected = SelectedImportTrack(item, track, None)
+    result = build_import_track_planning_result(
+        selected,
+        TrackEnrichmentContext("Synthetic Artist", "Synthetic Track"),
+        from_scratch=False,
+        candidates=(
+            MetadataCandidate("lyrics", PRIVATE_LYRIC, "lrclib", 0.95, "42"),
+            MetadataCandidate(
+                "synced_lyrics", PRIVATE_SYNCED_LYRIC, "lrclib", 0.95, "42"
+            ),
+        ),
+        policy=_policy("lyrics", "synced_lyrics"),
+    )
+    applied = apply_track_target_plan(selected, result.target_plan, from_scratch=False)
+
+    render_import_track_plan(result, applied)
+
+    rendered = output[0]
+    assert "mapped changes: 1" in rendered
+    assert "mapping blockers: 1" in rendered
+    assert "application mode: strict" in rendered
+    assert "applied changes: 0" in rendered
+    assert "application status: blocked" in rendered
+    assert PRIVATE_LYRIC not in rendered
+    assert PRIVATE_SYNCED_LYRIC not in rendered
+
+
+def test_partial_preview_reports_applied_and_withheld_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output: list[str] = []
+    monkeypatch.setattr("beetsplug.noqlenmeta.track_preview.ui.print_", output.append)
+    item = Item()
+    track = TrackInfo(
+        artist="Synthetic Artist",
+        title="Synthetic Track",
+        album="Synthetic Album",
+        length=180.0,
+    )
+    selected = SelectedImportTrack(item, track, None)
+    result = build_import_track_planning_result(
+        selected,
+        TrackEnrichmentContext("Synthetic Artist", "Synthetic Track"),
+        from_scratch=False,
+        candidates=(
+            MetadataCandidate("lyrics", PRIVATE_LYRIC, "lrclib", 0.95, "42"),
+            MetadataCandidate(
+                "synced_lyrics", PRIVATE_SYNCED_LYRIC, "lrclib", 0.95, "42"
+            ),
+        ),
+        policy=_policy("lyrics", "synced_lyrics"),
+    )
+    applied = apply_track_target_plan(
+        selected,
+        result.target_plan,
+        from_scratch=False,
+        mode=TrackApplicationMode.PARTIAL,
+    )
+
+    render_import_track_plan(result, applied)
+
+    rendered = output[0]
+    assert "application mode: partial" in rendered
+    assert "applied changes: 1" in rendered
+    assert "withheld mapping blockers: 1" in rendered
+    assert "application status: partial" in rendered
+    assert PRIVATE_LYRIC not in rendered
+    assert PRIVATE_SYNCED_LYRIC not in rendered
