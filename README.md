@@ -388,6 +388,18 @@ Noqlen Meta / beets target plan:
     reason: selected 'discogs' by field authority; current value is missing
 ```
 
+## MusicBrainz identity roadmap
+
+Block 024 introduces an internal, read-only MusicBrainz identity audit engine. It hydrates release
+candidates and uses album-wide title, duration, artist, count, and multidisc order evidence to make a
+global local-track-to-release-track assignment. Existing MBIDs are comparison targets only and never
+boost their own correctness score.
+
+This is not yet a user-operational repair feature. There is no importer or library CLI integration,
+no MBID mutation, no database or file-tag write, and no physical file write. AcoustID and
+fingerprinting remain deferred beyond v1.0. Blocks 025 and 026 will consume the audit result for
+separately reviewed importer and library workflows.
+
 ## Current status
 
 The plugin resolves release candidates from Discogs, MusicBrainz, Last.fm, and iTunes through one

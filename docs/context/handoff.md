@@ -2,42 +2,39 @@
 
 ## State
 
-Block 023 adds the first safe selected-track write boundary. With importer `apply: true`, only
-losslessly mapped fields on the already-selected `TrackInfo` may change. Noqlen stops before match
-application; normal beets owns Item updates, persistence, and files.
+Block 024 adds an internal read-only MusicBrainz identity audit engine. It globally assigns local
+tracks to hydrated release tracks, ranks album structure without using existing MBIDs as evidence,
+and compares all four v1.0 identity fields only after unique strong selection.
 
 ## Completed
 
-- Track-specific strict/partial parsing and immutable application results.
-- Canonical target-plan integrity and effective-current stale-state guards.
-- Effective-current validation temporarily refreshes TrackInfo and album-match AlbumInfo application
-  caches, then restores their exact pre-attempt state.
-- Full target/value/uniqueness validation before per-track atomic mutation.
-- Plain lyrics application only; synchronized lyrics remain blocked.
-- TrackInfo `raw_data` and `item_data` cache invalidation.
-- Preview-enabled and preview-disabled importer application.
-- Real TrackMatch/AlbumMatch downstream ownership tests and forbidden-write sentinels.
-- Independent release/track and per-track outcomes with provider fail-open behavior.
-- Fresh-fallback focused application/importer validation passes 48 tests; the full suite passes 800
-  tests with 5 live tests skipped. Lint, repository contamination, and diff-whitespace checks pass.
+- Immutable validated local context, MusicBrainz candidate, policy, score, finding, and result types.
+- Conservative Unicode text comparison and explicit pair/release weights bounded to 0-100.
+- Deterministic O(n^3) global assignment for reordered, unequal, multidisc, and large albums.
+- Conservative minimum-score, margin, pair-strength, completeness, uniqueness, and singleton policy.
+- Confirmed, missing, conflict, and ambiguous semantics with conflict precedence.
+- Pure beets 2.12 AlbumInfo normalization and bounded injectable MusicBrainz acquisition.
+- Offline synthetic regression coverage, including Forge positional-mapping and wrong-existing-ID
+  weaknesses.
+- Focused validation passes 58 tests; the full suite passes 858 tests with 5 opt-in live tests
+  skipped. Ruff, repository contamination, and diff-whitespace checks pass.
 
 ## Important Decisions
 
-- Existing `apply` authorizes both selected-release and selected-track guarded boundaries.
-- The same configured string is parsed into distinct release and track mode types.
-- Strict blocks one selected track on review or mapping blockers; partial applies mapped changes only.
-- Successful track mutation permanently invalidates only TrackInfo caches; AlbumInfo cache state is
-  restored and AlbumInfo is not a track mutation target.
-- Noqlen never calls match application, Item update/store/write/sync, or Album store for track work.
-- The library CLI remains album-only.
+- Identity selection is separate from enrichment Field Authority, resolver, and ChangePlan.
+- Existing IDs are audited values, never positive score evidence or candidate priority.
+- Search results are hydrated before scoring and near-equal releases remain ambiguous.
+- Positional mapping is rejected; recording MBIDs may repeat only across distinct release tracks.
+- The engine has no write authority and no importer, CLI, database, tag, or file integration.
 
 ## Deferred
 
-- Native synchronized/SYLT target strategy and physical file synchronization.
-- MusicBrainz/Navidrome identity audit and repair, including later AcoustID recording evidence.
-- Track database backfill or library track command modes.
+- Importer identity preview and explicitly authorized selected-metadata repair in Block 025.
+- Library identity audit/repair in Block 026 and tag synchronization in Block 027.
+- AcoustID and fingerprint evidence after v1.0.
 
 ## Next Direction
 
-Pause further lyrics persistence work. A separately reviewed Noqlen Identity Audit / Repair direction
-should address MusicBrainz recording/release-track and release/release-group identity quality.
+Proceed only to Block 025 after Block 024 review. Block 025 must consume `IdentityAuditResult` rather
+than duplicate assignment or scoring. Preserve the frozen finish line: 025 importer identity,
+026 library identity, 027 tag synchronization, 028 v1.0 hardening/release, then stop.

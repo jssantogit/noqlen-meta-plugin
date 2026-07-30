@@ -10,8 +10,8 @@ Noqlen Meta Plugin - universal multi-provider metadata enrichment for beets.
 
 ## Context Level
 
-`standard` for Block 023 because it adds one guarded mutation boundary after the existing pure
-selected-track target plan while preserving downstream beets ownership.
+`standard` for Block 024 because it adds an isolated identity domain, structural assignment/scoring,
+and an injectable MusicBrainz source without importer, CLI, or persistence integration.
 
 ## Tool Mode
 
@@ -20,38 +20,38 @@ shell output.
 
 ## Active Block
 
-Block 023 - Safe Selected-Track Application.
+Block 024 - MusicBrainz Identity Audit Engine.
 
 ## Active Spec
 
-`docs/specs/023-safe-selected-track-application/`
+`docs/specs/024-musicbrainz-identity-audit/`
 
 ## Active ADRs
 
-- `docs/adr/0007-strict-selected-release-application.md`
-- `docs/adr/0008-partial-application-policy.md`
 - `docs/adr/0015-track-enrichment-boundary.md`
-- `docs/adr/0017-importer-track-planning-preview.md`
-- `docs/adr/0018-track-target-mapping.md`
 - `docs/adr/0019-safe-selected-track-application.md`
+- `docs/adr/0020-musicbrainz-identity-audit-engine.md`
 
 ## Allowed Files
 
-Track application and preview code, importer integration, focused tests, README, ADR 0019, Block 023
-specs, and context/handoff documents.
+The isolated identity package, focused identity tests, README, ADR 0020, Block 024 specs, and
+context/handoff documents.
 
 ## Forbidden Behavior
 
-Direct Item/Album mutation, match application calls, database persistence, tag/file writes, native
-SYLT or synchronized-lyrics persistence, library track CLI, provider redesign, identity repair, and
-album-wide rollback.
+Importer identity integration, library identity CLI, MBID mutation, AlbumInfo/TrackInfo/Item/Album
+mutation, database persistence, tag/file writes, AcoustID/fingerprinting, recording search, new
+configuration, and enrichment resolver/ChangePlan reuse.
 
 ## Completion State
 
-The fresh AlbumInfo fallback stale-validation fix and final offline validation are complete. Focused
-application/importer validation passes 48 tests; the full suite passes 800 tests with 5 opt-in live
-tests skipped. Lint, repository contamination, and diff-whitespace checks pass.
+The read-only identity domain, global assignment, structural scoring, conservative selection and
+field comparison, plus the injectable beets MusicBrainz source are complete. Focused validation
+passes 58 tests; the full suite passes 858 tests with 5 opt-in live tests skipped. Ruff, repository
+contamination, and diff-whitespace checks pass.
 
 ## Stop Condition
 
-Stop after Block 023. Do not add further lyrics persistence or identity audit/repair in this block.
+Stop after Block 024. Do not add importer/CLI identity preview or repair. The frozen roadmap remains:
+024 Identity Audit Engine, 025 Importer Identity Preview/Repair, 026 Library Identity Audit/Repair,
+027 Identity Tag Synchronization, 028 v1.0 Hardening and Release, then stop.
