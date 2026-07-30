@@ -198,6 +198,39 @@ def test_stale_selected_track_info_aborts_without_overwrite() -> None:
     assert track.lyrics == "Selected after"
 
 
+def test_stale_album_fallback_aborts_and_restores_album_caches() -> None:
+    item = Item()
+    track = _track()
+    album = AlbumInfo(
+        [track],
+        artist="Synthetic Artist",
+        album="Synthetic Album",
+        lyrics="Album fallback before",
+    )
+    selected = SelectedImportTrack(item, track, album)
+    plan = _planning_result(selected, "lyrics", preserve_existing=False)
+    assert plan.target_plan.mapped_changes[0].source.before == "Album fallback before"
+    assert "raw_data" in album.__dict__
+    assert "item_data" in album.__dict__
+    album.lyrics = "Album fallback after"
+    album_cache_before = {
+        key: album.__dict__[key] for key in ("raw_data", "item_data")
+    }
+    item_before = dict(item)
+
+    with pytest.raises(TrackApplicationError, match="'lyrics'.*no longer matches"):
+        apply_track_target_plan(selected, plan.target_plan, from_scratch=False)
+
+    assert track.get("lyrics") is None
+    assert dict(item) == item_before
+    assert album.lyrics == "Album fallback after"
+    assert {key for key in ("raw_data", "item_data") if key in album.__dict__} == set(
+        album_cache_before
+    )
+    for key, cached in album_cache_before.items():
+        assert album.__dict__[key] is cached
+
+
 def test_forged_target_plan_is_rejected_without_mutation() -> None:
     track = _track()
     selected = SelectedImportTrack(Item(), track, None)
@@ -300,12 +333,25 @@ def test_real_album_match_applies_selected_track_later(from_scratch: bool) -> No
         preserve_existing=False,
     )
     match = AlbumMatch(Distance(), album, {item: track})
+    track_item_data_before = track.item_data
     track.merge_with_album(album)
+    assert "raw_data" in track.__dict__
+    assert "item_data" in track.__dict__
+    assert "raw_data" in album.__dict__
+    assert "item_data" in album.__dict__
+    assert track.__dict__["item_data"] is track_item_data_before
+    album_cache_before = {
+        key: album.__dict__[key] for key in ("raw_data", "item_data")
+    }
 
     apply_track_target_plan(selected, plan.target_plan, from_scratch=from_scratch)
 
     assert track.lyrics == REMOTE_PLAIN
     assert item.lyrics == "Local synthetic lyrics"
+    assert "raw_data" not in track.__dict__
+    assert "item_data" not in track.__dict__
+    for key, cached in album_cache_before.items():
+        assert album.__dict__[key] is cached
     match.apply_metadata(from_scratch=from_scratch)
     assert item.lyrics == REMOTE_PLAIN
 

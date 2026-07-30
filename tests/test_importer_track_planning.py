@@ -328,6 +328,42 @@ def test_strict_track_application_blocks_plain_when_synced_is_unwritable(
     assert "application status: blocked" in output[0]
 
 
+def test_strict_blocked_track_does_not_block_separate_clean_track(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = _silence_preview(monkeypatch)
+    private_synced = "[00:01.00] PRIVATE-SYNTHETIC-SYNCED-CONTENT"
+
+    def candidates(
+        self: NoqlenMetaPlugin, context: TrackEnrichmentContext
+    ) -> tuple[MetadataCandidate, ...]:
+        plain = _candidate(value=f"Synthetic remote track {context.track_number}")
+        if context.track_number == 1:
+            return (plain, _candidate("synced_lyrics", private_synced))
+        return (plain,)
+
+    monkeypatch.setattr(NoqlenMetaPlugin, "_lrclib_candidates", candidates)
+    first_item = Item()
+    second_item = Item()
+    first_track = _track("First", 1)
+    second_track = _track("Second", 2)
+    task, _ = _album_task(
+        [(first_item, first_track), (second_item, second_track)]
+    )
+    plugin = NoqlenMetaPlugin()
+    _configure(plugin, apply=True, synced_lyrics=True)
+
+    plugin._import_task_choice(None, task)
+
+    assert first_track.get("lyrics") is None
+    assert second_track.lyrics == "Synthetic remote track 2"
+    assert first_item.lyrics == ""
+    assert second_item.lyrics == ""
+    assert "application status: blocked" in output[0]
+    assert "application status: applied" in output[1]
+    assert private_synced not in "\n".join(output)
+
+
 def test_plain_and_synced_plans_render_both_without_precedence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

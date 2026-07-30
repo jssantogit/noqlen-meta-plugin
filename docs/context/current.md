@@ -48,9 +48,9 @@ album-wide rollback.
 
 ## Completion State
 
-Implementation and final offline validation are complete. Focused validation passes 176 tests; the
-full suite passes 798 tests with 5 opt-in live tests skipped. Lint, repository contamination, and
-diff-whitespace checks pass.
+The fresh AlbumInfo fallback stale-validation fix and final offline validation are complete. Focused
+application/importer validation passes 48 tests; the full suite passes 800 tests with 5 opt-in live
+tests skipped. Lint, repository contamination, and diff-whitespace checks pass.
 
 ## Stop Condition
 

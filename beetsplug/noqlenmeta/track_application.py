@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 
@@ -73,6 +75,40 @@ class TrackApplicationResult:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class _CacheSnapshot:
+    target: TrackInfo | AlbumInfo
+    values: tuple[tuple[str, object], ...]
+
+
+@contextmanager
+def _fresh_selected_application_caches(
+    selected: SelectedImportTrack,
+) -> Iterator[None]:
+    """Temporarily refresh only caches used by selected metadata application."""
+    cache_keys = ("raw_data", "item_data")
+    targets = (selected.track_info,) + (
+        (selected.album_info,) if selected.album_info is not None else ()
+    )
+    snapshots = tuple(
+        _CacheSnapshot(
+            target,
+            tuple((key, target.__dict__[key]) for key in cache_keys if key in target.__dict__),
+        )
+        for target in targets
+    )
+    for snapshot in snapshots:
+        for key in cache_keys:
+            snapshot.target.__dict__.pop(key, None)
+    try:
+        yield
+    finally:
+        for snapshot in snapshots:
+            for key in cache_keys:
+                snapshot.target.__dict__.pop(key, None)
+            snapshot.target.__dict__.update(snapshot.values)
+
+
 def apply_track_target_plan(
     selected: SelectedImportTrack,
     plan: TrackTargetPlan,
@@ -111,22 +147,11 @@ def apply_track_target_plan(
     if result.is_blocked:
         return result
 
-    # Recompute through beets' real surfaces without changing caches on a failed attempt.
-    missing_cache = object()
-    raw_data_cache = selected.track_info.__dict__.pop("raw_data", missing_cache)
-    item_data_cache = selected.track_info.__dict__.pop("item_data", missing_cache)
-    try:
+    with _fresh_selected_application_caches(selected):
         current_values = effective_current_values_for_import_track(
             selected,
             from_scratch=from_scratch,
         )
-    finally:
-        selected.track_info.__dict__.pop("raw_data", None)
-        selected.track_info.__dict__.pop("item_data", None)
-        if raw_data_cache is not missing_cache:
-            selected.track_info.__dict__["raw_data"] = raw_data_cache
-        if item_data_cache is not missing_cache:
-            selected.track_info.__dict__["item_data"] = item_data_cache
     for change in plan.mapped_changes:
         current = current_values.get(change.canonical_field)
         expected_before = change.source.before

@@ -28,14 +28,18 @@ preventing forged plans, stale state, partial mutation, or synchronized-lyrics s
 11. Atomicity is per selected track. Tracks and release/track boundaries evaluate independently;
     there is no album-wide rollback.
 12. The only writable target is `lyrics -> TrackInfo.lyrics`; `synced_lyrics` remains blocked.
-13. Successful mutation invalidates only selected `TrackInfo.raw_data` and `TrackInfo.item_data`
-    caches. AlbumInfo caches are not cleared without a concrete requirement.
-14. `preview: false` with `apply: true` may execute track providers and emits only sanitized status
+13. Effective-current stale validation temporarily refreshes selected `TrackInfo.raw_data` and
+    `TrackInfo.item_data` plus, for an album match, the selected `AlbumInfo.raw_data` and
+    `AlbumInfo.item_data` consumed by `merge_with_album()`.
+14. Temporary stale-validation refresh restores the exact pre-attempt cache objects and presence for
+    both selected metadata objects. Successful track mutation then permanently invalidates only the
+    selected TrackInfo `raw_data` and `item_data`; AlbumInfo cache state remains unchanged.
+15. `preview: false` with `apply: true` may execute track providers and emits only sanitized status
     logs. With both disabled, no track provider executes.
-15. The library CLI remains album-only and keeps its separate `--partial` policy.
-16. Noqlen does not call `Item.store`, file-write/sync methods, or `Album.store` in this boundary.
+16. The library CLI remains album-only and keeps its separate `--partial` policy.
+17. Noqlen does not call `Item.store`, file-write/sync methods, or `Album.store` in this boundary.
     Normal downstream beets may later persist or write the selected plain lyrics.
-17. MusicBrainz/Navidrome identity audit and repair remains separate later work.
+18. MusicBrainz/Navidrome identity audit and repair remains separate later work.
 
 ## Consequences
 
