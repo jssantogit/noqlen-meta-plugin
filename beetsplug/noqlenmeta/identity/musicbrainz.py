@@ -95,7 +95,16 @@ class BeetsMusicBrainzIdentitySource:
     def candidates_for(
         self, context: IdentityAlbumContext
     ) -> tuple[MusicBrainzReleaseIdentity, ...]:
-        infos: list[AlbumInfo] = []
+        ordered_candidates: list[MusicBrainzReleaseIdentity] = []
+        seen_release_mbids: set[str] = set()
+
+        def append_candidate(info: AlbumInfo) -> None:
+            candidate = musicbrainz_identity_from_album_info(info)
+            if candidate.release_mbid in seen_release_mbids:
+                return
+            seen_release_mbids.add(candidate.release_mbid)
+            ordered_candidates.append(candidate)
+
         try:
             anchored_ids = sorted(
                 {
@@ -104,9 +113,9 @@ class BeetsMusicBrainzIdentitySource:
                     if (canonical := canonical_mbid(value)) is not None
                 }
             )
-            for release_mbid in anchored_ids:
+            for release_mbid in anchored_ids[: self._maximum_candidates]:
                 if (info := self._fetch_release(release_mbid)) is not None:
-                    infos.append(info)
+                    append_candidate(info)
             queries = [(context.album_artist, context.album)]
             if len(context.tracks) == 1:
                 track = context.tracks[0]
@@ -114,22 +123,19 @@ class BeetsMusicBrainzIdentitySource:
                 if _query_key(alternate) != _query_key(queries[0]):
                     queries.append(alternate)
             for artist, album in queries:
-                infos.extend(self._search_releases(artist, album))
-            by_release: dict[str, MusicBrainzReleaseIdentity] = {}
-            for info in infos:
-                candidate = musicbrainz_identity_from_album_info(info)
-                by_release.setdefault(candidate.release_mbid, candidate)
+                if len(ordered_candidates) >= self._maximum_candidates:
+                    break
+                for info in self._search_releases(artist, album):
+                    append_candidate(info)
+                    if len(ordered_candidates) >= self._maximum_candidates:
+                        break
         except RequestException:
             raise IdentitySourceError("MusicBrainz identity source request failed") from None
         except IdentityAuditError:
             raise IdentitySourceError("MusicBrainz identity source returned invalid data") from None
         except (AttributeError, IndexError, KeyError, TypeError, ValueError):
             raise IdentitySourceError("MusicBrainz identity source returned invalid data") from None
-        return tuple(
-            sorted(by_release.values(), key=lambda candidate: candidate.release_mbid)[
-                : self._maximum_candidates
-            ]
-        )
+        return tuple(ordered_candidates)
 
 
 def _required_text(value: object) -> str:

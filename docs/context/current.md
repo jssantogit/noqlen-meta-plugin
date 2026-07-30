@@ -46,9 +46,11 @@ configuration, and enrichment resolver/ChangePlan reuse.
 ## Completion State
 
 The read-only identity domain, global assignment, structural scoring, conservative selection and
-field comparison, plus the injectable beets MusicBrainz source are complete. Focused validation
-passes 58 tests; the full suite passes 858 tests with 5 opt-in live tests skipped. Ruff, repository
-contamination, and diff-whitespace checks pass.
+field comparison, plus the injectable beets MusicBrainz source are complete. Source bounding now
+preserves exact-ID priority and MusicBrainz search relevance with first-occurrence deduplication;
+acquisition order remains excluded from structural ranking. Focused validation passes 62 tests; the
+full suite passes 862 tests with 5 opt-in live tests skipped. Ruff, repository contamination, and
+diff-whitespace checks pass.
 
 ## Stop Condition
 

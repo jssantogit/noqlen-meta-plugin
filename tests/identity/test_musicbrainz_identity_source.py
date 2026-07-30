@@ -10,6 +10,8 @@ from beetsplug.noqlenmeta.identity import (
     BeetsMusicBrainzIdentitySource,
     IdentityAuditError,
     IdentitySourceError,
+    IdentityVerdict,
+    audit_musicbrainz_identity,
     musicbrainz_identity_from_album_info,
 )
 
@@ -43,6 +45,14 @@ def album_info(number: int = 100, *, title: str = "Example Album") -> AlbumInfo:
     )
 
 
+def structurally_wrong_album_info(number: int) -> AlbumInfo:
+    info = album_info(number, title="Unrelated Album")
+    for index, track in enumerate(info.tracks, 1):
+        track.title = f"Unrelated Track {index}"
+        track.length = 500.0 + index
+    return info
+
+
 def test_real_beets_album_info_contract_normalizes_without_mutation() -> None:
     info = album_info()
     before = deepcopy(info)
@@ -68,8 +78,8 @@ def test_malformed_album_info_is_rejected() -> None:
 
 def test_source_fetches_existing_ids_searches_text_and_deduplicates() -> None:
     calls: list[tuple[str, ...]] = []
-    fetched = album_info(100)
-    duplicate = album_info(100)
+    fetched = album_info(100, title="Fetched Representation")
+    duplicate = album_info(100, title="Search Representation")
     searched = album_info(101)
 
     def fetch(release_mbid: str) -> AlbumInfo:
@@ -88,6 +98,7 @@ def test_source_fetches_existing_ids_searches_text_and_deduplicates() -> None:
         ("search", "Example Artist", "Example Album"),
     ]
     assert [item.release_mbid for item in candidates] == [mbid(100), mbid(101)]
+    assert candidates[0].album == "Fetched Representation"
 
 
 def test_default_source_uses_beets_musicbrainz_fetch_and_search_hooks(
@@ -120,15 +131,22 @@ def test_default_source_uses_beets_musicbrainz_fetch_and_search_hooks(
     }
 
 
-def test_anchored_candidate_has_no_source_order_bonus() -> None:
+def test_existing_candidate_is_included_first_but_receives_no_structural_bonus() -> None:
+    wrong_existing = structurally_wrong_album_info(200)
+    correct_search = album_info(120)
     source = BeetsMusicBrainzIdentitySource(
-        fetch_release=lambda value: album_info(200),
-        search_releases=lambda artist, album: (album_info(100),),
+        fetch_release=lambda value: wrong_existing,
+        search_releases=lambda artist, album: (correct_search, album_info(100)),
+        maximum_candidates=2,
     )
+    local = context(release_ids=(mbid(200),))
 
-    candidates = source.candidates_for(context(release_ids=(mbid(200),)))
+    candidates = source.candidates_for(local)
+    result = audit_musicbrainz_identity(local, candidates)
 
-    assert [item.release_mbid for item in candidates] == [mbid(100), mbid(200)]
+    assert [item.release_mbid for item in candidates] == [mbid(200), mbid(120)]
+    assert result.selected_candidate == candidates[1]
+    assert result.verdict is IdentityVerdict.CONFLICT
 
 
 def test_singleton_adds_distinct_track_title_release_query() -> None:
@@ -149,19 +167,96 @@ def test_singleton_adds_distinct_track_title_release_query() -> None:
     ]
 
 
+def test_singleton_preserves_primary_then_alternate_order_with_cross_query_deduplication() -> None:
+    def search(artist: str, album: str):
+        if album == "Example Album":
+            return (album_info(120), album_info(100))
+        return (album_info(100), album_info(119))
+
+    source = BeetsMusicBrainzIdentitySource(
+        fetch_release=lambda value: None,
+        search_releases=search,
+        maximum_candidates=4,
+    )
+
+    candidates = source.candidates_for(context(1))
+
+    assert [item.release_mbid for item in candidates] == [mbid(120), mbid(100), mbid(119)]
+
+
 def test_source_is_bounded_and_deterministic() -> None:
-    releases = tuple(album_info(number) for number in range(120, 99, -1))
+    source_order = (120, 100, 119, 101, 118)
+    releases = tuple(album_info(number) for number in source_order)
     source = BeetsMusicBrainzIdentitySource(
         fetch_release=lambda value: None,
         search_releases=lambda artist, album: releases,
+        maximum_candidates=3,
     )
 
     first = source.candidates_for(context())
     second = source.candidates_for(context())
 
     assert first == second
-    assert len(first) == 10
-    assert [item.release_mbid for item in first] == [mbid(number) for number in range(100, 110)]
+    assert len(first) == 3
+    assert [item.release_mbid for item in first] == [mbid(120), mbid(100), mbid(119)]
+
+
+def test_structurally_correct_later_uuid_survives_bound_and_wins_audit() -> None:
+    correct = album_info(120)
+    wrong = (structurally_wrong_album_info(100), structurally_wrong_album_info(101))
+    source = BeetsMusicBrainzIdentitySource(
+        fetch_release=lambda value: None,
+        search_releases=lambda artist, album: (correct, *wrong),
+        maximum_candidates=2,
+    )
+
+    candidates = source.candidates_for(context())
+    result = audit_musicbrainz_identity(context(), candidates)
+
+    assert [item.release_mbid for item in candidates] == [mbid(120), mbid(100)]
+    assert result.selected_candidate == candidates[0]
+
+
+def test_pathological_existing_id_count_is_bounded_in_canonical_order() -> None:
+    calls: list[str] = []
+
+    def fetch(release_mbid: str) -> AlbumInfo:
+        calls.append(release_mbid)
+        return album_info(int(release_mbid[-4:], 16))
+
+    source = BeetsMusicBrainzIdentitySource(
+        fetch_release=fetch,
+        search_releases=lambda artist, album: (),
+        maximum_candidates=2,
+    )
+
+    candidates = source.candidates_for(
+        context(release_ids=(mbid(120), mbid(100), mbid(119)))
+    )
+
+    assert calls == [mbid(100), mbid(119)]
+    assert [item.release_mbid for item in candidates] == [mbid(100), mbid(119)]
+
+
+def test_pathological_existing_id_fetch_attempts_are_bounded_even_without_results() -> None:
+    calls: list[str] = []
+
+    def fetch(release_mbid: str) -> None:
+        calls.append(release_mbid)
+        return None
+
+    source = BeetsMusicBrainzIdentitySource(
+        fetch_release=fetch,
+        search_releases=lambda artist, album: (album_info(120),),
+        maximum_candidates=2,
+    )
+
+    candidates = source.candidates_for(
+        context(release_ids=(mbid(120), mbid(100), mbid(119)))
+    )
+
+    assert calls == [mbid(100), mbid(119)]
+    assert [item.release_mbid for item in candidates] == [mbid(120)]
 
 
 def test_network_and_malformed_source_failures_are_sanitized() -> None:
@@ -173,7 +268,7 @@ def test_network_and_malformed_source_failures_are_sanitized() -> None:
     )
     malformed = BeetsMusicBrainzIdentitySource(
         fetch_release=lambda value: None,
-        search_releases=lambda artist, album: (object(),),
+        search_releases=lambda artist, album: (object(),),  # type: ignore[arg-type]
     )
 
     with pytest.raises(IdentitySourceError, match=r"^MusicBrainz identity source request failed$"):
