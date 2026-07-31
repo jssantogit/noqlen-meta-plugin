@@ -2,53 +2,34 @@
 
 ## State
 
-Block 027 is complete. Database-to-file MusicBrainz identity synchronization exists as explicit
-`--identity-tags` mode on the existing `noqlenmeta`/`nm` command.
+Block 028 implementation is complete. Noqlen Meta 1.0.0 package,
+public MkDocs source, concise README, release checks, and publication workflow
+have been prepared without adding product behavior.
 
-## Completed
+## Prepared
 
-- Exclusive mode validation with query-or-`--all` selection, complete Album expansion, standalone
-  Items, deterministic ordering, and no provider/source/audit work.
-- Preview by default; only CLI `--write` permits file replacement and operational `mtime` update.
-- Fresh immutable path-private database snapshots with complete canonical Album/singleton coherence.
-- Exact no-follow source fingerprints and safely frozen four-field/unrelated MediaFile snapshots.
-- Missing/conflict/malformed statuses and immutable canonical four-field plans.
-- Whole-command planning and fresh database/stat preflight before the first candidate.
-- Same-directory extension-preserving candidates that write and verify all four fields without
-  opening the source for save.
-- Unrelated logical tag and supported filesystem metadata verification.
-- Same-directory rollback backup before `os.replace`, replaced-source verification, safe restoration,
-  and integrity-critical restore failure handling.
-- Fixed-column savepoint update of only Item `mtime`, followed by fresh verification and standard
-  post-success `after_write` and `database_change` events. The mutable pre-write `write` hook is not
-  emitted.
-- Explicit source/mtime commit phases, safe restoration, and retained path-private recovery backup for
-  integrity-critical uncertain commit state.
-- Truthful per-file capability rendering and blocked empty/invalid persisted paths without filesystem
-  access or interruption of valid files.
-- Candidate and backup-copy fallback source reads through `O_NOATIME` no-follow descriptors, with no
-  production media-source `copy2`; unsupported atime-safe copies block before replacement.
-- Safe restoration verifies original mtime and final link count one, and committed cleanup failure
-  retains the path-private original backup truthfully.
-- Immediate privacy-safe rendering, no-op behavior, and truthful later committed-state reporting.
-- Offline generated-silence production round trips for FLAC, MP3, M4A, Ogg Vorbis, and Opus.
-- Validation: 51 focused fix tests, 288 identity tests, and 1,088 full offline tests pass with 5 live
-  tests skipped; Ruff, contamination, and diff-whitespace checks pass.
+- Public English documentation under `site-docs`, with explicit strict MkDocs navigation.
+- Pinned Material for MkDocs and version-2 Read the Docs configuration.
+- Complete command/config/provider/field/beets/compatibility/troubleshooting references.
+- Fresh centralized configuration defaults and release-quality command help.
+- Version 1.0.0 package metadata with no invented author or license.
+- Documentation drift checks, archive inspection, and synthetic release workflows.
+- Python 3.10-3.14, beets-boundary, docs, package, and hygiene CI jobs.
+- Tag-only build-once OIDC publication workflow with protected `pypi` environment.
+- Canonical changelog/contribution/security documents and explicit owner release checklist.
 
-## Important Decisions
+## Validation
 
-- Database identity is authoritative but must be canonical and internally coherent.
-- Exactly four MusicBrainz fields are writable; conflicting/malformed file identity is synchronized.
-- `--apply` and importer configuration never authorize tag writes.
-- Source paths are private and source files are never saved in place.
-- Files commit independently; there is no command-wide filesystem rollback claim.
+- 1,097 offline tests passed; 5 live tests were deselected.
+- 165 focused tests passed on beets 2.12.0 and current 2.13.1.
+- Python 3.10-3.14 focused release/documentation/plugin smoke tests passed.
+- Strict docs, Ruff, hygiene, wheel/sdist, Twine, archive inspection, and clean-install plugin help passed.
 
-## Deferred
+## External Owner Ceremony
 
-- Block 028 final configuration/UX/package/documentation compatibility and release hardening.
-- AcoustID, Chromaprint, fingerprinting, recording search, and new metadata features remain outside
-  v1.0.
+After reviewer PASS and merge, the owner decides/adds licensing (or explicitly
+distributes without an open-source grant), imports Read the Docs, confirms PyPI
+ownership, configures trusted publishing and the `pypi` environment, creates
+the v1.0.0 tag, and verifies GitHub/PyPI/Read the Docs publication.
 
-## Next Direction
-
-Proceed to Block 028, then STOP.
+There is no next development block. STOP after Block 028 release preparation.

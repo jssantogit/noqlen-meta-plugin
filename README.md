@@ -1,70 +1,58 @@
-# Noqlen Meta Plugin
+# Noqlen Meta
 
-Universal metadata enrichment for beets.
+Noqlen Meta is a beets plugin for multi-provider metadata enrichment and
+MusicBrainz identity tools. beets remains the matcher and library manager:
+Noqlen enriches releases and tracks that beets has already selected, and it
+offers separate workflows to audit MusicBrainz identity and synchronize four
+confirmed MusicBrainz IDs to audio-file tags.
 
-Noqlen Meta is a beets plugin focused on enriching an already identified release with broader, field-aware metadata from multiple providers. The goal is not to replace beets' matcher. Beets remains responsible for release identification and import flow; Noqlen Meta adds a provider orchestration layer, field authority, conflict resolution, provenance, and reviewable enrichment.
+Noqlen previews by default. Database changes require `--apply`; specialized
+identity-tag file replacement requires `--identity-tags --write`. There is no
+`--force` option.
 
-## Project direction
+## Capabilities
 
-```text
-providers
-    ↓
-normalized candidates
-    ↓
-Field Authority
-    ↓
-FieldDecision
-    ↓
-ChangePlan
-    ↓
-BeetsTargetPlan
-    ↓
-explicit application policy
-    ↓
-selected AlbumInfo mutation
-    ↓
-normal beets lifecycle
-```
+- Enrich selected releases from Discogs, MusicBrainz, Last.fm, and iTunes.
+- Add selected-track plain lyrics from LRCLIB during import.
+- Preview or apply ordinary enrichment to albums already in a beets library.
+- Audit and repair release, release-group, recording, and release-track MBIDs.
+- Synchronize those four coherent database MBIDs to supported audio files.
+- Keep provider lookup, database application, and file writing separately
+  authorized.
 
-`ChangePlan` describes what Noqlen would change and what still requires review. It does not write
-metadata. `BeetsTargetPlan` then determines whether each canonical change can be represented by the
-current beets `AlbumInfo` model without information loss. Noqlen maps canonical values to beets only
-when the mapping is lossless. Multi-value metadata is not silently collapsed into singular beets
-fields. With explicit application enabled, the strict default requires a review-free and fully
-lossless target plan. An explicitly configured partial policy may instead apply only the already
-resolved, losslessly mapped subset. Both policies mutate only the selected `AlbumInfo`; beets then
-remains responsible for its normal import lifecycle.
+Noqlen does not rematch ordinary enrichment targets. It does not call
+Navidrome APIs; Navidrome is a possible consumer of resulting file tags.
 
-```text
-genres = [Rock, Metal]          -> genres (lossless)
-labels = [Label A, Label B]     -> mapping blocker
-```
+## Documentation
 
-The first providers are expected to include MusicBrainz, Discogs, and AcoustID, followed by additional catalog, community, lyrics, and fallback sources where they add clear value.
+The complete manual is prepared for
+[Read the Docs](https://noqlen-meta-plugin.readthedocs.io/). Until the owner
+imports the project there, browse the public source in
+[`site-docs/`](https://github.com/jssantogit/noqlen-meta-plugin/tree/main/site-docs).
 
-## Development model
+Start with:
 
-This repository follows the Noqlen Playbook workflow:
+- [Installation](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/site-docs/getting-started/installation.md)
+- [First safe preview](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/site-docs/getting-started/first-preview.md)
+- [Command reference](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/site-docs/reference/commands.md)
+- [Configuration reference](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/site-docs/reference/configuration.md)
+- [Troubleshooting](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/site-docs/troubleshooting/index.md)
 
-```text
-Plan → Block → Prompt → Tool Mode → Implement → Validate → Audit → Fix → Commit → Handoff → Next block
-```
+## Installation
 
-For provider integrations, this project uses the repository's **real-first, fixture-backed** fast path. Production adapters are implemented directly, external I/O stays behind narrow boundaries, representative real responses may be sanitized into fixtures, normal tests remain offline and deterministic, live tests are opt-in, and failure-only mocks are used where reproducing failures against a real service would be wasteful or unsafe.
-
-Automated tests must never use a real music library.
-
-## Development setup
+Install Noqlen Meta in the same Python environment as beets:
 
 ```bash
-python -m venv .venv
-python -m pip install -e ".[dev]"
-pytest
-ruff check .
-python scripts/check_repo_contamination.py
+pip install beets-noqlenmeta
 ```
 
-Enable the plugin in a beets configuration after installing it into the same Python environment:
+Discogs search needs the optional client:
+
+```bash
+pip install "beets-noqlenmeta[discogs]"
+```
+
+Enable the plugin in the beets `config.yaml`:
 
 ```yaml
 plugins:
@@ -72,462 +60,157 @@ plugins:
 
 noqlenmeta:
   preview: true
-  apply: false
-  apply_mode: strict
+```
 
-  identity:
-    enabled: false
-    preview: true
-    apply: false
+Run `beet config -p` to print the configuration path. beets chooses the normal
+platform-specific configuration directory; do not assume the same path on
+Linux, macOS, and Windows.
 
-  fields:
-    genres: true
-    styles: true
-    labels: true
-    catalog_numbers: true
-    barcodes: true
-    country: true
-    year: true
-    media: true
-    format_descriptions: true
-    mood: false
-    lyrics: false
-    synced_lyrics: false
-    cover: false
+Verify that the plugin loaded:
 
+```bash
+beet help noqlenmeta
+```
+
+The command is `beet noqlenmeta`; `beet nm` is the preferred alias.
+
+## First Preview
+
+Enable at least one provider before ordinary enrichment. For example,
+MusicBrainz enrichment uses the exact release MBID already known by beets:
+
+```yaml
+noqlenmeta:
   providers:
-    discogs:
-      enabled: false
-      user_token: ""
-
     musicbrainz:
-      enabled: false
-
-    lastfm:
-      enabled: false
-
-    itunes:
-      enabled: false
-      storefront: "us"
-
-    lrclib:
-      enabled: false
-
-  # Optional advanced resolution overrides. Omitted fields keep built-in defaults.
-  resolution:
-    authority:
-      genres:
-        - discogs
-        - lastfm
-        - itunes
-      year:
-        - musicbrainz
-        - discogs
-        - itunes
-
-    min_confidence:
-      genres: 0.80
-      year: 0.90
-
-    preserve_existing:
-      genres: true
-      year: false
+      enabled: true
 ```
 
-`fields` controls what metadata Noqlen wants. `providers` controls where metadata may come from.
-`resolution.authority` controls the preferred provider order per field,
-`resolution.min_confidence` controls the field-level eligibility threshold, and
-`resolution.preserve_existing` controls whether an existing conflict requires review. Every advanced
-setting is optional; empty mappings use the built-in defaults.
-
-`identity` controls a separate MusicBrainz identity workflow. All three settings are booleans.
-`enabled` defaults to `false` and is the master gate; `preview` defaults to `true`; `apply` defaults
-to `false`. `identity.apply: true` is invalid unless identity is enabled. Preview and application are
-independent, so an enabled audit may preview without repair or repair without rendering a preview.
-These settings do not inherit permission from top-level enrichment `preview`, `apply`, or
-`apply_mode`, and `providers.musicbrainz.enabled` neither enables nor disables identity auditing.
-
-A configured authority list replaces the default order for that field; it does not merge with or
-prepend to the default. An omitted field keeps its built-in default. The first provider is highest
-authority, and a lower-authority candidate cannot win merely because its numeric confidence is
-higher. Authority does not imply provider capability. A provider listed for a field is queried only
-if it is enabled and its adapter currently declares support for that field.
-
-All providers are disabled by default and can be enabled independently or simultaneously. Discogs
-is catalog- and edition-oriented. MusicBrainz enriches only from an exact MusicBrainz release MBID
-already known by beets; it does not perform fuzzy release matching. Last.fm currently contributes
-album genres only. iTunes is currently a fallback only for the narrow album genre and release year
-metadata exposed with defensible semantics.
-
-`apply` is `false` by default, and `apply_mode` defaults to `strict`. With `apply: false`, Noqlen
-never mutates the selected release. With `apply: true`, strict mode applies only when the entire
-target plan is lossless and has no resolver `REVIEW`; any review or mapping blocker prevents every
-Noqlen mutation. Partial mode requires explicit `apply_mode: partial` and may apply only losslessly
-mapped, already-resolved changes while review and mapping-blocked fields are withheld and remain
-visible in preview.
-
-`preserve_existing: false` can turn a conflicting existing value from `REVIEW` into `PROPOSE`, but
-it never grants write permission by itself. Importer writes still require `apply: true`, and library
-CLI writes still require `--apply`; all existing strict or partial application checks continue to
-apply.
-
-Partial mode never accepts a `REVIEW`, selects a review candidate, serializes or reduces a mapping
-blocker, or continues after an application contract error. All eligible mapped changes remain one
-atomic subset: target-plan integrity, stale state, target shapes, and target uniqueness are fully
-validated before any mutation. A failure aborts the whole mapped subset.
-
-For example, genres `Rock, Metal` map losslessly while labels `Label A, Label B` produce a mapping
-blocker. Strict mode applies zero fields. Partial mode applies genres and withholds labels; it does
-not discard or serialize the label values. `preview` and `apply` are independent, so preview can be
-disabled without disabling application and preview output never implies application.
-
-## Track-level lyrics
-
-Noqlen distinguishes release and track enrichment contexts internally. Existing Discogs,
-MusicBrainz, Last.fm, and iTunes providers remain release-scoped. Read-only track identity adapters
-can represent selected `TrackInfo` and persistent `Item` metadata, including duration, track/disc
-position, MusicBrainz recording and release-track IDs, ISRCs, and AcoustID track IDs.
-
-LRCLIB is the first track-scoped Noqlen provider and supports plain and synchronized lyrics. It uses
-the selected track title, artist, album, and duration for an exact-signature `GET /api/get` lookup.
-Album title and duration must be available before a request is made, and LRCLIB applies approximately
-a +/-2 second duration matching tolerance. No API key is required.
-
-Noqlen does not fall back to LRCLIB search when the exact track signature is unavailable or not
-found. Beets decides which track it is; LRCLIB only enriches that selected identity. Raw lyrics are
-never logged by the provider, and fixture/test lyrics are synthetic.
-
-During an accepted importer match, Noqlen can build a track plan for each selected
-`AlbumMatch` Item/`TrackInfo` pair or for the selected singleton `TrackMatch`. Album extras and
-unmatched tracks are excluded. Track planning runs when preview or application is enabled and an
-enabled track-scoped provider can contribute to an enabled field under the configured authority.
-LRCLIB is currently the only such provider. Its adapter is created lazily and retained by the plugin
-so its in-process cache, pacing, and Retry-After state are shared across selected tracks.
-
-The track resolver baseline predicts the canonical values that normal beets 2.12.x metadata
-application will produce before any Noqlen candidate is considered:
-
-- For an album match, selected metadata is `TrackInfo.merge_with_album(AlbumInfo)`.
-- For a singleton, selected metadata is `TrackInfo.item_data`.
-- With `from_scratch: false`, Item-local canonical values form the baseline and selected metadata is
-  overlaid on it.
-- With `from_scratch: true`, the baseline mirrors `Item.clear()`: modeled writable media fields are
-  cleared, flexible metadata survives, and selected metadata is then overlaid.
-
-For the current fields, this means `lyrics` is cleared by `from_scratch: true` when selected metadata
-omits it, while the flexible `synced_lyrics` value survives. Selected overlay is presence-sensitive: a
-field absent from beets' application mapping leaves the baseline untouched, while a present empty or
-non-canonical value still overwrites the Item and removes that canonical current value. This behavior
-is covered by parity tests that invoke real `AlbumMatch.apply_metadata()` and
-`TrackMatch.apply_metadata()` for both fields, both `from_scratch` modes, and absent, non-empty, empty,
-or whitespace-only selected values.
-
-Track plans reuse the existing Field Authority, resolver, and `ChangePlan`, then analyze already
-proposed canonical changes through a separate `TrackTargetPlan`:
-
-```text
-LRCLIB
-  -> canonical lyrics / synced_lyrics
-  -> ChangePlan
-  -> TrackTargetPlan
-  -> safe preview
-```
-
-Plain `lyrics` has one lossless selected target: `TrackInfo.lyrics`. Canonical lyric content and
-internal newlines are preserved exactly. `synced_lyrics` instead produces a visible mapping blocker
-because normal beets does not model it as an equivalent standard persistent Item field. The beets
-Lyrics plugin stores canonical synchronized LRC text in `Item.lyrics` and passes native SYLT data
-separately during file writing. Synchronized lyrics are not silently collapsed into plain lyrics or
-stored as an arbitrary flexible field.
-
-With importer `apply: true`, Noqlen may now mutate only losslessly mapped selected `TrackInfo`
-fields. It does not directly update Items, store database rows, or write files; normal beets applies
-the selected metadata later in its importer lifecycle. The current writable mapping is only
-`lyrics -> TrackInfo.lyrics`. `synced_lyrics` remains unsupported and mapping-blocked.
-
-Strict mode is the default and prevents every Noqlen change for one selected track when that track
-has any resolver review or mapping blocker. Explicit partial mode may prepare already-resolved,
-losslessly mapped fields while reviews and blockers are withheld. It never accepts a review or
-converts synchronized lyrics. Each selected track is validated and applied independently, including
-target-plan integrity, effective-current stale state, target shape, and target uniqueness. Cached
-`TrackInfo.raw_data` and `TrackInfo.item_data` views are invalidated after successful mutation so
-normal later beets application observes the new metadata.
-
-Noqlen does not call `AlbumMatch.apply_metadata()` or `TrackMatch.apply_metadata()`. Downstream beets
-may later persist or write plain lyrics as part of normal import; Noqlen itself does not call Item
-storage or file-writing APIs. Preview displays only character and line counts for current and
-candidate lyric values; raw plain or synchronized lyrics are never rendered.
-
-### Execution matrix
-
-| Entry point and settings | Release behavior | Track behavior | Noqlen write boundary |
-| --- | --- | --- | --- |
-| Importer, `preview: true`, `apply: false` | Preview eligible release plans | Preview eligible selected-track plans; LRCLIB may run | No mutation |
-| Importer, `preview: true`, `apply: true` | Guarded strict/partial selected `AlbumInfo` application plus preview | Guarded strict/partial selected `TrackInfo` application plus preview | Selected `AlbumInfo` and selected `TrackInfo` only |
-| Importer, `preview: false`, `apply: true` | Guarded release application without preview | Guarded track application without preview; LRCLIB may run | Selected `AlbumInfo` and selected `TrackInfo` only |
-| Importer, `preview: false`, `apply: false` | No release work | No track work | No mutation |
-| `beet noqlenmeta` / `beet nm` | Existing album query preview or explicit database application | No singleton or per-track mode; LRCLIB is not called | Existing persistent Album policy only |
-| `beet nm --identity` | Complete-Album or singleton MusicBrainz identity audit | Global Block 024 assignment; no enrichment providers | Preview only unless `--identity --apply` explicitly stores database MBIDs |
-| `beet nm --identity-tags` | Validate database identity only | Preview complete Album/singleton files | No replacement unless `--write` is explicit |
-
-## Library command
-
-Noqlen Meta previews enrichment for albums already stored in the beets library by default:
+Preview one existing album:
 
 ```bash
-beet nm artist:Gojira
-beet nm album:"From Mars to Sirius"
-beet nm --all
+beet nm album:"Example Album"
 ```
 
-Explicit application persists eligible metadata to the beets library database. Strict mode remains
-the default, while partial mode must be explicitly requested:
+The command may use the network, but preview does not change the beets database
+or audio files. Review `KEEP`, `PROPOSE`, `REVIEW`, and `BLOCKED` results before
+continuing.
+
+## Apply To The Database
+
+After reviewing the same query, explicitly apply ordinary safe changes:
 
 ```bash
-beet nm artist:Gojira --apply
-beet nm artist:Gojira --apply --partial
-beet nm --all --apply
-beet nm --all --apply --partial
+beet nm --apply album:"Example Album"
 ```
 
-The canonical command name is `beet noqlenmeta ...`; `nm` is its preferred short alias. A non-empty
-native beets album query is required unless `--all` explicitly requests every album. The command
-operates on albums only; singleton and per-track command modes are not available.
+This changes ordinary metadata in the beets database only. It does not write
+audio-file tags. Strict mode is the default: one review or mapping blocker
+withholds every ordinary Noqlen change for that album.
 
-The command runs the same provider collection, Field Authority, resolver, and `ChangePlan` path as
-importer enrichment, then analyzes the result against an explicit persistent `Album` target map.
-Without `--apply`, it displays losslessly representable changes, resolver reviews, and mapping
-blockers without changing database rows, Items, tags, or files.
-
-`--apply` is the only CLI write permission, and `--partial` is invalid without it. Importer
-`noqlenmeta.apply` and `apply_mode` settings do not authorize or select CLI writes: command mode
-comes only from `--apply` and `--partial`. Importer `apply: true` cannot make a preview command write,
-and importer `apply: false` does not override explicit CLI application.
-
-With `--apply` alone, strict mode prevents every Noqlen database change for an Album when any
-resolver `REVIEW` or library mapping blocker exists. With `--apply --partial`, losslessly mapped and
-resolved fields may persist together while review and mapping-blocked fields remain unchanged and
-visible. Partial mode is classification before application, not best-effort exception recovery. The
-entire mapped subset is atomically validated for canonical plan integrity, local dirty state, fresh
-persisted before-state, target shape, and target uniqueness before any mutation. Stale or malformed
-mapped data aborts that whole Album subset.
-
-Application policy is evaluated independently per Album. Another eligible Album selected by the
-same query may still be stored, but an unexpected application or store failure stops later Albums.
-There is no command-wide rollback. Persistent `Album` has no supported album-level `media` field, so
-media remains withheld in partial mode and blocking in strict mode; it is never inferred from or
-applied to Items.
-
-Successful application mutates only mapped persistent Album fields and calls
-`Album.store(inherit=True)` once. Normal beets behavior propagates inheritable Album fields to Item
-database rows. Noqlen does not assign Item metadata or call `Item.store()` itself. Physical file tags
-remain unchanged: CLI database application does not call `Item.write()`, tag synchronization, file
-moves, or art operations.
-
-All selected Albums are planned before the first database write. Persistence then occurs one Album
-at a time using normal beets store transactions. There is no command-wide rollback: if one Album is
-stored and a later Album store fails, the earlier database change may remain and later Albums are
-not attempted.
-
-### Library identity mode
-
-The same command and alias provide a separate, always-previewed MusicBrainz identity mode:
+Partial mode is explicit:
 
 ```bash
-beet nm --identity album:"Example"
-beet nm --identity --all
-beet nm --identity --apply album:"Example"
+beet nm --apply --partial album:"Example Album"
 ```
 
-In identity mode, positional arguments are a normal beets Item query. Matching one or more tracks
-from an Album selects that complete persisted Album exactly once; standalone Items are audited as
-singleton targets. `--all` selects every persisted Album and every standalone Item once. Targets are
-ordered by database ID, and paths are never identity keys or preview data.
+Partial mode can store already-safe ordinary fields while leaving blocked or
+review fields unchanged. Partial is not force: it never accepts ambiguity,
+lowers confidence, bypasses stale-state checks, or applies identity/file work
+partially.
 
-Identity preview always runs. Only the exact CLI combination `--identity --apply` authorizes repair,
-and it writes only `mb_albumid`, `mb_releasegroupid`, `mb_trackid`, and `mb_releasetrackid` in the
-beets database. It does not write or read tags, invoke file synchronization, or modify physical
-files. A bare `nm --apply` remains ordinary enrichment, and importer `identity.apply` does not grant
-library repair permission. Conversely, library identity flags do not alter importer configuration.
+## Commands And Write Boundaries
 
-`--partial` remains ordinary-enrichment-only and is rejected with `--identity`. There is no identity
-`--force` option. Ambiguous, weak, incomplete, stale, unavailable, and otherwise non-repair-ready
-evidence never writes. Complete source/audit/mapping work precedes the first database update, and one
-real SQLite savepoint makes each Album-plus-Items or singleton repair atomic. Block 026 remains
-database-only; the separate identity-tag mode below owns explicit file synchronization.
+| Command | Purpose | Network | Database | Audio files |
+| --- | --- | --- | --- | --- |
+| `beet nm QUERY` | Ordinary preview | Enabled providers | No | No |
+| `beet nm --apply QUERY` | Ordinary application | Enabled providers | Ordinary album metadata | No |
+| `beet nm --identity QUERY` | Identity audit | MusicBrainz | No | No |
+| `beet nm --identity --apply QUERY` | Identity repair | MusicBrainz | Four MBID columns | No |
+| `beet nm --identity-tags QUERY` | Identity-tag preview | No | No | No |
+| `beet nm --identity-tags --write QUERY` | Four-MBID synchronization | No | Operational `mtime` only | Four MBID tags |
+| `beet write QUERY` | Native beets tag sync | No | Operational state | Generic beets fields |
 
-### Identity tag synchronization
+The importer has another boundary: Noqlen may update the metadata selected by
+beets, then beets performs its normal persistence and optional tag write.
+`import.write`, native `beet write`, and Noqlen `--identity-tags --write` are
+different controls. See [How Noqlen interacts with
+beets](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/site-docs/reference/beets-interaction.md).
 
-The existing command and alias can synchronize coherent database identity to media-file tags:
+## Providers
 
-```bash
-beet nm --identity-tags album:"Example"
-beet nm --identity-tags --all
-beet nm --identity-tags --write album:"Example"
-beet nm --identity-tags --write --all
-```
+All providers are disabled by default.
 
-The positional expression is a normal beets Item query. Matching any track expands to that complete
-persisted Album; standalone singleton Items are also supported. Preview is always the default. Only
-the exact CLI combination `--identity-tags --write` permits file replacement. Ordinary `--apply`,
-top-level application settings, and importer `identity.apply` never authorize tag writes. Run
-`nm --identity` and, where needed, `nm --identity --apply` first: synchronization requires all
-database identity copies to be canonical, complete, and internally coherent.
+| Provider | Current scope | Current contribution |
+| --- | --- | --- |
+| Discogs | Releases | Genres, styles, labels, catalog numbers, barcodes, country, year, media, format descriptions |
+| MusicBrainz enrichment | Releases with an exact release MBID | Labels, catalog numbers, barcode, country, year, media |
+| Last.fm | Releases | Filtered album genres |
+| iTunes | Releases | Album genre and release year |
+| LRCLIB | Importer-selected tracks | Plain lyrics; synchronized lyrics preview as blocked |
+| MusicBrainz identity source | Separate identity modes | Four MusicBrainz identity fields |
 
-The database is authoritative for this mode. Missing file values are filled, while conflicting or
-malformed values are intentionally replaced. Exactly `mb_albumid`, `mb_releasegroupid`, `mb_trackid`,
-and `mb_releasetrackid` are set through MediaFile's native format mappings. Every other safely
-readable writable logical tag is compared before and after and must remain unchanged.
+Discogs direct-ID lookup can work without credentials; search requires the
+optional client and generally a token. Set the token in the
+`NOQLENMETA_DISCOGS_TOKEN` environment variable rather than committing it.
 
-The source is never saved in place. A complete extension-preserving candidate is created in the same
-directory, all four fields are round-trip verified, supported filesystem metadata is checked, and a
-rollback backup is created before atomic source-path replacement. The replaced source is reopened and
-verified before only the Item's operational database `mtime` is updated. Paths, filenames, temporary
-names, and raw malformed values are not shown.
+## Fields And Formats
 
-Candidate copying and the backup-copy fallback read the source only through an `O_NOATIME` and
-no-follow descriptor. Ordinary path-based media copying is forbidden because a blocked or failed
-synchronization must not advance source atime. Files that cannot be opened for atime-safe copying are
-blocked before replacement. Safe restoration verifies original mtime and one final link in addition
-to full content, identity tags, unrelated tags, and supported filesystem metadata.
+Ordinary release fields include genres, styles, labels, catalog numbers,
+barcodes, country, year, media, and format descriptions. Mood, lyrics,
+synchronized lyrics, and cover settings are present for explicit capability
+control, but a field is usable only where an enabled provider and a lossless
+target mapping exist.
 
-Preview does not create a candidate and therefore reports that per-file write capability still
-requires `--write` candidate verification. Capability is reported as verified only after that exact
-file completes a real candidate round trip. Empty or invalid persisted paths are blocked safely and
-do not prevent another valid selected file from being processed.
+Noqlen v1 does not apply synchronized lyrics or cover art. Existing-library
+ordinary enrichment is album-only. Importer plain-lyrics enrichment applies to
+selected tracks only.
 
-Beets' `write` event is a mutable pre-write hook, so this immutable candidate workflow intentionally
-does not emit it. After replaced-source verification, committed `mtime`, and fresh Item verification,
-Noqlen emits `after_write(item, path)` followed by `database_change(lib, model)`. A listener failure is
-post-commit and never causes restoration of a correct committed file.
+Identity-tag round trips are tested with:
 
-Post-replacement bookkeeping tracks source replacement and `mtime` commit separately. A safely
-rolled-back mtime failure restores the original. If mtime commit state is uncertain, the replacement
-is reported as committed, processing stops, and the original path-private backup is retained as a
-recovery artifact rather than being deleted or used for a blind restoration.
+- FLAC
+- MP3
+- M4A/MP4
+- Ogg Vorbis
+- Opus
 
-Writes are atomic per file, not across the complete command. Results render as each file completes;
-if a later file fails, earlier verified replacements may remain committed and are reported as such.
+The identity-tag filesystem workflow requires proven no-atime, no-follow, and
+same-directory atomic-replacement guarantees. Unsupported operating systems,
+filesystems, or files block before replacement. This narrower limitation does
+not imply that ordinary database enrichment is Linux-only.
 
-During importer enrichment, Noqlen mutates only eligible fields on the selected `AlbumInfo`. It does
-not directly mutate Items or persistent Albums, add library records, write tags, or move/copy files.
-After selected-release enrichment, normal beets import behavior determines Item application,
-database persistence, file handling, and tag writing. Consequently, importer `apply: true` is a real
-metadata application feature: the normal import can persist enriched values to the beets library
-and, depending on beets configuration, file metadata.
+## beets And Navidrome
 
-Field Authority expresses provider preference and ordering for each field. Provider Capabilities
-describe the fields each current adapter can actually produce. An enabled provider is contacted only
-when its capabilities intersect both enabled user fields and its Field Authority entries; authority
-may retain future fallback vocabulary that an adapter does not implement yet.
+The beets database is information managed privately by beets. Audio-file tags
+are metadata stored inside media files. Navidrome normally scans those files;
+it does not normally read the private beets database.
 
-Set `providers.discogs.enabled: true` to preview resolved Discogs decisions after selecting an album
-match. A non-empty `NOQLENMETA_DISCOGS_TOKEN` takes precedence over
-`providers.discogs.user_token`; direct Discogs release-ID lookups do not require a token. Tokens are
-redacted and never included in preview output.
+Therefore `beet nm --apply` alone does not update what Navidrome sees. Use
+native `beet write` for generic beets database-to-file synchronization, or use
+`beet nm --identity-tags --write` only for the specialized four-MBID workflow.
+Then let Navidrome rescan according to its own configuration.
 
-Set `providers.musicbrainz.enabled: true` to enrich releases for which beets already knows an exact
-MusicBrainz release MBID. No MusicBrainz credentials are required or stored by Noqlen. The provider
-performs one direct release lookup and supports labels, catalog numbers, barcode, release country,
-release year, and media format. Release year comes from the selected release date, not the release
-group's first release date, so reissues retain edition-specific year semantics. Multiple labels,
-catalog numbers, and media formats remain structured; existing singular target mappings may report
-mapping blockers rather than discard or join those values.
+## Compatibility
 
-Set `providers.lastfm.enabled: true` to enrich the selected album identity from Last.fm
-`album.getTopTags`. Last.fm top tags are community-generated and are not typed as
-genre/style/mood. Noqlen therefore filters tags through beets' packaged LastGenre genre vocabulary
-and does not infer styles or moods from arbitrary social tags. Tags below weight 10 are discarded,
-and at most the first three accepted genres are proposed as one structured value. There is no
-Last.fm credential configuration: Noqlen uses the Last.fm key that current beets explicitly shares
-with plugins, without displaying or persisting it.
+- Python 3.10 through 3.14 are covered by the release CI matrix.
+- beets 2.12 or later within the 2.x series is required.
+- Ordinary enrichment and database identity operations are Python/beets based.
+- Identity-tag replacement is supported only where its filesystem guarantees
+  can be proven at runtime.
+- Navidrome compatibility describes a file-tag workflow, not a direct API
+  integration.
 
-Under the default genres authority, Discogs is preferred over Last.fm and Last.fm is preferred over
-iTunes. Users can reorder those built-in providers through `resolution.authority.genres`; changing
-authority does not expand Last.fm beyond its current genres-only capability.
+See the [compatibility reference](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/site-docs/reference/compatibility.md) for the
+tested matrix and limitations.
 
-Set `providers.itunes.enabled: true` to use Apple's public iTunes Search API for album enrichment.
-`storefront` is a two-letter search territory such as `us`, `br`, `gb`, or `jp`. iTunes requests are
-bounded to at most 10 album search results, and direct collection-ID or UPC lookup is preferred when
-available. No API key is required. No artwork or previews are requested or consumed. iTunes store
-country is not treated as release-country metadata, and the provider does not claim label, catalog
-number, or barcode metadata.
+## Project
 
-The pre-release `noqlenmeta.discogs` configuration from Block 004 has been replaced rather than
-retained as a parallel schema. Move its values under `noqlenmeta.providers.discogs`.
+- [Changelog](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/CHANGELOG.md)
+- [Contributing](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/CONTRIBUTING.md)
+- [Security](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/SECURITY.md)
+- [Release status and owner gates](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/RELEASE_CHECKLIST.md)
+- [Issue tracker](https://github.com/jssantogit/noqlen-meta-plugin/issues)
 
-The target-plan preview reports application state while normal beets metadata application continues
-unchanged:
-
-```text
-Noqlen Meta / beets target plan:
-
-  application: disabled (preview only)
-  planned changes: 1
-  losslessly mapped: 1
-  mapping blockers: 0
-  resolution review: 0
-  unchanged: 0
-  skipped: 0
-  mapping complete: yes
-
-  genres
-    PROPOSE
-    target: genres
-    target shape: string-list
-    proposed: Electronic, Rock
-    source: Discogs
-    confidence: 0.92
-    reason: selected 'discogs' by field authority; current value is missing
-```
-
-## MusicBrainz identity
-
-The importer identity workflow is separate from metadata enrichment, Field Authority, the resolver,
-`ChangePlan`, provider enablement, and enrichment application policy. For an already accepted album
-or singleton match, it predicts the identity normal beets application would produce, including
-`from_scratch`, then consumes the Block 024 `IdentityAuditResult`. It never selects or reranks the
-beets match. Existing MBIDs remain comparison targets, not score evidence.
-
-Preview reports the verdict, structural score and margin, assignment counts, repair readiness, and
-per-field current/expected state for release, release-group, recording, and release-track MBIDs.
-Malformed current values are labeled rather than displayed, and paths, opaque local keys, search
-queries, and private library data are omitted. Ambiguous evidence shows at most the two leading
-candidate identities and never produces a repair.
-
-Repair requires `identity.enabled: true`, `identity.apply: true`, and a uniquely selected,
-repair-ready missing or conflicting identity. Confirmed identity is a no-op; ambiguous, weak,
-incomplete, stale, malformed-source, or otherwise non-repair-ready evidence is never applied. There
-is no identity partial mode: every mapped identity change is revalidated and applied as one atomic
-set, with rollback on failure.
-
-For album matches, release and release-group IDs target the selected `AlbumInfo`, while recording and
-release-track IDs target the assigned selected `TrackInfo` objects. For singleton matches, all four
-IDs target the selected `TrackInfo` application surface. Noqlen owns only this selected metadata
-mutation and cache invalidation. It does not directly mutate `Item` or persistent `Album` objects,
-store database rows, synchronize tags, or write files; normal beets importer lifecycle remains the
-sole owner of later persistence and file behavior.
-
-Block 025 importer identity preview/repair, Block 026 persisted library identity audit/repair, and
-Block 027 database-to-file identity synchronization are integrated as separately authorized
-workflows. AcoustID, Chromaprint, fingerprinting, and recording-search evidence remain excluded from
-v1.0. The frozen remaining roadmap is Block 028 v1.0 hardening/release, then STOP.
-
-## Current status
-
-The plugin resolves release candidates from Discogs, MusicBrainz, Last.fm, and iTunes through one
-shared planning path. During importer preview, LRCLIB can plan lyrics for selected album-match or
-singleton tracks through the same Field Authority, resolver, and `ChangePlan`. A read-only
-`TrackTargetPlan` then maps plain lyrics to `TrackInfo.lyrics` and exposes synchronized lyrics as a
-mapping blocker. Importer release enrichment separately maps its release `ChangePlan` to
-`BeetsTargetPlan`; ordinary library mode maps release plans to `LibraryTargetPlan`, while explicit
-library identity mode maps Block 024 findings directly to fixed Album/Item database columns.
-Identity-tag mode separately maps coherent database identity to four MediaFile fields.
-Importer application can mutate selected `AlbumInfo` and losslessly mapped fields on selected
-`TrackInfo` through separate guarded strict or partial boundaries. CLI application is separately
-authorized by `--apply`, remains strict by default, and permits safe partial database application
-only with `--apply --partial`. Block 026 can separately repair Item identity database columns only
-with `--identity --apply`; Block 027 can replace verified files only with
-`--identity-tags --write`.
-
-See `docs/context/current.md` and `docs/context/handoff.md` before starting a development block.
+Version `1.0.0` is a prepared release candidate. Publication remains gated on
+review, merge, owner license decision, Read the Docs setup, PyPI ownership and
+trusted-publisher setup, and creation of the release tag.

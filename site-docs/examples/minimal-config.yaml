@@ -1,0 +1,8 @@
+plugins:
+  - noqlenmeta
+
+noqlenmeta:
+  preview: true
+  providers:
+    musicbrainz:
+      enabled: true

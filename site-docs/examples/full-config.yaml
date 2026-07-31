@@ -1,0 +1,46 @@
+plugins:
+  - noqlenmeta
+
+noqlenmeta:
+  preview: true
+  apply: false
+  apply_mode: strict
+
+  identity:
+    enabled: false
+    preview: true
+    apply: false
+
+  fields:
+    genres: true
+    styles: true
+    labels: true
+    catalog_numbers: true
+    barcodes: true
+    country: true
+    year: true
+    media: true
+    format_descriptions: true
+    mood: false
+    lyrics: false
+    synced_lyrics: false
+    cover: false
+
+  providers:
+    discogs:
+      enabled: false
+      user_token: ""
+    musicbrainz:
+      enabled: false
+    lastfm:
+      enabled: false
+    itunes:
+      enabled: false
+      storefront: us
+    lrclib:
+      enabled: false
+
+  resolution:
+    authority: {}
+    min_confidence: {}
+    preserve_existing: {}

@@ -17,6 +17,7 @@ from beetsplug.noqlenmeta.beets_application import (
 )
 from beetsplug.noqlenmeta.beets_mapping import map_change_plan_to_beets
 from beetsplug.noqlenmeta.changeplan import ChangePlan, build_change_plan
+from beetsplug.noqlenmeta.configuration import default_config
 from beetsplug.noqlenmeta.domain import (
     MetadataCandidate,
     MetadataValue,
@@ -130,21 +131,7 @@ from beetsplug.noqlenmeta.track_preview import (
     render_incomplete_track_note,
 )
 
-_FIELD_DEFAULTS = {
-    "genres": True,
-    "styles": True,
-    "labels": True,
-    "catalog_numbers": True,
-    "barcodes": True,
-    "country": True,
-    "year": True,
-    "media": True,
-    "format_descriptions": True,
-    "mood": False,
-    "lyrics": False,
-    "synced_lyrics": False,
-    "cover": False,
-}
+_FIELD_DEFAULTS = default_config()["fields"]
 _RESOLUTION_SECTIONS = frozenset({"authority", "min_confidence", "preserve_existing"})
 
 
@@ -178,43 +165,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
     def __init__(self) -> None:
         super().__init__()
-        self.config.add(
-            {
-                "preview": True,
-                "apply": False,
-                "apply_mode": "strict",
-                "identity": {
-                    "enabled": False,
-                    "preview": True,
-                    "apply": False,
-                },
-                "fields": _FIELD_DEFAULTS,
-                "providers": {
-                    "discogs": {
-                        "enabled": False,
-                        "user_token": "",
-                    },
-                    "musicbrainz": {
-                        "enabled": False,
-                    },
-                    "lastfm": {
-                        "enabled": False,
-                    },
-                    "itunes": {
-                        "enabled": False,
-                        "storefront": "us",
-                    },
-                    "lrclib": {
-                        "enabled": False,
-                    },
-                },
-                "resolution": {
-                    "authority": {},
-                    "min_confidence": {},
-                    "preserve_existing": {},
-                },
-            }
-        )
+        self.config.add(default_config())
         self.config["providers"]["discogs"]["user_token"].redact = True
         self._lastfm_provider = None
         self._lrclib_provider = None
@@ -222,7 +173,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         self.register_listener("import_task_choice", self._import_task_choice)
         self._command = Subcommand(
             "noqlenmeta",
-            help="preview Noqlen metadata enrichment or MusicBrainz identity for the library",
+            help="preview or apply metadata and MusicBrainz identity workflows",
             aliases=["nm"],
         )
         self._command.parser.add_option(
@@ -230,7 +181,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
             dest="identity",
             action="store_true",
             default=False,
-            help="audit MusicBrainz identity instead of ordinary metadata enrichment",
+            help="audit MusicBrainz identity; --apply repairs database fields only",
         )
         self._command.parser.add_option(
             "--identity-tags",
@@ -247,21 +198,21 @@ class NoqlenMetaPlugin(BeetsPlugin):
             dest="all",
             action="store_true",
             default=False,
-            help="explicitly process every album in the library",
+            help="process all targets in the selected mode instead of using a query",
         )
         self._command.parser.add_option(
             "--apply",
             dest="apply",
             action="store_true",
             default=False,
-            help="strictly persist eligible metadata to the library database",
+            help="apply ordinary metadata or identity repair to the database; never writes files",
         )
         self._command.parser.add_option(
             "--partial",
             dest="partial",
             action="store_true",
             default=False,
-            help="with --apply, persist mapped fields and withhold unresolved fields",
+            help="ordinary metadata only: with --apply, store safe fields and withhold blockers",
         )
         self._command.parser.add_option(
             "--write",

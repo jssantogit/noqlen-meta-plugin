@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+"""Validate public documentation coverage against production interfaces."""
+
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+from beetsplug.noqlenmeta import NoqlenMetaPlugin
+from beetsplug.noqlenmeta.configuration import default_config
+
+ROOT = Path(__file__).resolve().parents[1]
+DOCS = ROOT / "site-docs"
+README = ROOT / "README.md"
+COMMAND_REFERENCE = DOCS / "reference" / "commands.md"
+CONFIG_REFERENCE = DOCS / "reference" / "configuration.md"
+FULL_CONFIG = DOCS / "examples" / "full-config.yaml"
+
+FORBIDDEN_README_TERMS = (
+    "Block 0",
+    "Noqlen Playbook",
+    "FieldDecision",
+    "ChangePlan",
+    "BeetsTargetPlan",
+    "TrackTargetPlan",
+    "handoff",
+)
+FORBIDDEN_PUBLIC_LINKS = (
+    "docs/context/",
+    "docs/specs/",
+    "docs/adr/",
+    "handoff.md",
+)
+SECRET_PATTERNS = (
+    re.compile(r"(?i)(?:api[_-]?key|access[_-]?token|password|secret)\s*[:=]\s*[\"'][^\"']{8,}[\"']"),
+    re.compile(r"/(?:home|Users)/[^/\s]+/"),
+    re.compile(r"[A-Za-z]:\\Users\\[^\\\s]+\\"),
+)
+
+
+class UniqueKeyLoader(yaml.SafeLoader):
+    """YAML loader that rejects duplicate mapping keys."""
+
+
+def _construct_mapping(loader: UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False) -> Any:
+    mapping: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"duplicate key: {key!r}",
+                key_node.start_mark,
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_mapping,
+)
+
+
+def _load_yaml(path: Path) -> Any:
+    return yaml.load(path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)
+
+
+def _leaf_paths(value: dict[str, Any], prefix: str = "noqlenmeta") -> dict[str, Any]:
+    leaves: dict[str, Any] = {}
+    for key, child in value.items():
+        path = f"{prefix}.{key}"
+        if isinstance(child, dict) and child:
+            leaves.update(_leaf_paths(child, path))
+        else:
+            leaves[path] = child
+    return leaves
+
+
+def _nav_paths(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [path for child in value for path in _nav_paths(child)]
+    if isinstance(value, dict):
+        return [path for child in value.values() for path in _nav_paths(child)]
+    return []
+
+
+def _public_markdown() -> list[Path]:
+    return sorted(DOCS.rglob("*.md"))
+
+
+def check() -> list[str]:
+    failures: list[str] = []
+    command_text = COMMAND_REFERENCE.read_text(encoding="utf-8")
+    config_text = CONFIG_REFERENCE.read_text(encoding="utf-8")
+    readme_text = README.read_text(encoding="utf-8")
+    public_pages = _public_markdown()
+    public_text = "\n".join(path.read_text(encoding="utf-8") for path in public_pages)
+
+    command = NoqlenMetaPlugin().commands()[0]
+    long_options = sorted(
+        option
+        for parser_option in command.parser.option_list
+        for option in parser_option._long_opts
+        if option != "--help"
+    )
+    for option in long_options:
+        if f"`{option}`" not in command_text:
+            failures.append(f"command reference omits {option}")
+
+    defaults = default_config()
+    for path in _leaf_paths(defaults):
+        if f"`{path}`" not in config_text:
+            failures.append(f"configuration reference omits {path}")
+
+    full_config = _load_yaml(FULL_CONFIG)
+    if not isinstance(full_config, dict) or full_config.get("noqlenmeta") != defaults:
+        failures.append("full-config.yaml does not exactly match production defaults")
+    for example in sorted((DOCS / "examples").glob("*.yaml")):
+        try:
+            parsed = _load_yaml(example)
+        except yaml.YAMLError as error:
+            failures.append(f"example YAML does not parse: {example.name}: {error}")
+        else:
+            if not isinstance(parsed, dict):
+                failures.append(f"example YAML is not a mapping: {example.name}")
+
+    mkdocs = _load_yaml(ROOT / "mkdocs.yml")
+    nav_paths = _nav_paths(mkdocs.get("nav", []))
+    for relative in nav_paths:
+        if not (DOCS / relative).is_file():
+            failures.append(f"navigation target does not exist: {relative}")
+    nav_markdown = {path for path in nav_paths if path.endswith(".md")}
+    actual_markdown = {str(path.relative_to(DOCS)) for path in public_pages}
+    omitted = sorted(actual_markdown - nav_markdown)
+    if omitted:
+        failures.append(f"public Markdown omitted from nav: {', '.join(omitted)}")
+
+    readme_lines = len(readme_text.splitlines())
+    if readme_lines > 500:
+        failures.append(f"README exceeds 500 lines: {readme_lines}")
+    for term in FORBIDDEN_README_TERMS:
+        if term.casefold() in readme_text.casefold():
+            failures.append(f"README contains internal term: {term}")
+
+    required_distinctions = (
+        "`--apply`",
+        "`--write`",
+        "`import.write`",
+        "native `beet write`",
+        "strict",
+        "partial",
+        "partial is not force",
+        "`providers.musicbrainz.enabled`",
+    )
+    folded = public_text.casefold()
+    for phrase in required_distinctions:
+        if phrase.casefold() not in folded:
+            failures.append(f"public docs omit required distinction: {phrase}")
+    database_only_apply = (
+        "--apply` authorizes database changes only",
+        "--apply` changes eligible ordinary fields in the beets database only",
+    )
+    if not any(statement in folded for statement in database_only_apply):
+        failures.append("public docs do not explicitly state that --apply is database-only")
+    separate_musicbrainz = (
+        "does not control this identity source",
+        "neither enables nor disables identity audit",
+    )
+    if not any(statement in folded for statement in separate_musicbrainz):
+        failures.append("public docs do not separate MusicBrainz enrichment from identity audit")
+
+    for link in FORBIDDEN_PUBLIC_LINKS:
+        if link.casefold() in folded:
+            failures.append(f"public docs link to internal project material: {link}")
+    for pattern in SECRET_PATTERNS:
+        for page in public_pages:
+            if pattern.search(page.read_text(encoding="utf-8")):
+                failures.append(f"possible secret or private path in {page.relative_to(ROOT)}")
+
+    return failures
+
+
+def main() -> int:
+    failures = check()
+    if failures:
+        print("FAIL: public documentation validation")
+        for failure in failures:
+            print(f"- {failure}")
+        return 1
+    print("PASS: public documentation matches production interfaces")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

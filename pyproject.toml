@@ -4,15 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "beets-noqlenmeta"
-version = "0.0.0"
-description = "Universal multi-provider metadata enrichment for beets"
+version = "1.0.0"
+description = "Multi-provider metadata enrichment and MusicBrainz identity tools for beets"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "beets>=2.12,<3",
 ]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Topic :: Multimedia :: Sound/Audio",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -20,15 +23,24 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
 ]
+keywords = ["beets", "metadata", "musicbrainz", "discogs", "music-library"]
+
+[project.urls]
+Documentation = "https://noqlen-meta-plugin.readthedocs.io/"
+Repository = "https://github.com/jssantogit/noqlen-meta-plugin"
+Issues = "https://github.com/jssantogit/noqlen-meta-plugin/issues"
+Changelog = "https://github.com/jssantogit/noqlen-meta-plugin/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 discogs = [
     "python3-discogs-client>=2.8,<3",
 ]
 dev = [
+    "build>=1.2",
     "pytest>=8",
     "python3-discogs-client>=2.8,<3",
     "ruff>=0.9",
+    "twine>=6",
 ]
 
 [tool.setuptools.packages.find]

@@ -1,0 +1,179 @@
+# Configuration Reference
+
+You will find every public Noqlen Meta YAML key, its default, users, effects,
+and write authority. The canonical complete example is
+[`full-config.yaml`](../examples/full-config.yaml).
+
+All paths below are relative to the beets configuration root and begin with
+`noqlenmeta`.
+
+## Importer Controls
+
+### `noqlenmeta.preview`
+
+- Type: boolean. Default: `true`. Accepted: `true`, `false`.
+- Used by: importer ordinary release and selected-track enrichment only.
+- Effect: renders importer ordinary plans when work is eligible.
+- Grants writes: no.
+- Interaction: independent of `noqlenmeta.apply`; neither setting controls the library command.
+- Example: `preview: true`.
+
+### `noqlenmeta.apply`
+
+- Type: boolean. Default: `false`. Accepted: `true`, `false`.
+- Used by: importer ordinary release and selected-track enrichment only.
+- Effect: permits guarded mutation of metadata already selected by beets.
+- Grants writes: selected importer metadata only; not direct database or file writes.
+- Interaction: final persistence and tag writing remain normal beets importer behavior.
+- Example: `apply: true`.
+
+### `noqlenmeta.apply_mode`
+
+- Type: string. Default: `strict`. Accepted: `strict`, `partial`.
+- Used by: importer ordinary enrichment only.
+- Effect: classifies selected release/track ordinary metadata application.
+- Grants writes: no; `noqlenmeta.apply: true` is still required.
+- Does not affect: `beet nm --apply`, identity, or identity-tag modes.
+- Example: `apply_mode: partial`.
+
+The value is normalized for surrounding whitespace and case when importer
+application is enabled. Invalid values stop application.
+
+## Importer Identity Controls
+
+| Path | Type | Default | Used by | Effect and interaction |
+| --- | --- | --- | --- | --- |
+| `noqlenmeta.identity.enabled` | boolean | `false` | Identity importer | Master gate for identity audit; separate from enrichment provider settings. |
+| `noqlenmeta.identity.preview` | boolean | `true` | Identity importer | Renders identity audit when enabled; grants no writes. |
+| `noqlenmeta.identity.apply` | boolean | `false` | Identity importer | Permits coherent selected-metadata repair; requires `identity.enabled: true`. |
+
+Accepted values are `true` or `false`. These keys do not control the library
+`--identity` command. Identity importer repair mutates selected `AlbumInfo` and
+`TrackInfo` only; beets owns later persistence and file behavior.
+
+`providers.musicbrainz.enabled` neither enables nor disables identity audit.
+
+```yaml
+identity:
+  enabled: true
+  preview: true
+  apply: false
+```
+
+## Field Controls
+
+Every field key is boolean, accepts `true` or `false`, grants no write
+permission, and is used only where a provider scope and lossless target mapping
+exist. Enabling a field does not guarantee an enabled provider can supply it.
+
+| Path | Default | Importer use | Ordinary library use | Important interaction |
+| --- | ---: | --- | --- | --- |
+| `noqlenmeta.fields.genres` | `true` | Release | Album | Discogs, Last.fm, iTunes; list mapping. |
+| `noqlenmeta.fields.styles` | `true` | Release | Album | Discogs; persistent target is singular. |
+| `noqlenmeta.fields.labels` | `true` | Release | Album | Discogs/MusicBrainz; multiple values can block singular targets. |
+| `noqlenmeta.fields.catalog_numbers` | `true` | Release | Album | Discogs/MusicBrainz; multiple values can block. |
+| `noqlenmeta.fields.barcodes` | `true` | Release | Album | Discogs/MusicBrainz; multiple values can block. |
+| `noqlenmeta.fields.country` | `true` | Release | Album | Discogs/MusicBrainz; iTunes storefront is not release country. |
+| `noqlenmeta.fields.year` | `true` | Release | Album | MusicBrainz, Discogs, iTunes. |
+| `noqlenmeta.fields.media` | `true` | Release | Preview/block | Importer target exists; persistent Album target does not. |
+| `noqlenmeta.fields.format_descriptions` | `true` | Preview/block | Preview/block | Discogs can supply it; v1 has no lossless ordinary target. |
+| `noqlenmeta.fields.mood` | `false` | None currently | None currently | No current provider adapter contributes mood. |
+| `noqlenmeta.fields.lyrics` | `false` | Selected tracks | None | LRCLIB plain lyrics map to selected `TrackInfo.lyrics`. |
+| `noqlenmeta.fields.synced_lyrics` | `false` | Preview/block | None | LRCLIB can supply it; v1 does not apply synchronized lyrics. |
+| `noqlenmeta.fields.cover` | `false` | None currently | None currently | v1 does not fetch or write cover art. |
+
+Example:
+
+```yaml
+fields:
+  genres: true
+  lyrics: false
+```
+
+Field settings do not control identity importer, identity library, or
+identity-tag commands, whose four fields are fixed.
+
+## Provider Controls
+
+Every `enabled` key is boolean, defaults to `false`, accepts `true`/`false`,
+and grants no write permission. Release providers are used by importer release
+enrichment and ordinary library mode. LRCLIB is used only for selected importer
+tracks. No provider key controls identity-tag mode.
+
+| Path | Type | Default | Effect and dependencies |
+| --- | --- | --- | --- |
+| `noqlenmeta.providers.discogs.enabled` | boolean | `false` | Enables release collection when field authority intersects Discogs capability; search needs the optional Discogs dependency. |
+| `noqlenmeta.providers.discogs.user_token` | string | empty | Optional Discogs token; redacted; a non-empty `NOQLENMETA_DISCOGS_TOKEN` environment value takes precedence. |
+| `noqlenmeta.providers.musicbrainz.enabled` | boolean | `false` | Enables exact-release-MBID enrichment only; no credentials; does not control identity audit. |
+| `noqlenmeta.providers.lastfm.enabled` | boolean | `false` | Enables filtered album genres; uses the API key current beets shares with plugins. |
+| `noqlenmeta.providers.itunes.enabled` | boolean | `false` | Enables album genres/year from the public search API. |
+| `noqlenmeta.providers.itunes.storefront` | string | `us` | Two ASCII letters such as `us`, `gb`, or `jp`; normalized lowercase when iTunes is used. |
+| `noqlenmeta.providers.lrclib.enabled` | boolean | `false` | Enables exact-signature selected-track lookup; no API key. |
+
+Token example without a secret value:
+
+```yaml
+providers:
+  discogs:
+    enabled: true
+    user_token: ""
+```
+
+Prefer setting `NOQLENMETA_DISCOGS_TOKEN` in the process environment. Never
+commit a real token. Direct Discogs release-ID lookup does not require a token;
+search generally does.
+
+## Resolution Controls
+
+These three mapping settings are used by importer ordinary enrichment and the
+ordinary library command. They are not used by either identity mode and grant
+no write permission.
+
+### `noqlenmeta.resolution.authority`
+
+- Type: mapping from field name to a non-empty ordered list of current provider names.
+- Default: `{}` (all fields use built-in authority).
+- Accepted providers: `discogs`, `musicbrainz`, `lastfm`, `itunes`, `lrclib`.
+- Effect: replaces the built-in provider order for each named field.
+- Validation: field/provider names must be known and unique after normalization.
+- Interaction: does not enable providers or add capabilities.
+
+```yaml
+authority:
+  genres: [discogs, lastfm, itunes]
+```
+
+### `noqlenmeta.resolution.min_confidence`
+
+- Type: mapping from field name to finite number.
+- Default: `{}`; built-in threshold is `0.8` for each field.
+- Accepted range: inclusive `0.0` through `1.0`; booleans are invalid.
+- Effect: candidates below the field threshold are ineligible.
+- Grants writes: no.
+
+```yaml
+min_confidence:
+  genres: 0.85
+```
+
+### `noqlenmeta.resolution.preserve_existing`
+
+- Type: mapping from field name to boolean.
+- Default: `{}`; built-in behavior is `true` for each field.
+- Accepted: `true`, `false`.
+- Effect: when false, a qualified candidate may replace a conflicting current value without `REVIEW`.
+- Grants writes: no; importer still needs `apply: true`, and the library command still needs `--apply`.
+
+```yaml
+preserve_existing:
+  year: false
+```
+
+## Complete Examples
+
+- [`minimal-config.yaml`](../examples/minimal-config.yaml) is the safe starting point.
+- [`full-config.yaml`](../examples/full-config.yaml) contains every public key exactly once with valid values.
+
+The full example is illustrative, not a recommendation to enable every
+provider or field. Identity-tag file replacement has no YAML permission; only
+CLI `--identity-tags --write` authorizes it.

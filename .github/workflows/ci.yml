@@ -9,29 +9,98 @@ permissions:
   contents: read
 
 jobs:
-  validate:
-    runs-on: ubuntu-latest
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.13"]
-
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-
       - name: Install project
         run: python -m pip install -e ".[dev]"
-
       - name: Lint
         run: ruff check .
-
-      - name: Test
+      - name: Offline tests
         run: pytest -m "not live"
-
       - name: Repository hygiene
         run: python scripts/check_repo_contamination.py
+
+  beets-compatibility:
+    name: beets ${{ matrix.beets }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - beets: minimum-2.12.0
+            requirement: beets==2.12.0
+          - beets: latest-below-3
+            requirement: beets<3
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install compatibility boundary
+        run: python -m pip install -e ".[dev]" "${{ matrix.requirement }}"
+      - name: Run focused compatibility tests
+        run: >-
+          pytest
+          tests/test_plugin_loads.py
+          tests/test_beets_integration.py
+          tests/test_library_cli.py
+          tests/identity/test_library_identity_command.py
+          tests/identity/test_identity_tag_command.py
+
+  documentation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install project and pinned documentation dependencies
+        run: python -m pip install -e . -r requirements-docs.txt
+      - name: Validate public documentation contract
+        run: python scripts/check_public_docs.py
+      - name: Build documentation strictly
+        run: mkdocs build --strict
+
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install release tooling
+        run: python -m pip install build twine
+      - name: Build once
+        run: python -m build
+      - name: Validate rendered metadata
+        run: python -m twine check --strict dist/*
+      - name: Inspect archive contents
+        run: python scripts/check_distribution.py dist
+      - name: Clean-install smoke test
+        run: |
+          python -m venv /tmp/noqlen-smoke
+          /tmp/noqlen-smoke/bin/python -m pip install dist/*.whl
+          /tmp/noqlen-smoke/bin/python -c "import beetsplug.noqlenmeta"
+          /tmp/noqlen-smoke/bin/beet -p noqlenmeta nm --help

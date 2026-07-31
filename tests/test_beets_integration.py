@@ -46,6 +46,8 @@ FUTURE_FIELDS = ("mood", "lyrics", "synced_lyrics", "cover")
 
 @pytest.fixture(autouse=True)
 def restore_beets_config() -> object:
+    # Materialize beets' lazy defaults before snapshotting its source list.
+    config["timeout"].get()
     sources = list(config.sources)
     yield
     config.sources[:] = sources

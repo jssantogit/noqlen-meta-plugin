@@ -1,0 +1,85 @@
+site_name: Noqlen Meta
+site_description: Multi-provider metadata enrichment and MusicBrainz identity tools for beets
+repo_url: https://github.com/jssantogit/noqlen-meta-plugin
+repo_name: jssantogit/noqlen-meta-plugin
+edit_uri: edit/main/site-docs/
+docs_dir: site-docs
+use_directory_urls: true
+strict: true
+
+theme:
+  name: material
+  language: en
+  font: false
+  features:
+    - content.code.copy
+    - navigation.indexes
+    - navigation.sections
+    - search.highlight
+    - search.suggest
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - search:
+      lang: en
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - getting-started/index.md
+      - Installation: getting-started/installation.md
+      - First Preview: getting-started/first-preview.md
+  - Concepts:
+      - concepts/index.md
+      - Database, Files, and Navidrome: concepts/database-files-navidrome.md
+      - Preview, Apply, and Write: concepts/preview-apply-write.md
+      - Strict and Partial: concepts/strict-vs-partial.md
+      - Result Statuses: concepts/result-statuses.md
+      - Providers and Field Authority: concepts/providers-and-field-authority.md
+  - How-to Guides:
+      - guides/index.md
+      - Import Enrichment: guides/import-enrichment.md
+      - Existing Library: guides/existing-library.md
+      - MusicBrainz Identity: guides/musicbrainz-identity.md
+      - Identity Tags: guides/identity-tags.md
+      - Navidrome Workflow: guides/navidrome.md
+      - Whole Library: guides/whole-library.md
+  - Reference:
+      - reference/index.md
+      - Commands: reference/commands.md
+      - Configuration: reference/configuration.md
+      - Providers: reference/providers.md
+      - Fields: reference/fields.md
+      - Compatibility: reference/compatibility.md
+      - beets Interaction: reference/beets-interaction.md
+  - Troubleshooting: troubleshooting/index.md
+  - Advanced:
+      - Safety: advanced/safety.md
+      - Architecture: advanced/architecture.md
+  - Project:
+      - Changelog: project/changelog.md
+      - Contributing: project/contributing.md
+      - Release: project/release.md

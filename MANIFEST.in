@@ -1,0 +1,15 @@
+include README.md
+include CHANGELOG.md
+include CONTRIBUTING.md
+include SECURITY.md
+include pyproject.toml
+recursive-include beetsplug *.py
+prune .github
+prune docs
+prune site-docs
+prune tests
+exclude RELEASE_CHECKLIST.md
+exclude mkdocs.yml
+exclude requirements-docs.txt
+exclude .readthedocs.yaml
+global-exclude __pycache__ *.py[cod]
