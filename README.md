@@ -75,6 +75,11 @@ noqlenmeta:
   apply: false
   apply_mode: strict
 
+  identity:
+    enabled: false
+    preview: true
+    apply: false
+
   fields:
     genres: true
     styles: true
@@ -134,6 +139,13 @@ noqlenmeta:
 `resolution.min_confidence` controls the field-level eligibility threshold, and
 `resolution.preserve_existing` controls whether an existing conflict requires review. Every advanced
 setting is optional; empty mappings use the built-in defaults.
+
+`identity` controls a separate MusicBrainz identity workflow. All three settings are booleans.
+`enabled` defaults to `false` and is the master gate; `preview` defaults to `true`; `apply` defaults
+to `false`. `identity.apply: true` is invalid unless identity is enabled. Preview and application are
+independent, so an enabled audit may preview without repair or repair without rendering a preview.
+These settings do not inherit permission from top-level enrichment `preview`, `apply`, or
+`apply_mode`, and `providers.musicbrainz.enabled` neither enables nor disables identity auditing.
 
 A configured authority list replaces the default order for that field; it does not merge with or
 prepend to the default. An omitted field keeps its built-in default. The first provider is highest
@@ -388,17 +400,37 @@ Noqlen Meta / beets target plan:
     reason: selected 'discogs' by field authority; current value is missing
 ```
 
-## MusicBrainz identity roadmap
+## MusicBrainz identity
 
-Block 024 introduces an internal, read-only MusicBrainz identity audit engine. It hydrates release
-candidates and uses album-wide title, duration, artist, count, and multidisc order evidence to make a
-global local-track-to-release-track assignment. Existing MBIDs are comparison targets only and never
-boost their own correctness score.
+The importer identity workflow is separate from metadata enrichment, Field Authority, the resolver,
+`ChangePlan`, provider enablement, and enrichment application policy. For an already accepted album
+or singleton match, it predicts the identity normal beets application would produce, including
+`from_scratch`, then consumes the Block 024 `IdentityAuditResult`. It never selects or reranks the
+beets match. Existing MBIDs remain comparison targets, not score evidence.
 
-This is not yet a user-operational repair feature. There is no importer or library CLI integration,
-no MBID mutation, no database or file-tag write, and no physical file write. AcoustID and
-fingerprinting remain deferred beyond v1.0. Blocks 025 and 026 will consume the audit result for
-separately reviewed importer and library workflows.
+Preview reports the verdict, structural score and margin, assignment counts, repair readiness, and
+per-field current/expected state for release, release-group, recording, and release-track MBIDs.
+Malformed current values are labeled rather than displayed, and paths, opaque local keys, search
+queries, and private library data are omitted. Ambiguous evidence shows at most the two leading
+candidate identities and never produces a repair.
+
+Repair requires `identity.enabled: true`, `identity.apply: true`, and a uniquely selected,
+repair-ready missing or conflicting identity. Confirmed identity is a no-op; ambiguous, weak,
+incomplete, stale, malformed-source, or otherwise non-repair-ready evidence is never applied. There
+is no identity partial mode: every mapped identity change is revalidated and applied as one atomic
+set, with rollback on failure.
+
+For album matches, release and release-group IDs target the selected `AlbumInfo`, while recording and
+release-track IDs target the assigned selected `TrackInfo` objects. For singleton matches, all four
+IDs target the selected `TrackInfo` application surface. Noqlen owns only this selected metadata
+mutation and cache invalidation. It does not directly mutate `Item` or persistent `Album` objects,
+store database rows, synchronize tags, or write files; normal beets importer lifecycle remains the
+sole owner of later persistence and file behavior.
+
+Block 025 importer identity preview/repair is integrated. Library identity audit/repair is absent and
+belongs to Block 026; identity tag synchronization is absent and belongs to Block 027. AcoustID,
+Chromaprint, fingerprinting, and recording-search evidence remain excluded from v1.0. The frozen
+remaining roadmap is Block 026, Block 027, Block 028 v1.0 hardening/release, then STOP.
 
 ## Current status
 

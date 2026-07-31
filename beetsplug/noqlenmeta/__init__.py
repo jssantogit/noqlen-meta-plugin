@@ -23,6 +23,22 @@ from beetsplug.noqlenmeta.domain import (
     ReleaseEnrichmentContext,
     TrackEnrichmentContext,
 )
+from beetsplug.noqlenmeta.identity import (
+    BeetsMusicBrainzIdentitySource,
+    IdentityImportApplicationResult,
+    IdentitySourceError,
+    ImportIdentityAuditResult,
+    MusicBrainzIdentitySource,
+    apply_import_identity_plan,
+    audit_with_musicbrainz_source,
+    identity_context_from_selected_import,
+    map_identity_audit_to_import_targets,
+    selected_import_identity,
+)
+from beetsplug.noqlenmeta.identity.importer_preview import (
+    render_import_identity_audit,
+    render_incomplete_import_identity_note,
+)
 from beetsplug.noqlenmeta.integration import (
     ResolutionSettingsError,
     context_from_album_info,
@@ -101,6 +117,10 @@ _FIELD_DEFAULTS = {
 _RESOLUTION_SECTIONS = frozenset({"authority", "min_confidence", "preserve_existing"})
 
 
+class IdentityImporterSettingsError(RuntimeError):
+    """Raised before provider work when importer identity settings are unsafe."""
+
+
 @dataclass(frozen=True, slots=True)
 class LibraryAlbumPlan:
     """One prepared command plan retained until every Album is planned."""
@@ -121,6 +141,11 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 "preview": True,
                 "apply": False,
                 "apply_mode": "strict",
+                "identity": {
+                    "enabled": False,
+                    "preview": True,
+                    "apply": False,
+                },
                 "fields": _FIELD_DEFAULTS,
                 "providers": {
                     "discogs": {
@@ -151,6 +176,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         self.config["providers"]["discogs"]["user_token"].redact = True
         self._lastfm_provider = None
         self._lrclib_provider = None
+        self._musicbrainz_identity_source: MusicBrainzIdentitySource | None = None
         self.register_listener("import_task_choice", self._import_task_choice)
         self._command = Subcommand(
             "noqlenmeta",
@@ -184,9 +210,11 @@ class NoqlenMetaPlugin(BeetsPlugin):
         return [self._command]
 
     def _import_task_choice(self, session: object, task: object) -> None:
+        identity_enabled, identity_preview, identity_apply = self._identity_settings()
         album_info = eligible_album_info(task)
         selected_tracks = selected_import_tracks(task)
-        if album_info is None and not selected_tracks:
+        selected_identity = selected_import_identity(task)
+        if album_info is None and not selected_tracks and selected_identity is None:
             return
 
         apply_enabled = self.config["apply"].get(bool)
@@ -207,8 +235,20 @@ class NoqlenMetaPlugin(BeetsPlugin):
             and self._has_contributing_track_provider(policy)
             and (preview_enabled or apply_enabled)
         )
-        if not release_can_contribute and not track_can_contribute:
+        identity_can_execute = (
+            identity_enabled
+            and (identity_preview or identity_apply)
+            and selected_identity is not None
+        )
+        if not release_can_contribute and not track_can_contribute and not identity_can_execute:
             return
+
+        match = getattr(task, "match", None)
+        from_scratch = None
+        if track_can_contribute or identity_can_execute:
+            if not isinstance(match, (AlbumMatch, TrackMatch)):
+                raise TypeError("selected importer metadata requires a beets match")
+            from_scratch = match.from_scratch(None)
 
         if release_can_contribute and album_info is not None:
             context = context_from_album_info(album_info)
@@ -274,10 +314,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                         )
 
         if track_can_contribute:
-            match = getattr(task, "match", None)
-            if not isinstance(match, (AlbumMatch, TrackMatch)):
-                raise TypeError("selected importer tracks require a beets match")
-            from_scratch = match.from_scratch(None)
+            assert from_scratch is not None
             for selected in selected_tracks:
                 context = context_from_selected_import_track(selected)
                 if context is None:
@@ -302,6 +339,88 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     render_import_track_plan(planning_result, track_application_result)
                 elif track_application_result is not None:
                     self._log_track_application_result(track_application_result)
+
+        if identity_can_execute:
+            assert selected_identity is not None
+            assert from_scratch is not None
+            identity_context = identity_context_from_selected_import(
+                selected_identity,
+                from_scratch=from_scratch,
+            )
+            if identity_context is None:
+                if identity_preview:
+                    render_incomplete_import_identity_note()
+                else:
+                    self._log.warning(
+                        "Noqlen Meta: selected import has insufficient identity structure "
+                        "for MusicBrainz audit"
+                    )
+                return
+            try:
+                identity_audit = audit_with_musicbrainz_source(
+                    identity_context,
+                    self._identity_source(),
+                )
+            except IdentitySourceError:
+                self._log.warning("Noqlen Meta: MusicBrainz identity audit unavailable")
+                return
+            identity_result = ImportIdentityAuditResult(
+                selected_identity,
+                identity_context,
+                identity_audit,
+            )
+            identity_target_plan = map_identity_audit_to_import_targets(
+                identity_result.audit,
+                match_kind=selected_identity.kind,
+            )
+            identity_application_result = None
+            if identity_apply:
+                identity_application_result = apply_import_identity_plan(
+                    selected_identity,
+                    identity_target_plan,
+                    from_scratch=from_scratch,
+                )
+            if identity_preview:
+                render_import_identity_audit(
+                    identity_result,
+                    identity_target_plan,
+                    identity_application_result,
+                )
+            elif identity_application_result is not None:
+                self._log_identity_application_result(identity_application_result)
+
+    def _identity_settings(self) -> tuple[bool, bool, bool]:
+        try:
+            enabled = self.config["identity"]["enabled"].get(bool)
+            preview = self.config["identity"]["preview"].get(bool)
+            apply = self.config["identity"]["apply"].get(bool)
+        except confuse.ConfigError as error:
+            raise IdentityImporterSettingsError("identity settings must be booleans") from error
+        if not enabled and apply:
+            raise IdentityImporterSettingsError(
+                "identity application requires identity to be enabled"
+            )
+        return enabled, preview, apply
+
+    def _identity_source(self) -> MusicBrainzIdentitySource:
+        if self._musicbrainz_identity_source is None:
+            self._musicbrainz_identity_source = BeetsMusicBrainzIdentitySource()
+        return self._musicbrainz_identity_source
+
+    def _log_identity_application_result(
+        self, result: IdentityImportApplicationResult
+    ) -> None:
+        if result.is_blocked:
+            self._log.warning(
+                "Noqlen Meta: MusicBrainz identity repair blocked by ambiguous evidence"
+            )
+        elif result.is_confirmed_noop:
+            self._log.info("Noqlen Meta: selected MusicBrainz identity already confirmed")
+        elif result.has_applied_changes:
+            self._log.info(
+                "Noqlen Meta: prepared {} MusicBrainz identity field(s) for beets application",
+                len(result.applied_changes),
+            )
 
     def _log_track_application_result(self, result: TrackApplicationResult) -> None:
         """Log one application outcome without selected identity or metadata values."""

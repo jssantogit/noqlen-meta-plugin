@@ -10,8 +10,8 @@ Noqlen Meta Plugin - universal multi-provider metadata enrichment for beets.
 
 ## Context Level
 
-`standard` for Block 024 because it adds an isolated identity domain, structural assignment/scoring,
-and an injectable MusicBrainz source without importer, CLI, or persistence integration.
+`standard` for integrated Block 025 importer identity preview/repair and its selected-metadata safety
+boundary.
 
 ## Tool Mode
 
@@ -20,41 +20,40 @@ shell output.
 
 ## Active Block
 
-Block 024 - MusicBrainz Identity Audit Engine.
+Block 025 - Importer Identity Preview/Repair (integrated); Block 026 is next.
 
 ## Active Spec
 
-`docs/specs/024-musicbrainz-identity-audit/`
+`docs/specs/025-importer-identity-preview-repair/`
 
 ## Active ADRs
 
 - `docs/adr/0015-track-enrichment-boundary.md`
 - `docs/adr/0019-safe-selected-track-application.md`
 - `docs/adr/0020-musicbrainz-identity-audit-engine.md`
+- `docs/adr/0021-importer-identity-preview-repair.md`
 
 ## Allowed Files
 
-The isolated identity package, focused identity tests, README, ADR 0020, Block 024 specs, and
-context/handoff documents.
+Block 025 importer identity modules, the plugin entry point and identity exports, focused identity
+tests, `README.md`, ADR 0021, the four Block 025 spec documents, and these current/handoff documents.
 
 ## Forbidden Behavior
 
-Importer identity integration, library identity CLI, MBID mutation, AlbumInfo/TrackInfo/Item/Album
-mutation, database persistence, tag/file writes, AcoustID/fingerprinting, recording search, new
-configuration, and enrichment resolver/ChangePlan reuse.
+Library identity CLI/repair, Item/Album mutation, direct database persistence, identity tag/file
+synchronization, AcoustID/fingerprinting, recording search, and enrichment resolver/ChangePlan reuse.
 
 ## Completion State
 
-The read-only identity domain, global assignment, structural scoring, conservative selection and
-field comparison, plus the injectable beets MusicBrainz source are complete. Source bounding now
-preserves exact-ID priority and MusicBrainz search relevance with first-occurrence deduplication;
-acquisition order remains excluded from structural ranking. Release-level duration now uses only
-assigned pairs with comparable local and candidate lengths and renormalizes when that evidence is
-unavailable. Focused validation passes 66 tests; the full suite passes 866 tests with 5 opt-in live
-tests skipped. Ruff, repository contamination, and diff-whitespace checks pass.
+Block 025 is integrated. Accepted album and singleton matches can independently audit and preview the
+four MusicBrainz identity fields, then explicitly apply one canonical, stale-checked, atomic repair
+set to selected `AlbumInfo`/`TrackInfo` metadata. Ambiguity and non-repair-ready evidence never write.
+Normal beets retains persistence/file ownership. Library identity audit/repair and identity tag sync
+are absent; AcoustID/fingerprinting remains excluded. Focused validation passes 117 tests, the
+identity suite passes 158 tests, and the full offline suite passes 958 tests with 5 live tests skipped.
 
 ## Stop Condition
 
-Stop after Block 024. Do not add importer/CLI identity preview or repair. The frozen roadmap remains:
-024 Identity Audit Engine, 025 Importer Identity Preview/Repair, 026 Library Identity Audit/Repair,
-027 Identity Tag Synchronization, 028 v1.0 Hardening and Release, then stop.
+Stop after integrated Block 025. Block 026 is next; do not add tag synchronization early. The frozen
+remaining roadmap is 026 Library Identity Audit/Repair, 027 Identity Tag Synchronization, 028 v1.0
+Hardening and Release, then STOP.
