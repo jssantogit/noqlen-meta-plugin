@@ -62,6 +62,14 @@ from beetsplug.noqlenmeta.identity.library_preview import (
     render_library_identity_audit,
     render_unavailable_library_identity_target,
 )
+from beetsplug.noqlenmeta.identity.tag_application import (
+    IdentityTagApplicationError,
+    apply_identity_tag_file_plan,
+    verify_identity_tag_file_plan,
+)
+from beetsplug.noqlenmeta.identity.tag_mapping import plan_identity_tag_targets
+from beetsplug.noqlenmeta.identity.tag_preview import render_identity_tag_plan
+from beetsplug.noqlenmeta.identity.tag_sync import prepare_identity_tag_database_target
 from beetsplug.noqlenmeta.integration import (
     ResolutionSettingsError,
     context_from_album_info,
@@ -225,6 +233,16 @@ class NoqlenMetaPlugin(BeetsPlugin):
             help="audit MusicBrainz identity instead of ordinary metadata enrichment",
         )
         self._command.parser.add_option(
+            "--identity-tags",
+            dest="identity_tags",
+            action="store_true",
+            default=False,
+            help=(
+                "preview synchronization of MusicBrainz identity from the database "
+                "to media-file tags"
+            ),
+        )
+        self._command.parser.add_option(
             "--all",
             dest="all",
             action="store_true",
@@ -244,6 +262,13 @@ class NoqlenMetaPlugin(BeetsPlugin):
             action="store_true",
             default=False,
             help="with --apply, persist mapped fields and withhold unresolved fields",
+        )
+        self._command.parser.add_option(
+            "--write",
+            dest="write",
+            action="store_true",
+            default=False,
+            help="with --identity-tags, replace eligible files after verified tag synchronization",
         )
         self._command.func = self._command_noqlenmeta
 
@@ -498,12 +523,26 @@ class NoqlenMetaPlugin(BeetsPlugin):
             )
 
     def _command_noqlenmeta(self, lib: Library, opts: object, args: list[str]) -> None:
-        if bool(getattr(opts, "identity", False)):
-            self._command_library_identity(lib, opts, args)
-            return
-        all_albums = bool(getattr(opts, "all", False))
+        identity_enabled = bool(getattr(opts, "identity", False))
+        identity_tags_enabled = bool(getattr(opts, "identity_tags", False))
+        write_enabled = bool(getattr(opts, "write", False))
         apply_enabled = bool(getattr(opts, "apply", False))
         partial_enabled = bool(getattr(opts, "partial", False))
+        if identity_enabled and identity_tags_enabled:
+            raise ui.UserError("noqlenmeta: --identity and --identity-tags are mutually exclusive")
+        if write_enabled and not identity_tags_enabled:
+            raise ui.UserError("noqlenmeta: --write requires --identity-tags")
+        if identity_tags_enabled and apply_enabled:
+            raise ui.UserError("noqlenmeta: --identity-tags cannot be used with --apply")
+        if identity_tags_enabled and partial_enabled:
+            raise ui.UserError("noqlenmeta: --identity-tags cannot be used with --partial")
+        if identity_enabled:
+            self._command_library_identity(lib, opts, args)
+            return
+        if identity_tags_enabled:
+            self._command_identity_tags(lib, opts, args)
+            return
+        all_albums = bool(getattr(opts, "all", False))
         if partial_enabled and not apply_enabled:
             raise ui.UserError("noqlenmeta: --partial requires --apply")
         application_mode = (
@@ -566,6 +605,65 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 position=album_plan.position,
                 total=album_plan.total,
             )
+
+    def _command_identity_tags(
+        self, lib: Library, opts: object, args: list[str]
+    ) -> None:
+        all_items = bool(getattr(opts, "all", False))
+        write_enabled = bool(getattr(opts, "write", False))
+        has_query = any(isinstance(argument, str) and argument.strip() for argument in args)
+        if not has_query and not all_items:
+            raise ui.UserError("noqlenmeta: --identity-tags requires an Item query or --all")
+        if args and all_items:
+            raise ui.UserError(
+                "noqlenmeta: use an Item query or --all with --identity-tags, not both"
+            )
+
+        selected = select_library_identity_targets(lib, args if args else None)
+        if not selected:
+            ui.print_("Noqlen MusicBrainz identity tags: no Items matched")
+            return
+        database_targets = tuple(
+            prepare_identity_tag_database_target(lib, target) for target in selected
+        )
+        target_plans = plan_identity_tag_targets(database_targets)
+        total = sum(len(target.files) for target in target_plans)
+
+        if write_enabled:
+            for target_plan in target_plans:
+                for plan in target_plan.files:
+                    if plan.blocked_reason is None:
+                        verify_identity_tag_file_plan(lib, target_plan.database, plan)
+
+        position = 0
+        earlier_changes_committed = False
+        for target_plan in target_plans:
+            for plan in target_plan.files:
+                position += 1
+                result = None
+                if write_enabled:
+                    try:
+                        result = apply_identity_tag_file_plan(lib, target_plan.database, plan)
+                    except IdentityTagApplicationError as error:
+                        if earlier_changes_committed and not error.committed:
+                            raise IdentityTagApplicationError(
+                                "identity tag command stopped after earlier file changes "
+                                "were committed",
+                                integrity_critical=error.integrity_critical,
+                                committed=True,
+                            ) from error
+                        raise
+                render_identity_tag_plan(
+                    plan,
+                    result,
+                    write_requested=write_enabled,
+                    position=position,
+                    total=total,
+                )
+                if result is not None:
+                    earlier_changes_committed = (
+                        earlier_changes_committed or result.has_applied_changes
+                    )
 
     def _command_library_identity(
         self, lib: Library, opts: object, args: list[str]

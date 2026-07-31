@@ -268,7 +268,7 @@ candidate lyric values; raw plain or synchronized lyrics are never rendered.
 | Importer, `preview: false`, `apply: false` | No release work | No track work | No mutation |
 | `beet noqlenmeta` / `beet nm` | Existing album query preview or explicit database application | No singleton or per-track mode; LRCLIB is not called | Existing persistent Album policy only |
 | `beet nm --identity` | Complete-Album or singleton MusicBrainz identity audit | Global Block 024 assignment; no enrichment providers | Preview only unless `--identity --apply` explicitly stores database MBIDs |
-| File tag synchronization | No new behavior | No track synchronization | No new behavior |
+| `beet nm --identity-tags` | Validate database identity only | Preview complete Album/singleton files | No replacement unless `--write` is explicit |
 
 ## Library command
 
@@ -353,8 +353,40 @@ library repair permission. Conversely, library identity flags do not alter impor
 `--partial` remains ordinary-enrichment-only and is rejected with `--identity`. There is no identity
 `--force` option. Ambiguous, weak, incomplete, stale, unavailable, and otherwise non-repair-ready
 evidence never writes. Complete source/audit/mapping work precedes the first database update, and one
-real SQLite savepoint makes each Album-plus-Items or singleton repair atomic. Block 027 will
-explicitly synchronize confirmed database MBIDs to supported file tags; Block 026 does not.
+real SQLite savepoint makes each Album-plus-Items or singleton repair atomic. Block 026 remains
+database-only; the separate identity-tag mode below owns explicit file synchronization.
+
+### Identity tag synchronization
+
+The existing command and alias can synchronize coherent database identity to media-file tags:
+
+```bash
+beet nm --identity-tags album:"Example"
+beet nm --identity-tags --all
+beet nm --identity-tags --write album:"Example"
+beet nm --identity-tags --write --all
+```
+
+The positional expression is a normal beets Item query. Matching any track expands to that complete
+persisted Album; standalone singleton Items are also supported. Preview is always the default. Only
+the exact CLI combination `--identity-tags --write` permits file replacement. Ordinary `--apply`,
+top-level application settings, and importer `identity.apply` never authorize tag writes. Run
+`nm --identity` and, where needed, `nm --identity --apply` first: synchronization requires all
+database identity copies to be canonical, complete, and internally coherent.
+
+The database is authoritative for this mode. Missing file values are filled, while conflicting or
+malformed values are intentionally replaced. Exactly `mb_albumid`, `mb_releasegroupid`, `mb_trackid`,
+and `mb_releasetrackid` are set through MediaFile's native format mappings. Every other safely
+readable writable logical tag is compared before and after and must remain unchanged.
+
+The source is never saved in place. A complete extension-preserving candidate is created in the same
+directory, all four fields are round-trip verified, supported filesystem metadata is checked, and a
+rollback backup is created before atomic source-path replacement. The replaced source is reopened and
+verified before only the Item's operational database `mtime` is updated. Paths, filenames, temporary
+names, and raw malformed values are not shown.
+
+Writes are atomic per file, not across the complete command. Results render as each file completes;
+if a later file fails, earlier verified replacements may remain committed and are reported as such.
 
 During importer enrichment, Noqlen mutates only eligible fields on the selected `AlbumInfo`. It does
 not directly mutate Items or persistent Albums, add library records, write tags, or move/copy files.
@@ -455,11 +487,10 @@ mutation and cache invalidation. It does not directly mutate `Item` or persisten
 store database rows, synchronize tags, or write files; normal beets importer lifecycle remains the
 sole owner of later persistence and file behavior.
 
-Block 025 importer identity preview/repair and Block 026 persisted library identity audit/repair are
-integrated as separately authorized workflows. Identity tag synchronization remains absent and
-belongs to Block 027. AcoustID, Chromaprint, fingerprinting, and recording-search evidence remain
-excluded from v1.0. The frozen remaining roadmap is Block 027, Block 028 v1.0 hardening/release, then
-STOP.
+Block 025 importer identity preview/repair, Block 026 persisted library identity audit/repair, and
+Block 027 database-to-file identity synchronization are integrated as separately authorized
+workflows. AcoustID, Chromaprint, fingerprinting, and recording-search evidence remain excluded from
+v1.0. The frozen remaining roadmap is Block 028 v1.0 hardening/release, then STOP.
 
 ## Current status
 
@@ -470,10 +501,12 @@ singleton tracks through the same Field Authority, resolver, and `ChangePlan`. A
 mapping blocker. Importer release enrichment separately maps its release `ChangePlan` to
 `BeetsTargetPlan`; ordinary library mode maps release plans to `LibraryTargetPlan`, while explicit
 library identity mode maps Block 024 findings directly to fixed Album/Item database columns.
+Identity-tag mode separately maps coherent database identity to four MediaFile fields.
 Importer application can mutate selected `AlbumInfo` and losslessly mapped fields on selected
 `TrackInfo` through separate guarded strict or partial boundaries. CLI application is separately
 authorized by `--apply`, remains strict by default, and permits safe partial database application
 only with `--apply --partial`. Block 026 can separately repair Item identity database columns only
-with `--identity --apply`; files and tags remain outside that boundary.
+with `--identity --apply`; Block 027 can replace verified files only with
+`--identity-tags --write`.
 
 See `docs/context/current.md` and `docs/context/handoff.md` before starting a development block.

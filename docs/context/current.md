@@ -10,7 +10,7 @@ Noqlen Meta Plugin - universal multi-provider metadata enrichment for beets.
 
 ## Context Level
 
-`standard` for completed Block 026 persisted library identity audit/repair.
+`standard` for completed Block 027 identity tag synchronization.
 
 ## Tool Mode
 
@@ -19,40 +19,36 @@ shell output.
 
 ## Active Block
 
-Block 026 - Library Identity Audit/Repair (complete); Block 027 is next.
+Block 027 - Identity Tag Synchronization (complete); Block 028 is next.
 
 ## Active Spec
 
-`docs/specs/026-library-identity-audit-repair/`
+`docs/specs/027-identity-tag-synchronization/`
 
 ## Active ADRs
 
-- `docs/adr/0015-track-enrichment-boundary.md`
-- `docs/adr/0019-safe-selected-track-application.md`
 - `docs/adr/0020-musicbrainz-identity-audit-engine.md`
 - `docs/adr/0021-importer-identity-preview-repair.md`
 - `docs/adr/0022-library-identity-audit-repair.md`
+- `docs/adr/0023-identity-tag-synchronization.md`
 
 ## Completion State
 
-Block 026 is complete. The existing `noqlenmeta`/`nm` command has an explicit `--identity` mode that
-audits complete persisted Albums and standalone Items through Block 024. Preview is always rendered,
-and only `--identity --apply` can repair the four fixed MusicBrainz identity columns in the beets
-database. Planning uses fresh exact path-free snapshots, completes before writes, and applies each
-eligible target only after creating one real SQLite savepoint. That savepoint contains the pre-write
-complete snapshot, identity updates, row checks, and a final complete expected-post snapshot derived
-only from the original snapshot and canonical plan. Apply-mode results render as each target
-completes, so a later stale failure preserves visible earlier commits and is marked accordingly
-without claiming command-wide rollback. Post-commit verification and events remain unchanged.
-Ordinary enrichment and importer identity authority remain separate.
+Block 027 is complete. The existing `noqlenmeta`/`nm` command has an explicit `--identity-tags`
+mode that selects complete persisted Albums and standalone Items using normal Item queries. Preview
+is the default. Only `--identity-tags --write` can replace media files and update operational Item
+`mtime`; ordinary `--apply`, importer settings, and identity database repair grant no file authority.
 
-Validation passes 35 focused application/command tests, 222 identity tests, and 1,022 full offline
-tests with 5 live tests skipped. Ruff, repository contamination, and diff-whitespace checks pass.
-
-Identity tag synchronization is still absent. No physical files or tags are read or written by
-Block 026.
+The database is the source of truth and must contain complete canonical coherent release,
+release-group, recording, and release-track identity. Synchronization touches only those four
+MediaFile fields. Planning snapshots every selected database target, exact source stat fingerprint,
+current identity, unrelated writable logical tags, and supported filesystem metadata before a
+command-wide preflight. Writes use verified same-directory candidates and rollback backups, reopen
+the replaced source, update only Item `mtime` under a fixed-column savepoint, and emit post-success
+events. Paths and raw errors remain private. Tiny generated-silence fixtures prove real FLAC, MP3,
+M4A, Ogg Vorbis, and Opus round trips offline.
 
 ## Stop Condition
 
-Proceed next to Block 027 Identity Tag Synchronization, then Block 028 v1.0 Hardening and Release,
-then STOP. Do not add tag synchronization early.
+Proceed next to Block 028 v1.0 Hardening and Release, then STOP. Add no new provider or metadata
+feature.

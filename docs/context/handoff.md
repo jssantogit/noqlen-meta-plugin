@@ -2,48 +2,42 @@
 
 ## State
 
-Block 026 is complete. Persisted library MusicBrainz identity audit/repair exists as the explicit
-`--identity` mode on the existing `noqlenmeta`/`nm` command.
+Block 027 is complete. Database-to-file MusicBrainz identity synchronization exists as explicit
+`--identity-tags` mode on the existing `noqlenmeta`/`nm` command.
 
 ## Completed
 
-- Item-query selection that expands complete Albums, deduplicates them, and supports standalone
-  singleton Items; `--all` covers both kinds once in deterministic database-ID order.
-- Fresh immutable selected boundaries and exact path-free stale snapshots.
-- Album and singleton Block 024 contexts, including multidisc ordering and conservative flattened
-  positions.
-- Album-plus-Item release identity aggregation with private mixed-missing state and direct per-Item
-  track identity.
-- One retained-source audit per complete target, sanitized per-target source failures, and always-on
-  privacy-safe preview.
-- Immutable mapping to every differing fixed Album/Item identity column.
-- Full planning before writes and unchanged command-wide preflight, followed by a real per-target
-  SQLite savepoint created before the final pre-write complete snapshot.
-- One real SQLite savepoint per complete Album-plus-Items or singleton repair using public
-  transaction SQL APIs and bound parameters.
-- In-savepoint and fresh post-commit verification with deterministic post-commit database events.
-- A final in-savepoint complete snapshot checked against immutable expected state derived only from
-  the original snapshot and canonical plan.
-- Immediate apply-mode rendering, with safe committed-state annotation if a later target races after
-  earlier changes committed.
-- Real temporary-database regression for beets 2.12 exceptional root commit and savepoint rollback.
-- Validation: 35 focused tests and 222 identity tests pass; the full offline suite passes 1,022 tests
-  with 5 live tests skipped. Ruff, contamination, and diff-whitespace checks pass.
+- Exclusive mode validation with query-or-`--all` selection, complete Album expansion, standalone
+  Items, deterministic ordering, and no provider/source/audit work.
+- Preview by default; only CLI `--write` permits file replacement and operational `mtime` update.
+- Fresh immutable path-private database snapshots with complete canonical Album/singleton coherence.
+- Exact no-follow source fingerprints and safely frozen four-field/unrelated MediaFile snapshots.
+- Missing/conflict/malformed statuses and immutable canonical four-field plans.
+- Whole-command planning and fresh database/stat preflight before the first candidate.
+- Same-directory extension-preserving candidates that write and verify all four fields without
+  opening the source for save.
+- Unrelated logical tag and supported filesystem metadata verification.
+- Same-directory rollback backup before `os.replace`, replaced-source verification, safe restoration,
+  and integrity-critical restore failure handling.
+- Fixed-column savepoint update of only Item `mtime`, followed by fresh verification and standard
+  post-success events.
+- Immediate privacy-safe rendering, no-op behavior, and truthful later committed-state reporting.
+- Offline generated-silence production round trips for FLAC, MP3, M4A, Ogg Vorbis, and Opus.
 
 ## Important Decisions
 
-- Only `--identity --apply` authorizes persisted library identity repair.
-- Bare `nm --apply` remains ordinary enrichment; importer identity settings do not grant library
-  writes.
-- Identity has no partial or force mode, and ambiguous/non-ready evidence never writes.
-- Block 026 is database-only. No model store, tag/file, importer application, or private connection
-  path participates in identity repair.
+- Database identity is authoritative but must be canonical and internally coherent.
+- Exactly four MusicBrainz fields are writable; conflicting/malformed file identity is synchronized.
+- `--apply` and importer configuration never authorize tag writes.
+- Source paths are private and source files are never saved in place.
+- Files commit independently; there is no command-wide filesystem rollback claim.
 
 ## Deferred
 
-- Block 027 explicit synchronization of confirmed database MBIDs to supported audio-file tags.
-- AcoustID, Chromaprint, fingerprinting, and recording search remain outside v1.0.
+- Block 028 final configuration/UX/package/documentation compatibility and release hardening.
+- AcoustID, Chromaprint, fingerprinting, recording search, and new metadata features remain outside
+  v1.0.
 
 ## Next Direction
 
-Proceed to Block 027, then Block 028, then STOP.
+Proceed to Block 028, then STOP.
