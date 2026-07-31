@@ -43,6 +43,10 @@ class IdentityTagFileSnapshot:
     filesystem_metadata: IdentityTagFilesystemMetadata
 
 
+class IdentityTagAtimeCopyError(RuntimeError):
+    pass
+
+
 def fingerprint_identity_tag_file(path: bytes) -> IdentityTagFileFingerprint:
     info = os.stat(path, follow_symlinks=False)
     if not stat.S_ISREG(info.st_mode):
@@ -75,6 +79,107 @@ def snapshot_identity_tag_file(path: bytes) -> IdentityTagFileSnapshot:
     if after != before:
         raise ValueError("identity tag source changed while reading")
     return IdentityTagFileSnapshot(before, identity, unrelated, format_name, metadata)
+
+
+def copy_regular_file_without_source_atime(
+    source: bytes,
+    destination: bytes,
+    *,
+    destination_exists: bool,
+    destination_descriptor: int | None = None,
+) -> None:
+    """Copy one regular file without allowing the source read to advance atime."""
+    if destination_exists and destination_descriptor is None:
+        raise ValueError("identity tag existing destination descriptor is required")
+    before: IdentityTagFileFingerprint | None = None
+    metadata: IdentityTagFilesystemMetadata | None = None
+    source_descriptor: int | None = None
+    opened_destination = destination_descriptor
+    destination_identity: tuple[int, int] | None = None
+    try:
+        before = fingerprint_identity_tag_file(source)
+        metadata = filesystem_metadata(source)
+        source_descriptor = _open_source_without_atime(source)
+        source_info = os.fstat(source_descriptor)
+        if _fingerprint(source_info) != before:
+            raise ValueError("identity tag source changed before atime-safe copy")
+        if opened_destination is None:
+            destination_flags = os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
+            destination_flags |= os.O_CREAT | os.O_EXCL
+            opened_destination = os.open(destination, destination_flags, metadata.mode)
+        destination_info = os.fstat(opened_destination)
+        destination_path_info = os.stat(destination, follow_symlinks=False)
+        destination_identity = (destination_info.st_dev, destination_info.st_ino)
+        if destination_identity != (
+            destination_path_info.st_dev,
+            destination_path_info.st_ino,
+        ):
+            raise ValueError("identity tag candidate destination changed")
+        os.ftruncate(opened_destination, 0)
+        os.lseek(opened_destination, 0, os.SEEK_SET)
+        while chunk := os.read(source_descriptor, 1024 * 1024):
+            remaining = memoryview(chunk)
+            while remaining:
+                written = os.write(opened_destination, remaining)
+                if written <= 0:
+                    raise OSError("identity tag destination write failed")
+                remaining = remaining[written:]
+        _apply_copied_metadata_descriptor(
+            opened_destination, before, metadata
+        )
+        os.fsync(opened_destination)
+    finally:
+        if source_descriptor is not None:
+            os.close(source_descriptor)
+        if opened_destination is not None:
+            os.close(opened_destination)
+
+    assert before is not None and metadata is not None
+    destination_after = os.stat(destination, follow_symlinks=False)
+    if destination_identity != (destination_after.st_dev, destination_after.st_ino):
+        raise ValueError("identity tag candidate destination changed")
+    verify_candidate_metadata(destination, metadata)
+    after = fingerprint_identity_tag_file(source)
+    if after != before or filesystem_metadata(source) != metadata:
+        raise ValueError("identity tag source changed during atime-safe copy")
+
+
+def _open_source_without_atime(path: bytes) -> int:
+    no_atime = getattr(os, "O_NOATIME", None)
+    no_follow = getattr(os, "O_NOFOLLOW", None)
+    if no_atime is None or no_follow is None:
+        raise IdentityTagAtimeCopyError(
+            "identity tag atime-safe file copy is unsupported"
+        )
+    try:
+        return os.open(path, os.O_RDONLY | no_atime | no_follow)
+    except OSError as error:
+        raise IdentityTagAtimeCopyError(
+            "identity tag atime-safe file copy is unsupported"
+        ) from error
+
+
+def _apply_copied_metadata_descriptor(
+    destination: int,
+    source_fingerprint: IdentityTagFileFingerprint,
+    source_metadata: IdentityTagFilesystemMetadata,
+) -> None:
+    current = os.fstat(destination)
+    if (current.st_uid, current.st_gid) != (source_metadata.uid, source_metadata.gid):
+        os.fchown(destination, source_metadata.uid, source_metadata.gid)
+    os.fchmod(destination, source_metadata.mode)
+    expected_xattrs = {name: value for name, value in source_metadata.xattrs}
+    try:
+        for name in os.listxattr(destination):
+            encoded = os.fsencode(name)
+            if encoded not in expected_xattrs:
+                os.removexattr(destination, name)
+        for name, value in source_metadata.xattrs:
+            os.setxattr(destination, name, value)
+    except (AttributeError, NotImplementedError):
+        if expected_xattrs:
+            raise ValueError("filesystem metadata cannot be preserved safely") from None
+    os.utime(destination, ns=(source_metadata.atime_ns, source_fingerprint.mtime_ns))
 
 
 @contextmanager

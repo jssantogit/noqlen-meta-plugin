@@ -51,7 +51,10 @@ original backup when commit state is uncertain; such uncertainty is integrity-cr
 Preview claims capability only after a real candidate round trip, and empty paths block without
 filesystem access while valid files continue. Paths and raw errors remain private. Tiny
 generated-silence fixtures prove real FLAC, MP3, M4A, Ogg Vorbis, and Opus round trips offline.
-Validation passes 52 focused fix tests, 278 identity tests, and 1,078 full offline tests with 5 live
+Candidate and backup fallback copies read sources through `O_NOATIME` no-follow descriptors; files
+without that support block before replacement. Safe restoration verifies original mtime and one final
+link in addition to content, tags, and supported metadata.
+Validation passes 51 focused fix tests, 288 identity tests, and 1,088 full offline tests with 5 live
 tests skipped. Ruff, repository contamination, and diff-whitespace checks pass.
 
 ## Stop Condition

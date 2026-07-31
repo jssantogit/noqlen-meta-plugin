@@ -21,9 +21,14 @@ the beets database to selected media files.
   unsupported formats, and unprovable metadata preservation.
 - Write all four fields through a same-directory candidate, verify the candidate, create a rollback
   backup, atomically replace the source, and verify the replaced source.
+- Read source bytes for candidate and backup-copy fallback only through `O_NOATIME` and no-follow
+  descriptors. Never use ordinary path-based media copying; block before replacement when atime-safe
+  copying is unsupported.
 - Restore the original on a safely classified post-replacement failure. For uncertain mtime commit
   state, report committed and integrity-critical, retain the path-private original backup, and do not
   restore blindly.
+- Verify safe restoration includes original mtime and a single final link as well as full content,
+  identity tags, unrelated logical tags, and supported filesystem metadata.
 - Update only operational Item `mtime` with fixed SQL under a real savepoint, then emit
   `after_write(item, path)` and `database_change(lib, model)`. Never emit the mutable pre-write
   `write(item, path, tags)` hook.

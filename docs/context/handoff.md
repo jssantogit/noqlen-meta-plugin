@@ -26,9 +26,13 @@ Block 027 is complete. Database-to-file MusicBrainz identity synchronization exi
   integrity-critical uncertain commit state.
 - Truthful per-file capability rendering and blocked empty/invalid persisted paths without filesystem
   access or interruption of valid files.
+- Candidate and backup-copy fallback source reads through `O_NOATIME` no-follow descriptors, with no
+  production media-source `copy2`; unsupported atime-safe copies block before replacement.
+- Safe restoration verifies original mtime and final link count one, and committed cleanup failure
+  retains the path-private original backup truthfully.
 - Immediate privacy-safe rendering, no-op behavior, and truthful later committed-state reporting.
 - Offline generated-silence production round trips for FLAC, MP3, M4A, Ogg Vorbis, and Opus.
-- Validation: 52 focused fix tests, 278 identity tests, and 1,078 full offline tests pass with 5 live
+- Validation: 51 focused fix tests, 288 identity tests, and 1,088 full offline tests pass with 5 live
   tests skipped; Ruff, contamination, and diff-whitespace checks pass.
 
 ## Important Decisions

@@ -9,7 +9,7 @@ validate exclusive CLI mode
   -> exact no-follow stat plus MediaFile logical snapshots
   -> immutable four-field plans for every file
   -> command-wide database/stat preflight
-  -> same-directory complete candidate copy
+  -> same-directory complete candidate copy through O_NOATIME source descriptor
   -> write and reopen/verify four fields plus unrelated tags and filesystem metadata
   -> rollback backup, os.replace, and replaced-source verification
   -> fixed-column mtime savepoint and fresh verification
@@ -41,3 +41,10 @@ with the immutable verified candidate. Successful delivery is `after_write(item,
 `database_change(lib, model)` only after file/database verification. Preview creates no candidate and
 does not claim per-file round-trip capability. Invalid persisted paths use a separate blocked boundary
 and never enter stat, MediaFile, candidate, or replacement code.
+
+Candidate and backup-copy fallback byte reads share one descriptor-based primitive. It opens the
+source with `O_NOATIME | O_NOFOLLOW`, writes through the retained `mkstemp` descriptor or an
+exclusively created backup descriptor, fsyncs, applies supported metadata through the descriptor, and
+requires exact source fingerprint and metadata equality afterward. There is no normal path-based
+source copy fallback. Safe restoration additionally requires original mtime and final link count one;
+inode and ctime are intentionally not universal restoration requirements.

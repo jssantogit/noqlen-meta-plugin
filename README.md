@@ -385,6 +385,12 @@ rollback backup is created before atomic source-path replacement. The replaced s
 verified before only the Item's operational database `mtime` is updated. Paths, filenames, temporary
 names, and raw malformed values are not shown.
 
+Candidate copying and the backup-copy fallback read the source only through an `O_NOATIME` and
+no-follow descriptor. Ordinary path-based media copying is forbidden because a blocked or failed
+synchronization must not advance source atime. Files that cannot be opened for atime-safe copying are
+blocked before replacement. Safe restoration verifies original mtime and one final link in addition
+to full content, identity tags, unrelated tags, and supported filesystem metadata.
+
 Preview does not create a candidate and therefore reports that per-file write capability still
 requires `--write` candidate verification. Capability is reported as verified only after that exact
 file completes a real candidate round trip. Empty or invalid persisted paths are blocked safely and

@@ -42,7 +42,9 @@ boundary that does not become another matcher or generic metadata writer.
 15. Every selected database row, file fingerprint, and logical tag surface is planned, followed by a
     command-wide fresh preflight, before the first candidate is created.
 16. The source is never saved in place. A random hidden, extension-preserving candidate is created in
-    the source directory and populated with a metadata-preserving complete copy.
+    the source directory and populated with a metadata-preserving complete copy. Candidate and
+    backup-copy fallback source reads use `O_NOATIME` and no-follow descriptors; ordinary path-based
+    media copying is forbidden. Files without atime-safe copy support block before replacement.
 17. Every candidate writes all four identity fields, even if one differs. It is reopened to verify
     canonical targets and every safely readable unrelated writable MediaFile field.
 18. Permission mode, observable owner/group, and public extended attributes are compared. Failure to
@@ -51,7 +53,8 @@ boundary that does not become another matcher or generic metadata writer.
 19. A verified same-directory rollback backup exists before `os.replace()` changes the source path.
     Hard-link backup is preferred, with a verified complete-copy fallback.
 20. The replaced source is freshly reopened and verified. Safe post-replacement failures restore and
-    verify the original; restoration failure is integrity-critical.
+    verify the original, including original mtime and a final link count of one in addition to full
+    content, tags, and supported metadata; restoration failure is integrity-critical.
 21. Only operational `items.mtime` may change in the database. A fixed-column named SQLite savepoint
     verifies the Item/target before update, checks the row, and fresh-verifies after commit. Identity
     database columns never change.

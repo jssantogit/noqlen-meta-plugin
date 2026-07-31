@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import secrets
-import shutil
 import tempfile
 from dataclasses import dataclass
 from enum import Enum
@@ -17,9 +16,11 @@ from mediafile import MediaFile
 
 from .domain import canonical_mbid
 from .tag_filesystem import (
+    IdentityTagAtimeCopyError,
     IdentityTagFileFingerprint,
     IdentityTagFileSnapshot,
     IdentityTagFilesystemMetadata,
+    copy_regular_file_without_source_atime,
     filesystem_metadata,
     fingerprint_identity_tag_file,
     freeze_media_value,
@@ -103,11 +104,15 @@ def verify_identity_tag_file_plan(
         if plan.file_snapshot is None:
             raise ValueError
         current = fingerprint_identity_tag_file(plan.database.selected.path)
+        current_metadata = filesystem_metadata(plan.database.selected.path)
     except Exception as error:
         raise IdentityTagApplicationError(
             "identity tag source changed before synchronization"
         ) from error
-    if current != plan.file_snapshot.fingerprint:
+    if (
+        current != plan.file_snapshot.fingerprint
+        or current_metadata != plan.file_snapshot.filesystem_metadata
+    ):
         raise IdentityTagApplicationError("identity tag source changed before synchronization")
 
 
@@ -138,9 +143,14 @@ def apply_identity_tag_file_plan(
     retain_backup = False
     try:
         _require_fresh(library, target, plan)
-        candidate = _candidate_path(path)
-        shutil.copy2(path, candidate, follow_symlinks=False)
-        _require_source_fingerprint(path, plan.file_snapshot)
+        candidate, candidate_descriptor = _candidate_path(path)
+        copy_regular_file_without_source_atime(
+            path,
+            candidate,
+            destination_exists=True,
+            destination_descriptor=candidate_descriptor,
+        )
+        _require_source_snapshot(path, plan.file_snapshot)
         candidate_before = snapshot_identity_tag_file(candidate)
         if candidate_before.unrelated_values != plan.file_snapshot.unrelated_values:
             raise ValueError("candidate unrelated tags differ")
@@ -187,10 +197,11 @@ def apply_identity_tag_file_plan(
                 committed=True,
             ) from error
         if not _remove_artifact(backup):
-            backup = None
+            retain_backup = _artifact_exists(backup)
             raise IdentityTagApplicationError(
                 "identity tag synchronization committed but artifact cleanup failed",
                 committed=True,
+                recovery_artifact_retained=retain_backup,
             )
         backup = None
         return IdentityTagApplicationResult(item_id, tuple(change.field for change in plan.changes))
@@ -200,9 +211,11 @@ def apply_identity_tag_file_plan(
                 if error.integrity_critical and error.state_uncertain:
                     retain_backup = _artifact_exists(backup)
                 elif not _remove_artifact(backup):
+                    retain_backup = _artifact_exists(backup)
                     raise IdentityTagApplicationError(
                         "identity tag synchronization committed but artifact cleanup failed",
                         committed=True,
+                        recovery_artifact_retained=retain_backup,
                     ) from error
                 else:
                     backup = None
@@ -234,12 +247,16 @@ def apply_identity_tag_file_plan(
                 blocked_reason="identity tag original restored after failed synchronization",
             )
         if phase is _IdentityTagCommitPhase.MTIME_COMMITTED:
-            if error.integrity_critical and error.state_uncertain:
+            if error.recovery_artifact_retained:
+                retain_backup = _artifact_exists(backup)
+            elif error.integrity_critical and error.state_uncertain:
                 retain_backup = _artifact_exists(backup)
             elif not _remove_artifact(backup):
+                retain_backup = _artifact_exists(backup)
                 raise IdentityTagApplicationError(
                     "identity tag synchronization committed but artifact cleanup failed",
                     committed=True,
+                    recovery_artifact_retained=retain_backup,
                 ) from error
             else:
                 backup = None
@@ -273,9 +290,11 @@ def apply_identity_tag_file_plan(
             )
         if phase is _IdentityTagCommitPhase.MTIME_COMMITTED:
             if not _remove_artifact(backup):
+                retain_backup = _artifact_exists(backup)
                 raise IdentityTagApplicationError(
                     "identity tag synchronization committed but artifact cleanup failed",
                     committed=True,
+                    recovery_artifact_retained=retain_backup,
                 ) from error
             backup = None
             raise IdentityTagApplicationError(
@@ -296,9 +315,11 @@ def apply_identity_tag_file_plan(
             ) from error
         if phase is _IdentityTagCommitPhase.MTIME_COMMITTED:
             if not _remove_artifact(backup):
+                retain_backup = _artifact_exists(backup)
                 raise IdentityTagApplicationError(
                     "identity tag synchronization committed but artifact cleanup failed",
                     committed=True,
+                    recovery_artifact_retained=retain_backup,
                 ) from error
             backup = None
             raise IdentityTagApplicationError(
@@ -354,7 +375,7 @@ def _require_fresh(
 ) -> None:
     try:
         verify_identity_tag_database_target(library, target)
-        _require_source_fingerprint(plan.database.selected.path, plan.file_snapshot)
+        _require_source_snapshot(plan.database.selected.path, plan.file_snapshot)
     except Exception as error:
         raise ValueError("identity tag source changed before replacement") from error
 
@@ -364,14 +385,19 @@ def _require_source_fingerprint(path: bytes, snapshot: IdentityTagFileSnapshot) 
         raise ValueError("identity tag source changed before replacement")
 
 
-def _candidate_path(path: bytes) -> bytes:
+def _require_source_snapshot(path: bytes, snapshot: IdentityTagFileSnapshot) -> None:
+    _require_source_fingerprint(path, snapshot)
+    if filesystem_metadata(path) != snapshot.filesystem_metadata:
+        raise ValueError("identity tag source changed before replacement")
+
+
+def _candidate_path(path: bytes) -> tuple[bytes, int]:
     parent = os.path.dirname(path) or os.fsencode(".")
     suffix = os.path.splitext(path)[1]
     descriptor, candidate = tempfile.mkstemp(
         prefix=b".noqlen-identity-candidate-", suffix=suffix, dir=parent
     )
-    os.close(descriptor)
-    return candidate
+    return candidate, descriptor
 
 
 def _create_backup(
@@ -397,8 +423,10 @@ def _create_backup(
     except OSError:
         _remove_artifact(backup)
         try:
-            shutil.copy2(path, backup, follow_symlinks=False)
-            _require_source_fingerprint(path, snapshot)
+            copy_regular_file_without_source_atime(
+                path, backup, destination_exists=False
+            )
+            _require_source_snapshot(path, snapshot)
             source_digest = _file_digest(path)
             if _file_digest(backup) != source_digest:
                 raise ValueError("identity tag backup verification failed") from None
@@ -434,6 +462,8 @@ def _restore_original(
         _file_digest(path) != expected_digest
         or restored.fingerprint.size != expected.fingerprint.size
         or restored.fingerprint.mode != expected.fingerprint.mode
+        or restored.fingerprint.mtime_ns != expected.fingerprint.mtime_ns
+        or restored.fingerprint.link_count != 1
         or restored.identity_values != expected.identity_values
         or restored.unrelated_values != expected.unrelated_values
     ):
@@ -561,6 +591,8 @@ def _rollback_mtime(tx: Transaction, original_error: Exception) -> None:
 
 
 def _safe_blocked_reason(error: Exception) -> str:
+    if isinstance(error, IdentityTagAtimeCopyError):
+        return "identity tag atime-safe file copy is unsupported"
     message = str(error)
     if "hard link" in message:
         return "identity tag file has multiple hard links"

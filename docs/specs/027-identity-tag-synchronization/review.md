@@ -16,6 +16,10 @@
   uncertain committed state, and prevent finalizer deletion of retained artifacts.
 - Preview capability wording is noncommittal until a real candidate succeeds; invalid paths block
   without filesystem access while valid files continue.
+- Candidate and backup-copy fallback source reads use `O_NOATIME` descriptors, never media-source
+  `copy2`; unsupported atime-safe copies block before replacement.
+- Safe restoration verifies original mtime and final link count one, while committed cleanup failures
+  truthfully retain the still-existing original backup.
 - No-op creates no artifacts/events; later failures report earlier per-file commits truthfully.
 - Real FLAC, MP3, M4A, Ogg Vorbis, and Opus generated-silence round trips run offline.
 
@@ -25,5 +29,5 @@ Block 027 database-to-file MusicBrainz identity synchronization is complete. Pre
 default and only explicit `--identity-tags --write` replaces verified eligible files. Block 028 v1.0
 Hardening and Release is next, then STOP.
 
-The commit-state correction passes 52 focused tests, 278 identity tests, and 1,078 full offline tests
+The atime/copy correction passes 51 focused tests, 288 identity tests, and 1,088 full offline tests
 with 5 live tests skipped. Ruff, repository contamination, and diff-whitespace checks pass.
