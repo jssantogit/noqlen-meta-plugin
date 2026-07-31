@@ -142,9 +142,9 @@ def apply_library_identity_plan(
         raise LibraryIdentityApplicationError("repair-ready identity plan has no changes")
 
     rows = _database_rows(resolved_plan)
-    _require_current_snapshot(library, target, resolved_plan.source.exact_snapshot)
     try:
         with library.transaction() as tx:
+            _require_current_snapshot(library, target, resolved_plan.source.exact_snapshot)
             tx.mutate(_SAVEPOINT_SQL)
             try:
                 _apply_and_verify(tx, rows)

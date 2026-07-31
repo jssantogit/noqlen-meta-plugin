@@ -52,9 +52,9 @@ transactions are not SQLite savepoints.
     duplicate database targets are hard mapping errors; there is no partial identity mode.
 13. Every context, source call, audit, and mapping completes before the first write. A command-wide
     fresh exact-snapshot preflight follows planning. Each eligible target receives another fresh
-    exact-snapshot guard immediately before its transaction. No source work occurs after writes
-    begin. A later race may stop the command after earlier targets committed; no command-wide
-    rollback is claimed.
+    exact-snapshot guard after acquiring its root beets transaction and before creating the
+    savepoint. This closes membership and structural races after command-wide preflight. No source
+    work occurs after writes begin.
 14. Application recomputes the canonical plan and validates all changes before database mutation.
     Planning model objects remain unchanged.
 15. One complete Album plus all changed Items, or one singleton Item, is updated under one named
@@ -71,7 +71,10 @@ transactions are not SQLite savepoints.
     one deterministic public `database_change` event emitted per changed row. Notification failure
     reports that the database committed and never retries writes or implies rollback.
 19. Identity mode always renders a privacy-safe result. Source failures are sanitized per target and
-    do not stop planning other targets. Internal mapping/application errors are not swallowed.
+    do not stop planning other targets. During apply mode, each completed target is rendered before
+    the next target begins. A later failure preserves earlier committed and rendered results, marks
+    the propagated safe error as committed when applicable, and never claims command-wide rollback.
+    Internal mapping/application errors are not swallowed.
 20. Application is database-only and never calls tag/file read, write, sync, move, MediaFile, or
     importer metadata application APIs. Block 027 owns explicit synchronization of confirmed
     database MBIDs to files.

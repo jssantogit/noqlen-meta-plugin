@@ -10,7 +10,7 @@ validate identity CLI
   -> retained MusicBrainz source, audit every target
   -> immutable canonical database plans
   -> command-wide stale preflight
-  -> optional per-target stale guard and SQLite SAVEPOINT application
+  -> optional root transaction, final full-target stale guard, then SQLite SAVEPOINT application
   -> in-savepoint verification, root commit, fresh verification, events
   -> privacy-safe preview/result for every target
 ```
@@ -28,13 +28,22 @@ ordered by positive disc, positive track, and Item ID. Local keys use Item IDs i
 never displayed. Mapping order is deterministic by target and Item order; already-correct canonical
 copies do not become writes.
 
+Preview-only mode renders after planning and opens no database transaction. Apply mode first finishes
+the unchanged command-wide preflight, then applies and renders each prepared record in deterministic
+order. If a later target fails, already rendered changes remain committed. The propagated safe error
+is annotated with `committed=True` only when an earlier result actually applied database changes;
+confirmed no-ops, blocked, and unavailable records do not count.
+
 ## Persistence
 
 beets 2.12.x commits root transactions on exceptional context exit, so application never relies on
-exception unwinding. It opens a fixed-name SQLite savepoint through `Transaction.mutate`, performs
-only bound fixed-column `UPDATE`s, queries every changed row through the same transaction, and
-releases only after exact verification. Failures roll back to and release the savepoint before a safe
-error escapes. A rollback failure is integrity-critical.
+exception unwinding. Application first acquires the per-target root transaction, rebuilds and compares
+the complete fresh structural/membership/identity snapshot inside it, and only then opens the
+fixed-name SQLite savepoint through `Transaction.mutate`. A stale failure before the savepoint has no
+mutation to roll back. After savepoint creation, application performs only bound fixed-column
+`UPDATE`s, queries every changed row through the same transaction, and releases only after exact
+verification. Failures roll back to and release the savepoint before a safe error escapes. A rollback
+failure is integrity-critical.
 
 No `Album.store()`, `Item.store()`, private connection, manual commit/rollback, or model mutation is
 used. Fresh post-commit models are verified and then delivered via `database_change`. Event failure

@@ -51,7 +51,6 @@ from beetsplug.noqlenmeta.identity.library import (
 )
 from beetsplug.noqlenmeta.identity.library_application import (
     LibraryIdentityApplicationError,
-    LibraryIdentityApplicationResult,
     apply_library_identity_plan,
     verify_library_identity_plan_snapshot,
 )
@@ -644,7 +643,6 @@ class NoqlenMetaPlugin(BeetsPlugin):
             for record in prepared
         ]
 
-        application_results: dict[int, LibraryIdentityApplicationResult] = {}
         if apply_enabled:
             # Every source call and mapping is complete before this command-wide stale preflight.
             for record in prepared:
@@ -658,11 +656,39 @@ class NoqlenMetaPlugin(BeetsPlugin):
                         raise LibraryIdentityApplicationError(
                             "library identity unavailable target is stale"
                         )
+            earlier_changes_committed = False
             for record in prepared:
-                if record.target_plan is not None:
-                    application_results[record.position] = apply_library_identity_plan(
-                        lib, record.target_plan
+                if record.result is None or record.target_plan is None:
+                    render_unavailable_library_identity_target(
+                        record.selected,
+                        position=record.position,
+                        total=record.total,
+                        source_unavailable=record.unavailable_reason == "source",
                     )
+                    continue
+                try:
+                    application_result = apply_library_identity_plan(lib, record.target_plan)
+                except LibraryIdentityApplicationError as error:
+                    if earlier_changes_committed:
+                        raise LibraryIdentityApplicationError(
+                            "library identity command stopped after earlier target changes "
+                            "were committed",
+                            integrity_critical=error.integrity_critical,
+                            committed=True,
+                        ) from error
+                    raise
+                render_library_identity_audit(
+                    record.result,
+                    record.target_plan,
+                    application_result,
+                    apply_requested=True,
+                    position=record.position,
+                    total=record.total,
+                )
+                earlier_changes_committed = (
+                    earlier_changes_committed or application_result.has_applied_changes
+                )
+            return
 
         for record in prepared:
             if record.result is None or record.target_plan is None:
@@ -676,8 +702,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
             render_library_identity_audit(
                 record.result,
                 record.target_plan,
-                application_results.get(record.position),
-                apply_requested=apply_enabled,
+                None,
+                apply_requested=False,
                 position=record.position,
                 total=record.total,
             )

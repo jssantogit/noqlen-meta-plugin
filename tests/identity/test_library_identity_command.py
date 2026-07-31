@@ -388,6 +388,125 @@ def test_command_wide_stale_preflight_aborts_every_identity_write(
     assert not any(identity_values(library, second))
 
 
+def test_late_target_race_preserves_rendered_commit_and_marks_error(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    first = add_album(library, "Album A")
+    second = add_album(library, "Album B")
+    second_item_id = next(iter(second.items())).id
+    other = Library(str(library.path), set_music_dir=False)
+    plugin = NoqlenMetaPlugin()
+    configure(plugin)
+    plugin._musicbrainz_identity_source = FakeIdentitySource(
+        lambda context: (
+            remote_for(context, 18000 if context.album == "Album A" else 19000),
+        )
+    )
+    output = capture_output(monkeypatch)
+    original_apply = plugin_module.apply_library_identity_plan
+    raced = False
+
+    def race_second_target(lib: Library, plan: object):
+        nonlocal raced
+        if plan.source.context.album != "Album B":  # type: ignore[attr-defined]
+            return original_apply(lib, plan)  # type: ignore[arg-type]
+        original_transaction = lib.transaction
+
+        def race_transaction():
+            nonlocal raced
+            if not raced:
+                raced = True
+                with other.transaction() as tx:
+                    tx.mutate(
+                        "UPDATE items SET title=? WHERE id=?",
+                        ("Changed after preflight", second_item_id),
+                    )
+            return original_transaction()
+
+        with monkeypatch.context() as race_patch:
+            race_patch.setattr(lib, "transaction", race_transaction)
+            return original_apply(lib, plan)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(plugin_module, "apply_library_identity_plan", race_second_target)
+    for method in ("write", "try_write", "try_sync"):
+        monkeypatch.setattr(
+            Item,
+            method,
+            lambda *args, method=method, **kwargs: pytest.fail(f"called {method}"),
+        )
+
+    with pytest.raises(LibraryIdentityApplicationError) as captured:
+        invoke(plugin, library, ["--identity", "--all", "--apply"])
+
+    assert raced
+    assert captured.value.committed is True
+    assert isinstance(captured.value.__cause__, LibraryIdentityApplicationError)
+    assert "earlier target changes were committed" in str(captured.value)
+    assert "rolled back" not in str(captured.value)
+    assert PRIVATE_PATH.decode() not in str(captured.value)
+    assert PRIVATE_QUERY not in str(captured.value)
+    assert "library-item:" not in str(captured.value)
+    assert mbid(18000) not in str(captured.value)
+    assert identity_values(library, first)[0:2] == (mbid(18000), mbid(18001))
+    assert not any(identity_values(library, second))
+    assert len(output) == 1
+    assert "library entry: Example Artist - Album A" in output[0]
+    assert "application: stored" in output[0]
+    assert "Album B" not in output[0]
+
+
+def test_first_target_race_reports_no_earlier_committed_changes(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    first = add_album(library, "Album A")
+    second = add_album(library, "Album B")
+    first_item_id = next(iter(first.items())).id
+    other = Library(str(library.path), set_music_dir=False)
+    plugin = NoqlenMetaPlugin()
+    configure(plugin)
+    plugin._musicbrainz_identity_source = FakeIdentitySource(
+        lambda context: (
+            remote_for(context, 20000 if context.album == "Album A" else 21000),
+        )
+    )
+    output = capture_output(monkeypatch)
+    original_apply = plugin_module.apply_library_identity_plan
+    raced = False
+
+    def race_first_target(lib: Library, plan: object):
+        nonlocal raced
+        if plan.source.context.album != "Album A":  # type: ignore[attr-defined]
+            return original_apply(lib, plan)  # type: ignore[arg-type]
+        original_transaction = lib.transaction
+
+        def race_transaction():
+            nonlocal raced
+            if not raced:
+                raced = True
+                with other.transaction() as tx:
+                    tx.mutate(
+                        "UPDATE items SET track=? WHERE id=?",
+                        (99, first_item_id),
+                    )
+            return original_transaction()
+
+        with monkeypatch.context() as race_patch:
+            race_patch.setattr(lib, "transaction", race_transaction)
+            return original_apply(lib, plan)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(plugin_module, "apply_library_identity_plan", race_first_target)
+
+    with pytest.raises(LibraryIdentityApplicationError) as captured:
+        invoke(plugin, library, ["--identity", "--all", "--apply"])
+
+    assert raced
+    assert captured.value.committed is False
+    assert "earlier target changes were committed" not in str(captured.value)
+    assert not any(identity_values(library, first))
+    assert not any(identity_values(library, second))
+    assert output == []
+
+
 def test_source_failure_is_private_and_does_not_block_other_targets(
     monkeypatch: pytest.MonkeyPatch, library: Library
 ) -> None:

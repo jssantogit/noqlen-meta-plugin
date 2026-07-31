@@ -21,14 +21,17 @@ persisted MusicBrainz identity and optionally repairs only the beets database wi
 - Map repair-ready missing/conflict findings to every differing required fixed database copy. Map no
   writes for confirmed, ambiguous, or non-ready results.
 - Complete all context, source, audit, and mapping work before writing. Perform command-wide and
-  per-target exact stale guards.
+  per-target exact stale guards. Acquire the per-target root transaction before rebuilding the final
+  complete snapshot, and require equality before SAVEPOINT creation or identity mutation.
 - Recompute and validate the canonical plan before applying one target under one real SQLite
   savepoint using public transaction SQL methods and bound values.
 - Verify rows before savepoint release and after root commit. Emit one post-commit
   `database_change` event per changed row.
 - Never call model stores, importer application, tag/file APIs, private database connections, or
   compensating writes.
-- Always render privacy-safe results with database-only wording.
+- Always render privacy-safe results with database-only wording. In apply mode, render each completed
+  target immediately. If a later target fails, retain earlier results and mark the safe propagated
+  error when earlier database changes committed without claiming command-wide rollback.
 
 ## Permission Matrix
 

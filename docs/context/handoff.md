@@ -17,11 +17,16 @@ Block 026 is complete. Persisted library MusicBrainz identity audit/repair exist
 - One retained-source audit per complete target, sanitized per-target source failures, and always-on
   privacy-safe preview.
 - Immutable mapping to every differing fixed Album/Item identity column.
-- Full planning before writes, command-wide preflight, and immediate per-target stale guards.
+- Full planning before writes, command-wide preflight, and a final complete snapshot rebuilt after
+  per-target root transaction acquisition but before SAVEPOINT creation.
 - One real SQLite savepoint per complete Album-plus-Items or singleton repair using public
   transaction SQL APIs and bound parameters.
 - In-savepoint and fresh post-commit verification with deterministic post-commit database events.
+- Immediate apply-mode rendering, with safe committed-state annotation if a later target races after
+  earlier changes committed.
 - Real temporary-database regression for beets 2.12 exceptional root commit and savepoint rollback.
+- Validation: 31 focused tests and 218 identity tests pass; the full offline suite passes 1,018 tests
+  with 5 live tests skipped. Ruff, contamination, and diff-whitespace checks pass.
 
 ## Important Decisions
 

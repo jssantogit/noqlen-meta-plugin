@@ -310,6 +310,188 @@ def test_item_moved_out_of_album_is_rejected_without_identity_writes(library: Li
     assert _persisted_identity(library, target) == before
 
 
+def test_membership_race_at_root_transaction_boundary_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    target = _add_album(library)
+    plan = _plan(target)
+    before = _persisted_identity(library, target)
+    moved_id = target.items[-1].item_id
+    other = Library(str(library.path), set_music_dir=False)
+    original_transaction = library.transaction
+    original_mutate = Transaction.mutate
+    statements: list[str] = []
+    events: list[object] = []
+    raced = False
+
+    def race_before_root():
+        nonlocal raced
+        if not raced:
+            raced = True
+            with other.transaction() as tx:
+                tx.mutate("UPDATE items SET album_id=NULL WHERE id=?", (moved_id,))
+        return original_transaction()
+
+    def record_mutate(self: Transaction, statement: str, *args, **kwargs):
+        statements.append(statement)
+        return original_mutate(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(library, "transaction", race_before_root)
+    monkeypatch.setattr(Transaction, "mutate", record_mutate)
+    monkeypatch.setattr(
+        application_module.plugins,
+        "send",
+        lambda *args, **kwargs: events.append((args, kwargs)),
+    )
+
+    with pytest.raises(LibraryIdentityApplicationError, match="structurally stale"):
+        apply_library_identity_plan(library, plan)
+
+    assert raced
+    assert "SAVEPOINT noqlen_identity_target" not in statements
+    assert not any("SET mb_" in statement for statement in statements)
+    assert _persisted_identity(library, target) == before
+    moved = library.get_item(moved_id)
+    assert moved is not None
+    assert moved.album_id is None
+    assert not moved.mb_albumid
+    assert not moved.mb_releasegroupid
+    assert not moved.mb_trackid
+    assert not moved.mb_releasetrackid
+    assert events == []
+
+
+def test_structural_race_at_root_transaction_boundary_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    target = _add_album(library)
+    plan = _plan(target)
+    before = _persisted_identity(library, target)
+    changed_id = target.items[0].item_id
+    other = Library(str(library.path), set_music_dir=False)
+    original_transaction = library.transaction
+    original_mutate = Transaction.mutate
+    statements: list[str] = []
+    raced = False
+
+    def race_before_root():
+        nonlocal raced
+        if not raced:
+            raced = True
+            with other.transaction() as tx:
+                tx.mutate("UPDATE items SET title=? WHERE id=?", ("Changed title", changed_id))
+        return original_transaction()
+
+    def record_mutate(self: Transaction, statement: str, *args, **kwargs):
+        statements.append(statement)
+        return original_mutate(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(library, "transaction", race_before_root)
+    monkeypatch.setattr(Transaction, "mutate", record_mutate)
+
+    with pytest.raises(LibraryIdentityApplicationError, match="target is stale"):
+        apply_library_identity_plan(library, plan)
+
+    assert raced
+    assert "SAVEPOINT noqlen_identity_target" not in statements
+    assert not any("SET mb_" in statement for statement in statements)
+    assert _persisted_identity(library, target) == before
+
+
+def test_final_full_snapshot_runs_inside_root_transaction_before_savepoint(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    plan = _plan(_add_album(library))
+    events: list[str] = []
+    original_enter = Transaction.__enter__
+    original_refresh = application_module.refresh_library_identity_target
+    original_mutate = Transaction.mutate
+
+    def record_enter(self: Transaction):
+        events.append("root entered")
+        return original_enter(self)
+
+    def record_refresh(*args, **kwargs):
+        events.append("full snapshot refresh")
+        return original_refresh(*args, **kwargs)
+
+    def record_mutate(self: Transaction, statement: str, *args, **kwargs):
+        if statement == "SAVEPOINT noqlen_identity_target":
+            events.append("savepoint")
+        elif statement.startswith("UPDATE "):
+            events.append("update")
+        return original_mutate(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(Transaction, "__enter__", record_enter)
+    monkeypatch.setattr(application_module, "refresh_library_identity_target", record_refresh)
+    monkeypatch.setattr(Transaction, "mutate", record_mutate)
+
+    apply_library_identity_plan(library, plan)
+
+    assert events.index("root entered") < events.index("full snapshot refresh")
+    assert events.index("full snapshot refresh") < events.index("savepoint")
+    assert events.index("savepoint") < events.index("update")
+
+
+def test_identity_before_value_change_inside_savepoint_blocks_and_rolls_back(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    target = _add_album(library)
+    plan = _plan(target)
+    before = _persisted_identity(library, target)
+    item_id = target.items[0].item_id
+    original_mutate = Transaction.mutate
+    injected = False
+
+    def inject_after_savepoint(self: Transaction, statement: str, *args, **kwargs):
+        nonlocal injected
+        result = original_mutate(self, statement, *args, **kwargs)
+        if statement == "SAVEPOINT noqlen_identity_target" and not injected:
+            injected = True
+            original_mutate(
+                self,
+                "UPDATE items SET mb_trackid=? WHERE id=?",
+                (mbid(9999), item_id),
+            )
+        return result
+
+    monkeypatch.setattr(Transaction, "mutate", inject_after_savepoint)
+
+    with pytest.raises(LibraryIdentityApplicationError, match="rolled back"):
+        apply_library_identity_plan(library, plan)
+
+    assert injected
+    assert _persisted_identity(library, target) == before
+
+
+def test_missing_row_inside_savepoint_blocks_and_rolls_back(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    target = _add_album(library)
+    plan = _plan(target)
+    before = _persisted_identity(library, target)
+    item_id = target.items[0].item_id
+    original_mutate = Transaction.mutate
+    injected = False
+
+    def delete_after_savepoint(self: Transaction, statement: str, *args, **kwargs):
+        nonlocal injected
+        result = original_mutate(self, statement, *args, **kwargs)
+        if statement == "SAVEPOINT noqlen_identity_target" and not injected:
+            injected = True
+            original_mutate(self, "DELETE FROM items WHERE id=?", (item_id,))
+        return result
+
+    monkeypatch.setattr(Transaction, "mutate", delete_after_savepoint)
+
+    with pytest.raises(LibraryIdentityApplicationError, match="rolled back"):
+        apply_library_identity_plan(library, plan)
+
+    assert injected
+    assert library.get_item(item_id) is not None
+    assert _persisted_identity(library, target) == before
+
+
 def test_application_uses_named_savepoint_transaction_apis_and_verifies_before_release(
     monkeypatch: pytest.MonkeyPatch, library: Library
 ) -> None:
