@@ -39,13 +39,14 @@ Block 026 is complete. The existing `noqlenmeta`/`nm` command has an explicit `-
 audits complete persisted Albums and standalone Items through Block 024. Preview is always rendered,
 and only `--identity --apply` can repair the four fixed MusicBrainz identity columns in the beets
 database. Planning uses fresh exact path-free snapshots, completes before writes, and applies each
-eligible target only after acquiring its root transaction and rebuilding the final complete snapshot
-before one real SQLite savepoint. Apply-mode results render as each target completes, so a later stale
-failure preserves visible earlier commits and is marked accordingly without claiming command-wide
-rollback. Verification and post-commit events remain unchanged. Ordinary enrichment and importer
-identity authority remain separate.
+eligible target only after creating one real SQLite savepoint. That savepoint contains the pre-write
+complete snapshot, identity updates, row checks, and a final complete expected-post snapshot derived
+only from the original snapshot and canonical plan. Apply-mode results render as each target
+completes, so a later stale failure preserves visible earlier commits and is marked accordingly
+without claiming command-wide rollback. Post-commit verification and events remain unchanged.
+Ordinary enrichment and importer identity authority remain separate.
 
-Validation passes 31 focused application/command tests, 218 identity tests, and 1,018 full offline
+Validation passes 35 focused application/command tests, 222 identity tests, and 1,022 full offline
 tests with 5 live tests skipped. Ruff, repository contamination, and diff-whitespace checks pass.
 
 Identity tag synchronization is still absent. No physical files or tags are read or written by

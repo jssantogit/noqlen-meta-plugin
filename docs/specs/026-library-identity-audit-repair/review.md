@@ -11,11 +11,12 @@ complete Albums and standalone singleton targets. Preview is always rendered. On
 - Block 024 is reused unchanged and existing IDs remain comparison-only.
 - Planning uses fresh rows and immutable exact path-free stale snapshots.
 - All source/audit/mapping work and command-wide preflight precede writes.
-- The final complete snapshot is rebuilt after root transaction acquisition and before SAVEPOINT,
-  closing late membership and structural races.
+- The real SQLite savepoint is created before the final pre-write complete snapshot; the Python root
+  lock alone is not treated as cross-connection isolation.
 - Album and Item changes share one named real SQLite savepoint per target.
 - SQL uses public transaction methods, fixed identifiers, and bound values.
-- In-savepoint and fresh post-commit verification are mandatory.
+- Row verification and a final complete expected-post snapshot occur before savepoint release; fresh
+  post-commit verification remains mandatory.
 - Events occur only after successful commit and verification.
 - Ambiguous, confirmed, unavailable, and non-ready outcomes do not write.
 - No model store, file/tag, private connection, or compensation path exists.
@@ -28,10 +29,13 @@ A real temporary beets 2.12.x database regression proves exceptional root transa
 while explicit rollback to the Block 026 savepoint restores all target identity columns after an
 injected mid-target failure.
 
-Real boundary-race regressions also move an Item and change track structure immediately before root
-transaction acquisition. Both fail the full snapshot before SAVEPOINT or identity UPDATE. Command
-regressions prove that an earlier successful target is already rendered and remains committed when a
-later target races, while a first-target race reports `committed=False`.
+Real boundary-race regressions move an Item and change track structure before application, and a
+synchronized two-Library regression attempts a structural write after the in-savepoint pre-write
+snapshot. It accepts only serialization/blocking or safe Noqlen rollback, never stale concurrent
+success. Same-transaction structural, membership, and unplanned identity injections are rejected by
+the final expected-post full snapshot and completely rolled back. Command regressions prove that an
+earlier successful target is already rendered and remains committed when a later target races, while
+a first-target race reports `committed=False`.
 
 ## Roadmap
 

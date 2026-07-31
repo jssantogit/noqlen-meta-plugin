@@ -52,9 +52,10 @@ transactions are not SQLite savepoints.
     duplicate database targets are hard mapping errors; there is no partial identity mode.
 13. Every context, source call, audit, and mapping completes before the first write. A command-wide
     fresh exact-snapshot preflight follows planning. Each eligible target receives another fresh
-    exact-snapshot guard after acquiring its root beets transaction and before creating the
-    savepoint. This closes membership and structural races after command-wide preflight. No source
-    work occurs after writes begin.
+    exact-snapshot guard after creating the real SQLite savepoint. The same savepoint contains the
+    pre-write snapshot, identity updates, row verification, and a final complete expected-post
+    snapshot derived only from the original exact snapshot and canonical plan. No source work occurs
+    after writes begin.
 14. Application recomputes the canonical plan and validates all changes before database mutation.
     Planning model objects remain unchanged.
 15. One complete Album plus all changed Items, or one singleton Item, is updated under one named
@@ -64,9 +65,12 @@ transactions are not SQLite savepoints.
     `mb_albumid` and `mb_releasegroupid`; Item rows accept the four fixed identity columns. No model
     `store()`, private connection/transaction-stack access, inserts, deletes, or flexible attributes
     participate in the write unit.
-17. Every changed row is queried and exactly verified before `RELEASE SAVEPOINT`. Ordinary failures
-    execute `ROLLBACK TO SAVEPOINT` and `RELEASE SAVEPOINT`, then raise a safe application error.
-    Failure of SQLite rollback itself is integrity-critical. There are no compensating writes.
+17. Every changed row is queried and exactly verified, then the complete target is refreshed and
+    compared with the immutable expected-post snapshot before `RELEASE SAVEPOINT`. Ordinary failures,
+    including stale pre-write snapshots, execute `ROLLBACK TO SAVEPOINT` and `RELEASE SAVEPOINT`, then
+    raise a safe application error. Failure of SQLite rollback itself is integrity-critical. There
+    are no compensating writes. The beets root Python lock alone is not treated as cross-connection
+    isolation.
 18. After successful root commit, every changed row is freshly re-fetched and verified. Only then is
     one deterministic public `database_change` event emitted per changed row. Notification failure
     reports that the database committed and never retries writes or implies rollback.

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from beets import plugins
 from beets.dbcore.db import Transaction
@@ -142,12 +142,18 @@ def apply_library_identity_plan(
         raise LibraryIdentityApplicationError("repair-ready identity plan has no changes")
 
     rows = _database_rows(resolved_plan)
+    expected_after = snapshot_after_library_identity_plan(
+        resolved_plan.source.exact_snapshot, resolved_plan
+    )
     try:
         with library.transaction() as tx:
-            _require_current_snapshot(library, target, resolved_plan.source.exact_snapshot)
             tx.mutate(_SAVEPOINT_SQL)
             try:
+                _require_current_snapshot(
+                    library, target, resolved_plan.source.exact_snapshot
+                )
                 _apply_and_verify(tx, rows)
+                _require_current_snapshot(library, target, expected_after)
                 tx.mutate(_RELEASE_SQL)
             except Exception as error:
                 _rollback_savepoint(tx, error)
@@ -177,6 +183,72 @@ def verify_library_identity_plan_snapshot(
     """Command-wide preflight used after all source and mapping work completes."""
     _validate_plan(plan)
     _require_current_snapshot(library, plan.source.selected, plan.source.exact_snapshot)
+
+
+def snapshot_after_library_identity_plan(
+    original: LibraryIdentityExactSnapshot,
+    plan: LibraryIdentityTargetPlan,
+) -> LibraryIdentityExactSnapshot:
+    """Derive the only complete snapshot one canonical plan may persist."""
+    if type(original) is not LibraryIdentityExactSnapshot:
+        raise LibraryIdentityApplicationError("library identity original snapshot is invalid")
+    _validate_plan(plan)
+    if original != plan.source.exact_snapshot:
+        raise LibraryIdentityApplicationError(
+            "library identity snapshot does not match the canonical plan"
+        )
+
+    album_fields = dict(original.album_fields)
+    item_fields = {item.item_id: dict(item.fields) for item in original.item_snapshots}
+    if len(item_fields) != len(original.item_snapshots):
+        raise LibraryIdentityApplicationError(
+            "library identity snapshot Item rows are inconsistent"
+        )
+    seen: set[tuple[LibraryIdentityWriteKind, int, str]] = set()
+    for change in plan.changes:
+        key = (change.write_kind, change.row_id, change.target_field)
+        if key in seen:
+            raise LibraryIdentityApplicationError("library identity snapshot target is duplicated")
+        seen.add(key)
+        if canonical_mbid(change.target_value) != change.target_value:
+            raise LibraryIdentityApplicationError("library identity snapshot UUID is invalid")
+        if change.canonical_field != change.target_field:
+            raise LibraryIdentityApplicationError("library identity snapshot field is inconsistent")
+        if change.write_kind is LibraryIdentityWriteKind.ALBUM_FIELD:
+            if original.album_id != change.row_id or change.target_field not in _ALBUM_FIELDS:
+                raise LibraryIdentityApplicationError(
+                    "library identity snapshot Album target is invalid"
+                )
+            if album_fields.get(change.target_field) != change.before_value:
+                raise LibraryIdentityApplicationError(
+                    "library identity snapshot Album before-value is invalid"
+                )
+            album_fields[change.target_field] = change.target_value
+            continue
+        if change.write_kind is not LibraryIdentityWriteKind.ITEM_FIELD:
+            raise LibraryIdentityApplicationError(
+                "library identity snapshot target kind is invalid"
+            )
+        fields = item_fields.get(change.row_id)
+        if fields is None or change.target_field not in _ITEM_FIELDS:
+            raise LibraryIdentityApplicationError(
+                "library identity snapshot Item target is invalid"
+            )
+        if fields.get(change.target_field) != change.before_value:
+            raise LibraryIdentityApplicationError(
+                "library identity snapshot Item before-value is invalid"
+            )
+        fields[change.target_field] = change.target_value
+
+    expected_items = tuple(
+        replace(item, fields=tuple(item_fields[item.item_id].items()))
+        for item in original.item_snapshots
+    )
+    return replace(
+        original,
+        album_fields=tuple(album_fields.items()),
+        item_snapshots=expected_items,
+    )
 
 
 def _validate_plan(plan: LibraryIdentityTargetPlan) -> None:

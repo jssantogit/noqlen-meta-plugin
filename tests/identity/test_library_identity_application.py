@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
+from threading import Event, Thread
 
 import pytest
 from beets.dbcore.db import Transaction
@@ -264,9 +265,11 @@ def test_stale_plan_is_rejected_without_identity_writes(library: Library) -> Non
         tx.mutate("UPDATE items SET title=? WHERE id=?", ("Changed concurrently", item_id))
     before = _persisted_identity(library, target)
 
-    with pytest.raises(LibraryIdentityApplicationError, match="stale"):
+    with pytest.raises(LibraryIdentityApplicationError, match="rolled back") as captured:
         apply_library_identity_plan(library, plan)
 
+    assert isinstance(captured.value.__cause__, LibraryIdentityApplicationError)
+    assert "stale" in str(captured.value.__cause__)
     assert _persisted_identity(library, target) == before
 
 
@@ -284,9 +287,11 @@ def test_deleted_target_is_rejected_without_writes(library: Library) -> None:
         for item in target.items
     )
 
-    with pytest.raises(LibraryIdentityApplicationError, match="unavailable or structurally stale"):
+    with pytest.raises(LibraryIdentityApplicationError, match="rolled back") as captured:
         apply_library_identity_plan(library, plan)
 
+    assert isinstance(captured.value.__cause__, LibraryIdentityApplicationError)
+    assert "unavailable or structurally stale" in str(captured.value.__cause__)
     assert tuple(
         tuple(
             library.get_item(item.item_id).get(field, with_album=False)
@@ -304,9 +309,11 @@ def test_item_moved_out_of_album_is_rejected_without_identity_writes(library: Li
         tx.mutate("UPDATE items SET album_id=NULL WHERE id=?", (moved_id,))
     before = _persisted_identity(library, target)
 
-    with pytest.raises(LibraryIdentityApplicationError, match="structurally stale"):
+    with pytest.raises(LibraryIdentityApplicationError, match="rolled back") as captured:
         apply_library_identity_plan(library, plan)
 
+    assert isinstance(captured.value.__cause__, LibraryIdentityApplicationError)
+    assert "structurally stale" in str(captured.value.__cause__)
     assert _persisted_identity(library, target) == before
 
 
@@ -344,11 +351,15 @@ def test_membership_race_at_root_transaction_boundary_is_rejected(
         lambda *args, **kwargs: events.append((args, kwargs)),
     )
 
-    with pytest.raises(LibraryIdentityApplicationError, match="structurally stale"):
+    with pytest.raises(LibraryIdentityApplicationError, match="rolled back") as captured:
         apply_library_identity_plan(library, plan)
 
     assert raced
-    assert "SAVEPOINT noqlen_identity_target" not in statements
+    assert isinstance(captured.value.__cause__, LibraryIdentityApplicationError)
+    assert "structurally stale" in str(captured.value.__cause__)
+    assert statements.count("SAVEPOINT noqlen_identity_target") == 1
+    assert "ROLLBACK TO SAVEPOINT noqlen_identity_target" in statements
+    assert "RELEASE SAVEPOINT noqlen_identity_target" in statements
     assert not any("SET mb_" in statement for statement in statements)
     assert _persisted_identity(library, target) == before
     moved = library.get_item(moved_id)
@@ -389,16 +400,20 @@ def test_structural_race_at_root_transaction_boundary_is_rejected(
     monkeypatch.setattr(library, "transaction", race_before_root)
     monkeypatch.setattr(Transaction, "mutate", record_mutate)
 
-    with pytest.raises(LibraryIdentityApplicationError, match="target is stale"):
+    with pytest.raises(LibraryIdentityApplicationError, match="rolled back") as captured:
         apply_library_identity_plan(library, plan)
 
     assert raced
-    assert "SAVEPOINT noqlen_identity_target" not in statements
+    assert isinstance(captured.value.__cause__, LibraryIdentityApplicationError)
+    assert "target is stale" in str(captured.value.__cause__)
+    assert statements.count("SAVEPOINT noqlen_identity_target") == 1
+    assert "ROLLBACK TO SAVEPOINT noqlen_identity_target" in statements
+    assert "RELEASE SAVEPOINT noqlen_identity_target" in statements
     assert not any("SET mb_" in statement for statement in statements)
     assert _persisted_identity(library, target) == before
 
 
-def test_final_full_snapshot_runs_inside_root_transaction_before_savepoint(
+def test_savepoint_contains_prewrite_snapshot_updates_and_postwrite_snapshot(
     monkeypatch: pytest.MonkeyPatch, library: Library
 ) -> None:
     plan = _plan(_add_album(library))
@@ -418,6 +433,8 @@ def test_final_full_snapshot_runs_inside_root_transaction_before_savepoint(
     def record_mutate(self: Transaction, statement: str, *args, **kwargs):
         if statement == "SAVEPOINT noqlen_identity_target":
             events.append("savepoint")
+        elif statement == "RELEASE SAVEPOINT noqlen_identity_target":
+            events.append("release")
         elif statement.startswith("UPDATE "):
             events.append("update")
         return original_mutate(self, statement, *args, **kwargs)
@@ -428,9 +445,14 @@ def test_final_full_snapshot_runs_inside_root_transaction_before_savepoint(
 
     apply_library_identity_plan(library, plan)
 
-    assert events.index("root entered") < events.index("full snapshot refresh")
-    assert events.index("full snapshot refresh") < events.index("savepoint")
-    assert events.index("savepoint") < events.index("update")
+    refreshes = [index for index, event in enumerate(events) if event == "full snapshot refresh"]
+    assert events.count("savepoint") == 1
+    assert len(refreshes) == 2
+    assert events.index("root entered") < events.index("savepoint")
+    assert events.index("savepoint") < refreshes[0]
+    assert refreshes[0] < events.index("update")
+    assert events.index("update") < refreshes[1]
+    assert refreshes[1] < events.index("release")
 
 
 def test_identity_before_value_change_inside_savepoint_blocks_and_rolls_back(
@@ -441,21 +463,34 @@ def test_identity_before_value_change_inside_savepoint_blocks_and_rolls_back(
     before = _persisted_identity(library, target)
     item_id = target.items[0].item_id
     original_mutate = Transaction.mutate
+    original_require = application_module._require_current_snapshot
+    active_tx: Transaction | None = None
+    snapshot_count = 0
     injected = False
 
-    def inject_after_savepoint(self: Transaction, statement: str, *args, **kwargs):
-        nonlocal injected
+    def capture_savepoint(self: Transaction, statement: str, *args, **kwargs):
+        nonlocal active_tx
         result = original_mutate(self, statement, *args, **kwargs)
-        if statement == "SAVEPOINT noqlen_identity_target" and not injected:
+        if statement == "SAVEPOINT noqlen_identity_target":
+            active_tx = self
+        return result
+
+    def inject_after_snapshot(*args, **kwargs):
+        nonlocal injected, snapshot_count
+        result = original_require(*args, **kwargs)
+        snapshot_count += 1
+        if snapshot_count == 1:
+            assert active_tx is not None
             injected = True
             original_mutate(
-                self,
+                active_tx,
                 "UPDATE items SET mb_trackid=? WHERE id=?",
                 (mbid(9999), item_id),
             )
         return result
 
-    monkeypatch.setattr(Transaction, "mutate", inject_after_savepoint)
+    monkeypatch.setattr(Transaction, "mutate", capture_savepoint)
+    monkeypatch.setattr(application_module, "_require_current_snapshot", inject_after_snapshot)
 
     with pytest.raises(LibraryIdentityApplicationError, match="rolled back"):
         apply_library_identity_plan(library, plan)
@@ -472,17 +507,30 @@ def test_missing_row_inside_savepoint_blocks_and_rolls_back(
     before = _persisted_identity(library, target)
     item_id = target.items[0].item_id
     original_mutate = Transaction.mutate
+    original_require = application_module._require_current_snapshot
+    active_tx: Transaction | None = None
+    snapshot_count = 0
     injected = False
 
-    def delete_after_savepoint(self: Transaction, statement: str, *args, **kwargs):
-        nonlocal injected
+    def capture_savepoint(self: Transaction, statement: str, *args, **kwargs):
+        nonlocal active_tx
         result = original_mutate(self, statement, *args, **kwargs)
-        if statement == "SAVEPOINT noqlen_identity_target" and not injected:
-            injected = True
-            original_mutate(self, "DELETE FROM items WHERE id=?", (item_id,))
+        if statement == "SAVEPOINT noqlen_identity_target":
+            active_tx = self
         return result
 
-    monkeypatch.setattr(Transaction, "mutate", delete_after_savepoint)
+    def delete_after_snapshot(*args, **kwargs):
+        nonlocal injected, snapshot_count
+        result = original_require(*args, **kwargs)
+        snapshot_count += 1
+        if snapshot_count == 1:
+            assert active_tx is not None
+            injected = True
+            original_mutate(active_tx, "DELETE FROM items WHERE id=?", (item_id,))
+        return result
+
+    monkeypatch.setattr(Transaction, "mutate", capture_savepoint)
+    monkeypatch.setattr(application_module, "_require_current_snapshot", delete_after_snapshot)
 
     with pytest.raises(LibraryIdentityApplicationError, match="rolled back"):
         apply_library_identity_plan(library, plan)
@@ -490,6 +538,260 @@ def test_missing_row_inside_savepoint_blocks_and_rolls_back(
     assert injected
     assert library.get_item(item_id) is not None
     assert _persisted_identity(library, target) == before
+
+
+def test_structural_change_after_prewrite_snapshot_rolls_back_complete_target(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    target = _add_album(library)
+    plan = _plan(target)
+    before = _persisted_identity(library, target)
+    item_id = target.items[0].item_id
+    original_title = target.items[0].item.title
+    original_mutate = Transaction.mutate
+    original_require = application_module._require_current_snapshot
+    active_tx: Transaction | None = None
+    snapshot_count = 0
+    events: list[object] = []
+
+    def capture_savepoint(self: Transaction, statement: str, *args, **kwargs):
+        nonlocal active_tx
+        result = original_mutate(self, statement, *args, **kwargs)
+        if statement == "SAVEPOINT noqlen_identity_target":
+            active_tx = self
+        return result
+
+    def mutate_after_snapshot(*args, **kwargs):
+        nonlocal snapshot_count
+        result = original_require(*args, **kwargs)
+        snapshot_count += 1
+        if snapshot_count == 1:
+            assert active_tx is not None
+            original_mutate(
+                active_tx,
+                "UPDATE items SET title=? WHERE id=?",
+                ("Injected structural change", item_id),
+            )
+        return result
+
+    monkeypatch.setattr(Transaction, "mutate", capture_savepoint)
+    monkeypatch.setattr(application_module, "_require_current_snapshot", mutate_after_snapshot)
+    monkeypatch.setattr(
+        application_module.plugins,
+        "send",
+        lambda *args, **kwargs: events.append((args, kwargs)),
+    )
+
+    with pytest.raises(LibraryIdentityApplicationError, match="rolled back"):
+        apply_library_identity_plan(library, plan)
+
+    fresh = library.get_item(item_id)
+    assert fresh is not None
+    assert fresh.title == original_title
+    assert _persisted_identity(library, target) == before
+    assert events == []
+
+
+def test_membership_change_after_prewrite_snapshot_rolls_back_complete_target(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    target = _add_album(library)
+    plan = _plan(target)
+    before = _persisted_identity(library, target)
+    item_id = target.items[-1].item_id
+    original_mutate = Transaction.mutate
+    original_require = application_module._require_current_snapshot
+    active_tx: Transaction | None = None
+    snapshot_count = 0
+    events: list[object] = []
+
+    def capture_savepoint(self: Transaction, statement: str, *args, **kwargs):
+        nonlocal active_tx
+        result = original_mutate(self, statement, *args, **kwargs)
+        if statement == "SAVEPOINT noqlen_identity_target":
+            active_tx = self
+        return result
+
+    def mutate_after_snapshot(*args, **kwargs):
+        nonlocal snapshot_count
+        result = original_require(*args, **kwargs)
+        snapshot_count += 1
+        if snapshot_count == 1:
+            assert active_tx is not None
+            original_mutate(active_tx, "UPDATE items SET album_id=NULL WHERE id=?", (item_id,))
+        return result
+
+    monkeypatch.setattr(Transaction, "mutate", capture_savepoint)
+    monkeypatch.setattr(application_module, "_require_current_snapshot", mutate_after_snapshot)
+    monkeypatch.setattr(
+        application_module.plugins,
+        "send",
+        lambda *args, **kwargs: events.append((args, kwargs)),
+    )
+
+    with pytest.raises(LibraryIdentityApplicationError, match="rolled back"):
+        apply_library_identity_plan(library, plan)
+
+    fresh = library.get_item(item_id)
+    assert fresh is not None
+    assert fresh.album_id == target.album_id
+    assert _persisted_identity(library, target) == before
+    assert events == []
+
+
+def test_unplanned_identity_change_after_prewrite_snapshot_rolls_back(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    initial = _add_album(library)
+    item_id = initial.items[0].item_id
+    with library.transaction() as tx:
+        tx.mutate("UPDATE items SET mb_trackid=? WHERE id=?", (mbid(1001), item_id))
+    target = next(
+        item
+        for item in select_library_identity_targets(library)
+        if item.album_id == initial.album_id
+    )
+    plan = _plan(target)
+    assert not any(
+        change.row_id == item_id and change.target_field == "mb_trackid"
+        for change in plan.changes
+    )
+    before = _persisted_identity(library, target)
+    original_mutate = Transaction.mutate
+    original_require = application_module._require_current_snapshot
+    active_tx: Transaction | None = None
+    snapshot_count = 0
+    events: list[object] = []
+
+    def capture_savepoint(self: Transaction, statement: str, *args, **kwargs):
+        nonlocal active_tx
+        result = original_mutate(self, statement, *args, **kwargs)
+        if statement == "SAVEPOINT noqlen_identity_target":
+            active_tx = self
+        return result
+
+    def mutate_after_snapshot(*args, **kwargs):
+        nonlocal snapshot_count
+        result = original_require(*args, **kwargs)
+        snapshot_count += 1
+        if snapshot_count == 1:
+            assert active_tx is not None
+            original_mutate(
+                active_tx,
+                "UPDATE items SET mb_trackid=? WHERE id=?",
+                (mbid(9999), item_id),
+            )
+        return result
+
+    monkeypatch.setattr(Transaction, "mutate", capture_savepoint)
+    monkeypatch.setattr(application_module, "_require_current_snapshot", mutate_after_snapshot)
+    monkeypatch.setattr(
+        application_module.plugins,
+        "send",
+        lambda *args, **kwargs: events.append((args, kwargs)),
+    )
+
+    with pytest.raises(LibraryIdentityApplicationError, match="rolled back"):
+        apply_library_identity_plan(library, plan)
+
+    assert _persisted_identity(library, target) == before
+    assert events == []
+
+
+def test_external_writer_after_prewrite_snapshot_cannot_create_stale_success(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    with library.transaction() as tx:
+        assert tx.query("PRAGMA journal_mode=WAL")[0][0] == "wal"
+    target = _add_album(library)
+    plan = _plan(target)
+    before = _persisted_identity(library, target)
+    item_id = target.items[0].item_id
+    original_title = target.items[0].item.title
+    other = Library(str(library.path), set_music_dir=False)
+    start_writer = Event()
+    writer_attempting = Event()
+    writer_done = Event()
+    writer_errors: list[Exception] = []
+    original_require = application_module._require_current_snapshot
+    original_apply_rows = application_module._apply_and_verify
+    original_mutate = Transaction.mutate
+    snapshot_count = 0
+    writer_committed_before_apply: list[bool] = []
+    write_order: list[str] = []
+    events: list[object] = []
+
+    def competing_writer() -> None:
+        try:
+            assert start_writer.wait(timeout=5)
+            with other.transaction() as tx:
+                writer_attempting.set()
+                tx.mutate(
+                    "UPDATE items SET title=? WHERE id=?",
+                    ("External structural change", item_id),
+                )
+            write_order.append("writer committed")
+        except Exception as error:
+            writer_errors.append(error)
+        finally:
+            writer_done.set()
+
+    def synchronize_after_snapshot(*args, **kwargs):
+        nonlocal snapshot_count
+        result = original_require(*args, **kwargs)
+        snapshot_count += 1
+        if snapshot_count == 1:
+            start_writer.set()
+            assert writer_attempting.wait(timeout=5)
+        return result
+
+    def record_writer_state(*args, **kwargs):
+        writer_committed_before_apply.append(writer_done.is_set() and not writer_errors)
+        return original_apply_rows(*args, **kwargs)
+
+    def record_identity_update(self: Transaction, statement: str, *args, **kwargs):
+        if statement.startswith("UPDATE ") and " SET mb_" in statement:
+            write_order.append("noqlen identity update")
+        return original_mutate(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(
+        application_module, "_require_current_snapshot", synchronize_after_snapshot
+    )
+    monkeypatch.setattr(application_module, "_apply_and_verify", record_writer_state)
+    monkeypatch.setattr(Transaction, "mutate", record_identity_update)
+    monkeypatch.setattr(
+        application_module.plugins,
+        "send",
+        lambda *args, **kwargs: events.append((args, kwargs)),
+    )
+    writer = Thread(target=competing_writer, daemon=True)
+    writer.start()
+
+    application_error: LibraryIdentityApplicationError | None = None
+    try:
+        apply_library_identity_plan(library, plan)
+    except LibraryIdentityApplicationError as error:
+        application_error = error
+    writer.join(timeout=5)
+
+    assert not writer.is_alive()
+    assert writer_attempting.is_set()
+    assert writer_committed_before_apply
+    if application_error is None:
+        assert writer_committed_before_apply == [False]
+        if "writer committed" in write_order:
+            assert write_order.index("noqlen identity update") < write_order.index(
+                "writer committed"
+            )
+        assert _persisted_identity(library, target) != before
+        assert len(events) == 1 + len(target.items)
+    else:
+        assert "rolled back" in str(application_error)
+        assert _persisted_identity(library, target) == before
+        assert events == []
+    fresh = library.get_item(item_id)
+    assert fresh is not None
+    assert fresh.title in {original_title, "External structural change"}
 
 
 def test_application_uses_named_savepoint_transaction_apis_and_verifies_before_release(
