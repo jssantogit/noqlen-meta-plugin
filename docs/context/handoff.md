@@ -2,39 +2,41 @@
 
 ## State
 
-Block 025 is integrated. It consumes the Block 024 audit for an already accepted album or singleton
-match, renders a privacy-safe importer preview, and can explicitly prepare one atomic identity repair
-on selected metadata for normal beets application.
+Block 026 is complete. Persisted library MusicBrainz identity audit/repair exists as the explicit
+`--identity` mode on the existing `noqlenmeta`/`nm` command.
 
 ## Completed
 
-- Separate boolean identity enable, preview, and apply settings with conservative defaults.
-- Accepted AlbumMatch/TrackMatch extraction and effective post-beets context prediction, including
-  `from_scratch`.
-- Direct reuse of Block 024 assignment, scoring, selection, ambiguity, and field comparison.
-- Sanitized preview of evidence, findings, repair readiness, and application state.
-- Album preview renders repeated canonical IDs once, distinct IDs as `multiple/conflict`, and mixed
-  state as `mixed/missing`; ambiguous counts use top-ranked evidence without selecting it.
-- Canonical album/singleton mapping to selected `AlbumInfo`/`TrackInfo` identity fields.
-- Forged-plan, stale-context, target-shape, scope, uniqueness, atomic rollback, and cache guards.
-- Selected metadata mutation only; normal beets still owns persistence and file behavior.
+- Item-query selection that expands complete Albums, deduplicates them, and supports standalone
+  singleton Items; `--all` covers both kinds once in deterministic database-ID order.
+- Fresh immutable selected boundaries and exact path-free stale snapshots.
+- Album and singleton Block 024 contexts, including multidisc ordering and conservative flattened
+  positions.
+- Album-plus-Item release identity aggregation with private mixed-missing state and direct per-Item
+  track identity.
+- One retained-source audit per complete target, sanitized per-target source failures, and always-on
+  privacy-safe preview.
+- Immutable mapping to every differing fixed Album/Item identity column.
+- Full planning before writes, command-wide preflight, and immediate per-target stale guards.
+- One real SQLite savepoint per complete Album-plus-Items or singleton repair using public
+  transaction SQL APIs and bound parameters.
+- In-savepoint and fresh post-commit verification with deterministic post-commit database events.
+- Real temporary-database regression for beets 2.12 exceptional root commit and savepoint rollback.
 
 ## Important Decisions
 
-- Identity settings and application authority are separate from enrichment and provider settings.
-- Noqlen audits only the selected match and never changes beets match selection.
-- Ambiguous or non-repair-ready evidence produces no repair; identity has no partial mode.
-- The entire target set is revalidated and applied atomically or not at all.
-- Noqlen mutates only selected metadata; Item, Album, database, tags, and files remain out of bounds.
+- Only `--identity --apply` authorizes persisted library identity repair.
+- Bare `nm --apply` remains ordinary enrichment; importer identity settings do not grant library
+  writes.
+- Identity has no partial or force mode, and ambiguous/non-ready evidence never writes.
+- Block 026 is database-only. No model store, tag/file, importer application, or private connection
+  path participates in identity repair.
 
 ## Deferred
 
-- Library identity audit/repair in Block 026.
-- Identity tag synchronization in Block 027.
-- AcoustID, Chromaprint, fingerprinting, and recording search after v1.0.
+- Block 027 explicit synchronization of confirmed database MBIDs to supported audio-file tags.
+- AcoustID, Chromaprint, fingerprinting, and recording search remain outside v1.0.
 
 ## Next Direction
 
-Proceed to Block 026 library identity audit/repair. Library identity and tag synchronization are
-currently absent. Preserve the frozen remaining roadmap: 026 library identity, 027 tag
-synchronization, 028 v1.0 hardening/release, then STOP.
+Proceed to Block 027, then Block 028, then STOP.

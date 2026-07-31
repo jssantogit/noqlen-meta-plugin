@@ -267,6 +267,7 @@ candidate lyric values; raw plain or synchronized lyrics are never rendered.
 | Importer, `preview: false`, `apply: true` | Guarded release application without preview | Guarded track application without preview; LRCLIB may run | Selected `AlbumInfo` and selected `TrackInfo` only |
 | Importer, `preview: false`, `apply: false` | No release work | No track work | No mutation |
 | `beet noqlenmeta` / `beet nm` | Existing album query preview or explicit database application | No singleton or per-track mode; LRCLIB is not called | Existing persistent Album policy only |
+| `beet nm --identity` | Complete-Album or singleton MusicBrainz identity audit | Global Block 024 assignment; no enrichment providers | Preview only unless `--identity --apply` explicitly stores database MBIDs |
 | File tag synchronization | No new behavior | No track synchronization | No new behavior |
 
 ## Library command
@@ -327,6 +328,33 @@ All selected Albums are planned before the first database write. Persistence the
 at a time using normal beets store transactions. There is no command-wide rollback: if one Album is
 stored and a later Album store fails, the earlier database change may remain and later Albums are
 not attempted.
+
+### Library identity mode
+
+The same command and alias provide a separate, always-previewed MusicBrainz identity mode:
+
+```bash
+beet nm --identity album:"Example"
+beet nm --identity --all
+beet nm --identity --apply album:"Example"
+```
+
+In identity mode, positional arguments are a normal beets Item query. Matching one or more tracks
+from an Album selects that complete persisted Album exactly once; standalone Items are audited as
+singleton targets. `--all` selects every persisted Album and every standalone Item once. Targets are
+ordered by database ID, and paths are never identity keys or preview data.
+
+Identity preview always runs. Only the exact CLI combination `--identity --apply` authorizes repair,
+and it writes only `mb_albumid`, `mb_releasegroupid`, `mb_trackid`, and `mb_releasetrackid` in the
+beets database. It does not write or read tags, invoke file synchronization, or modify physical
+files. A bare `nm --apply` remains ordinary enrichment, and importer `identity.apply` does not grant
+library repair permission. Conversely, library identity flags do not alter importer configuration.
+
+`--partial` remains ordinary-enrichment-only and is rejected with `--identity`. There is no identity
+`--force` option. Ambiguous, weak, incomplete, stale, unavailable, and otherwise non-repair-ready
+evidence never writes. Complete source/audit/mapping work precedes the first database update, and one
+real SQLite savepoint makes each Album-plus-Items or singleton repair atomic. Block 027 will
+explicitly synchronize confirmed database MBIDs to supported file tags; Block 026 does not.
 
 During importer enrichment, Noqlen mutates only eligible fields on the selected `AlbumInfo`. It does
 not directly mutate Items or persistent Albums, add library records, write tags, or move/copy files.
@@ -427,10 +455,11 @@ mutation and cache invalidation. It does not directly mutate `Item` or persisten
 store database rows, synchronize tags, or write files; normal beets importer lifecycle remains the
 sole owner of later persistence and file behavior.
 
-Block 025 importer identity preview/repair is integrated. Library identity audit/repair is absent and
-belongs to Block 026; identity tag synchronization is absent and belongs to Block 027. AcoustID,
-Chromaprint, fingerprinting, and recording-search evidence remain excluded from v1.0. The frozen
-remaining roadmap is Block 026, Block 027, Block 028 v1.0 hardening/release, then STOP.
+Block 025 importer identity preview/repair and Block 026 persisted library identity audit/repair are
+integrated as separately authorized workflows. Identity tag synchronization remains absent and
+belongs to Block 027. AcoustID, Chromaprint, fingerprinting, and recording-search evidence remain
+excluded from v1.0. The frozen remaining roadmap is Block 027, Block 028 v1.0 hardening/release, then
+STOP.
 
 ## Current status
 
@@ -439,11 +468,12 @@ shared planning path. During importer preview, LRCLIB can plan lyrics for select
 singleton tracks through the same Field Authority, resolver, and `ChangePlan`. A read-only
 `TrackTargetPlan` then maps plain lyrics to `TrackInfo.lyrics` and exposes synchronized lyrics as a
 mapping blocker. Importer release enrichment separately maps its release `ChangePlan` to
-`BeetsTargetPlan`; the album-only library command maps only release plans to `LibraryTargetPlan`.
+`BeetsTargetPlan`; ordinary library mode maps release plans to `LibraryTargetPlan`, while explicit
+library identity mode maps Block 024 findings directly to fixed Album/Item database columns.
 Importer application can mutate selected `AlbumInfo` and losslessly mapped fields on selected
 `TrackInfo` through separate guarded strict or partial boundaries. CLI application is separately
 authorized by `--apply`, remains strict by default, and permits safe partial database application
-only with `--apply --partial`. Items, track database metadata, and files remain outside Noqlen track
-application.
+only with `--apply --partial`. Block 026 can separately repair Item identity database columns only
+with `--identity --apply`; files and tags remain outside that boundary.
 
 See `docs/context/current.md` and `docs/context/handoff.md` before starting a development block.

@@ -1,7 +1,7 @@
 """Noqlen Meta beets plugin."""
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import confuse
 from beets import ui
@@ -38,6 +38,30 @@ from beetsplug.noqlenmeta.identity import (
 from beetsplug.noqlenmeta.identity.importer_preview import (
     render_import_identity_audit,
     render_incomplete_import_identity_note,
+)
+from beetsplug.noqlenmeta.identity.library import (
+    LibraryIdentityAuditResult,
+    LibraryIdentityContextResult,
+    SelectedLibraryIdentityTarget,
+    audit_library_identity_target,
+    exact_snapshot_from_library_target,
+    identity_context_from_library_target,
+    refresh_library_identity_target,
+    select_library_identity_targets,
+)
+from beetsplug.noqlenmeta.identity.library_application import (
+    LibraryIdentityApplicationError,
+    LibraryIdentityApplicationResult,
+    apply_library_identity_plan,
+    verify_library_identity_plan_snapshot,
+)
+from beetsplug.noqlenmeta.identity.library_mapping import (
+    LibraryIdentityTargetPlan,
+    map_library_identity_targets,
+)
+from beetsplug.noqlenmeta.identity.library_preview import (
+    render_library_identity_audit,
+    render_unavailable_library_identity_target,
 )
 from beetsplug.noqlenmeta.integration import (
     ResolutionSettingsError,
@@ -131,6 +155,17 @@ class LibraryAlbumPlan:
     total: int
 
 
+@dataclass(frozen=True, slots=True)
+class PreparedLibraryIdentityPlan:
+    selected: SelectedLibraryIdentityTarget
+    context_result: LibraryIdentityContextResult | None
+    result: LibraryIdentityAuditResult | None
+    target_plan: LibraryIdentityTargetPlan | None
+    unavailable_reason: str | None
+    position: int
+    total: int
+
+
 class NoqlenMetaPlugin(BeetsPlugin):
     """Entry point loaded by beets as the ``noqlenmeta`` plugin."""
 
@@ -180,8 +215,15 @@ class NoqlenMetaPlugin(BeetsPlugin):
         self.register_listener("import_task_choice", self._import_task_choice)
         self._command = Subcommand(
             "noqlenmeta",
-            help="preview Noqlen metadata enrichment for library albums",
+            help="preview Noqlen metadata enrichment or MusicBrainz identity for the library",
             aliases=["nm"],
+        )
+        self._command.parser.add_option(
+            "--identity",
+            dest="identity",
+            action="store_true",
+            default=False,
+            help="audit MusicBrainz identity instead of ordinary metadata enrichment",
         )
         self._command.parser.add_option(
             "--all",
@@ -457,6 +499,9 @@ class NoqlenMetaPlugin(BeetsPlugin):
             )
 
     def _command_noqlenmeta(self, lib: Library, opts: object, args: list[str]) -> None:
+        if bool(getattr(opts, "identity", False)):
+            self._command_library_identity(lib, opts, args)
+            return
         all_albums = bool(getattr(opts, "all", False))
         apply_enabled = bool(getattr(opts, "apply", False))
         partial_enabled = bool(getattr(opts, "partial", False))
@@ -521,6 +566,120 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 application_result,
                 position=album_plan.position,
                 total=album_plan.total,
+            )
+
+    def _command_library_identity(
+        self, lib: Library, opts: object, args: list[str]
+    ) -> None:
+        all_items = bool(getattr(opts, "all", False))
+        apply_enabled = bool(getattr(opts, "apply", False))
+        partial_enabled = bool(getattr(opts, "partial", False))
+        has_query = any(isinstance(argument, str) and argument.strip() for argument in args)
+        if partial_enabled:
+            raise ui.UserError("noqlenmeta: --identity cannot be used with --partial")
+        if not has_query and not all_items:
+            raise ui.UserError("noqlenmeta: --identity requires an Item query or --all")
+        if args and all_items:
+            raise ui.UserError("noqlenmeta: use an Item query or --all with --identity, not both")
+
+        targets = select_library_identity_targets(lib, args if args else None)
+        if not targets:
+            ui.print_("Noqlen MusicBrainz identity: no Items matched")
+            return
+
+        context_results = tuple(identity_context_from_library_target(target) for target in targets)
+        source = self._identity_source() if any(context_results) else None
+        prepared: list[PreparedLibraryIdentityPlan] = []
+        total = len(targets)
+        for position, (target, context_result) in enumerate(
+            zip(targets, context_results, strict=True), start=1
+        ):
+            if context_result is None:
+                prepared.append(
+                    PreparedLibraryIdentityPlan(
+                        target, None, None, None, "context", position, total
+                    )
+                )
+                continue
+            assert source is not None
+            try:
+                result = audit_library_identity_target(target, source)
+            except IdentitySourceError:
+                prepared.append(
+                    PreparedLibraryIdentityPlan(
+                        target,
+                        context_result,
+                        None,
+                        None,
+                        "source",
+                        position,
+                        total,
+                    )
+                )
+                continue
+            if result is None:
+                prepared.append(
+                    PreparedLibraryIdentityPlan(
+                        target, None, None, None, "context", position, total
+                    )
+                )
+                continue
+            prepared.append(
+                PreparedLibraryIdentityPlan(
+                    target,
+                    result.context_result,
+                    result,
+                    None,
+                    None,
+                    position,
+                    total,
+                )
+            )
+
+        # Keep mapping as a distinct phase after every source call and audit has completed.
+        prepared = [
+            replace(record, target_plan=map_library_identity_targets(record.result))
+            if record.result is not None
+            else record
+            for record in prepared
+        ]
+
+        application_results: dict[int, LibraryIdentityApplicationResult] = {}
+        if apply_enabled:
+            # Every source call and mapping is complete before this command-wide stale preflight.
+            for record in prepared:
+                if record.target_plan is not None:
+                    verify_library_identity_plan_snapshot(lib, record.target_plan)
+                elif record.context_result is not None:
+                    fresh = refresh_library_identity_target(lib, record.selected)
+                    if exact_snapshot_from_library_target(
+                        fresh
+                    ) != record.context_result.exact_snapshot:
+                        raise LibraryIdentityApplicationError(
+                            "library identity unavailable target is stale"
+                        )
+            for record in prepared:
+                if record.target_plan is not None:
+                    application_results[record.position] = apply_library_identity_plan(
+                        lib, record.target_plan
+                    )
+
+        for record in prepared:
+            if record.result is None or record.target_plan is None:
+                render_unavailable_library_identity_target(
+                    record.selected,
+                    position=record.position,
+                    total=record.total,
+                    source_unavailable=record.unavailable_reason == "source",
+                )
+                continue
+            render_library_identity_audit(
+                record.result,
+                record.target_plan,
+                application_results.get(record.position),
+                apply_requested=apply_enabled,
+                position=record.position,
+                total=record.total,
             )
 
     def _resolution_policy(self) -> ResolutionPolicy:
