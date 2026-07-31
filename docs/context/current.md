@@ -49,8 +49,10 @@ Block 025 is integrated. Accepted album and singleton matches can independently 
 four MusicBrainz identity fields, then explicitly apply one canonical, stale-checked, atomic repair
 set to selected `AlbumInfo`/`TrackInfo` metadata. Ambiguity and non-repair-ready evidence never write.
 Normal beets retains persistence/file ownership. Library identity audit/repair and identity tag sync
-are absent; AcoustID/fingerprinting remains excluded. Focused validation passes 117 tests, the
-identity suite passes 158 tests, and the full offline suite passes 958 tests with 5 live tests skipped.
+are absent; AcoustID/fingerprinting remains excluded. Album preview now interprets original per-Item
+identity tuples safely, and ambiguous preview counts reflect top-ranked assignment evidence without
+selecting it. Focused preview/plugin validation passes 48 tests, the identity suite passes 166 tests,
+and the full offline suite passes 966 tests with 5 live tests skipped.
 
 ## Stop Condition
 

@@ -13,6 +13,8 @@ on selected metadata for normal beets application.
   `from_scratch`.
 - Direct reuse of Block 024 assignment, scoring, selection, ambiguity, and field comparison.
 - Sanitized preview of evidence, findings, repair readiness, and application state.
+- Album preview renders repeated canonical IDs once, distinct IDs as `multiple/conflict`, and mixed
+  state as `mixed/missing`; ambiguous counts use top-ranked evidence without selecting it.
 - Canonical album/singleton mapping to selected `AlbumInfo`/`TrackInfo` identity fields.
 - Forged-plan, stale-context, target-shape, scope, uniqueness, atomic rollback, and cache guards.
 - Selected metadata mutation only; normal beets still owns persistence and file behavior.

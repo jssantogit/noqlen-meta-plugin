@@ -206,6 +206,37 @@ def test_preview_only_calls_source_once_without_mutation(
     assert "application: disabled" in output[0]
 
 
+def test_confirmed_album_preview_renders_repeated_identity_canonically(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = _capture_ui(monkeypatch)
+    task, pairs, info = _album_task(2)
+    info.album_id = mbid(100)
+    info.releasegroup_id = mbid(200)
+    for index, (_, track) in enumerate(pairs, start=1):
+        track.track_id = mbid(1000 + index)
+        track.release_track_id = mbid(2000 + index)
+    targets = (info,) + tuple(track for _, track in pairs) + tuple(item for item, _ in pairs)
+    before = _snapshot(*targets)
+    plugin = NoqlenMetaPlugin()
+    _configure(plugin, preview=True, apply=False)
+    source = _inject(plugin, (candidate(2),))
+
+    plugin._import_task_choice(None, task)
+
+    assert len(source.contexts) == 1
+    assert _snapshot(*targets) == before
+    assert len(output) == 1
+    rendered = output[0]
+    assert "verdict: confirmed" in rendered
+    assert rendered.count(f"current: {mbid(100)}") == 1
+    assert rendered.count(f"current: {mbid(200)}") == 1
+    assert "current: malformed" not in rendered
+    assert "track:000" not in rendered
+    assert "__noqlen_missing_" not in rendered
+    assert "/synthetic/" not in rendered
+
+
 @pytest.mark.parametrize("preview", [False, True])
 def test_identity_apply_mutates_selected_metadata_with_or_without_preview(
     monkeypatch: pytest.MonkeyPatch, preview: bool

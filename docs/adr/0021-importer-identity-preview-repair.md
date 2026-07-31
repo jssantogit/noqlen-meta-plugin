@@ -54,7 +54,10 @@ selected metadata for normal beets application without merging identity and enri
 36. Identity executes after ordinary release and track enrichment.
 37. Identity works when all ordinary providers are disabled.
 38. Preview may show canonical MBIDs but never paths, local keys, queries, source URLs, or raw malformed
-    values.
+    values. Album rows interpret the original per-Item tuple: repeated identical canonical IDs render
+    once, distinct canonical IDs render as `multiple/conflict`, and mixed-marker state renders as
+    `mixed/missing`. Ambiguous audits report assignment counts from the top-ranked evaluation without
+    treating it as selected.
 39. Block 025 adds no library identity command.
 40. AcoustID, Chromaprint, fingerprinting, and recording search remain excluded.
 41. Block 026 owns library identity audit and repair.

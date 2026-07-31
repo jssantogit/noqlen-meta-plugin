@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from beets import ui
 
-from .domain import IdentityFieldFinding, IdentityVerdict, canonical_mbid
+from .domain import IdentityAlbumContext, IdentityFieldFinding, IdentityVerdict, canonical_mbid
 from .importer import (
     MISSING_ALBUM_ID_MARKER,
     MISSING_RELEASE_GROUP_ID_MARKER,
@@ -21,7 +21,9 @@ def render_import_identity_audit(
 ) -> None:
     """Render audit evidence without paths, opaque keys, queries, or raw malformed values."""
     audit = result.audit
-    selected = audit.selected_evaluation
+    evidence_evaluation = audit.selected_evaluation
+    if evidence_evaluation is None and audit.evaluations:
+        evidence_evaluation = audit.evaluations[0]
     lines = [
         "MusicBrainz identity audit",
         f"  match kind: {'album' if result.selected.kind.value == 'album' else 'singleton'}",
@@ -35,8 +37,8 @@ def render_import_identity_audit(
         top = audit.evaluations[0].score.total
         second = audit.evaluations[1].score.total
         lines.extend((f"  second score: {second:.2f}", f"  margin: {top - second:.2f}"))
-    if selected is not None:
-        assignment = selected.assignment
+    if evidence_evaluation is not None:
+        assignment = evidence_evaluation.assignment
         lines.extend(
             (
                 f"  assigned tracks: {len(assignment.assignments)}",
@@ -83,9 +85,17 @@ def render_incomplete_import_identity_note() -> None:
     )
 
 
-def _finding_lines(finding: IdentityFieldFinding, context: object) -> tuple[str, ...]:
+def _finding_lines(
+    finding: IdentityFieldFinding, context: IdentityAlbumContext
+) -> tuple[str, ...]:
     if finding.scope_key is None:
         label = f"album {finding.field}"
+        if finding.field == "mb_albumid":
+            current = _safe_album_current(context.current_release_mbids)
+        elif finding.field == "mb_releasegroupid":
+            current = _safe_album_current(context.current_release_group_mbids)
+        else:
+            current = _safe_current(finding.current_value)
     else:
         track_number = 1
         tracks = getattr(context, "tracks", ())
@@ -94,12 +104,29 @@ def _finding_lines(finding: IdentityFieldFinding, context: object) -> tuple[str,
                 track_number = index
                 break
         label = f"track {track_number} {finding.field}"
+        current = _safe_current(finding.current_value)
     return (
         f"  {label}",
         f"    status: {finding.status.value}",
-        f"    current: {_safe_current(finding.current_value)}",
+        f"    current: {current}",
         f"    expected: {finding.expected_value}",
     )
+
+
+def _safe_album_current(values: tuple[str, ...]) -> str:
+    if not values:
+        return "missing"
+    markers = (MISSING_ALBUM_ID_MARKER, MISSING_RELEASE_GROUP_ID_MARKER)
+    if any(value in markers for value in values):
+        return "mixed/missing"
+    canonical = tuple(canonical_mbid(value) for value in values)
+    if any(value is None for value in canonical):
+        return "malformed"
+    canonical_values = tuple(value for value in canonical if value is not None)
+    unique = set(canonical_values)
+    if len(unique) == 1:
+        return canonical_values[0]
+    return "multiple/conflict"
 
 
 def _safe_current(value: str | None) -> str:

@@ -26,6 +26,12 @@ Album release identities target `AlbumInfo`; assigned recording identities targe
 application are independent, but ambiguity always maps to no changes. There is no partial identity
 mode: the complete plan succeeds or no identity field changes.
 
+Album-level preview interprets the original per-Item identity tuple rather than the audit finding's
+joined display value. Repeated identical canonical IDs render once, distinct canonical IDs render as
+`multiple/conflict`, mixed-marker state renders as `mixed/missing`, and malformed raw values remain
+hidden. An ambiguous result uses its top-ranked evaluation for assignment counts only; that candidate
+remains unselected and cannot authorize repair.
+
 The repair boundary never owns Item/Album persistence, database writes, tags, or files. Normal beets
 application remains downstream owner. Block 026 owns library identity; Block 027 owns tag sync;
 AcoustID evidence remains outside v1.0.
