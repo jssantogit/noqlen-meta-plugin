@@ -192,7 +192,8 @@ Then let Navidrome rescan according to its own configuration.
 
 ## Compatibility
 
-- Python 3.10 through 3.14 are covered by the release CI matrix.
+- Python 3.10 through 3.14 (`>=3.10,<3.15`) are supported and covered by the
+  release CI matrix. Version 1.0.0 does not claim Python 3.15 support.
 - beets 2.12 or later within the 2.x series is required.
 - Ordinary enrichment and database identity operations are Python/beets based.
 - Identity-tag replacement is supported only where its filesystem guarantees

@@ -2,7 +2,8 @@
 
 ## Development Setup
 
-Use Python 3.10 or later and install the project in an isolated environment:
+Use a supported Python version from 3.10 through 3.14 and install the project
+in an isolated environment:
 
 ```bash
 python -m venv .venv

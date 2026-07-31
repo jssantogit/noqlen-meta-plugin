@@ -10,6 +10,7 @@ performing external publication.
 
 - Use the public name Noqlen Meta and accurate matcher/enrichment positioning.
 - Set package version 1.0.0 and claim only tested Python/beets compatibility.
+- Bound package support to Python 3.10-3.14 with `Requires-Python >=3.10,<3.15`; do not claim Python 3.15.
 - Keep Discogs optional and add no runtime dependency unrelated to production.
 - Do not invent author, maintainer, license, OS, or feature metadata.
 - Validate wheel, sdist, rendered README, discovery, and clean installation.
@@ -30,7 +31,9 @@ performing external publication.
 - Add synthetic release workflows and bounded performance/ordering sanity.
 - Test Python 3.10-3.14 and minimum/latest compatible beets in CI.
 - Build documentation strictly and inspect package contents in CI.
+- Require wheel `Requires-Python` to match the bounded source declaration semantically.
 - Prepare a tag-only OIDC trusted-publishing workflow that builds once.
+- Require the release tag's commit to be contained in remote `main` before building.
 - Record license, Read the Docs, PyPI ownership, environment, trusted
   publisher, tag, and publication as owner gates.
 - Do not merge, tag, upload, publish, create credentials, or touch real music.

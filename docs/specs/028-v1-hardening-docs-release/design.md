@@ -26,14 +26,17 @@ obvious sensitive data.
 
 Setuptools includes only production Python in the wheel and a deliberately
 small source distribution. Distribution validation checks identity, version,
-required source, and forbidden runtime/internal content. CI separates the
-claimed Python matrix, beets boundary tests, strict documentation, and package
-smoke tests.
+semantic wheel/source `Requires-Python` equality, the tested Python 3.10-3.14
+boundary, required source, and forbidden runtime/internal content. CI separates
+the claimed Python matrix, beets boundary tests, strict documentation, and
+package smoke tests.
 
-The release workflow runs only for `v*` tags, verifies an exact semantic tag
-match to `pyproject.toml`, builds once in an unprivileged job, uploads checked
-artifacts, and publishes those same artifacts in a protected `pypi`
-environment using OIDC. No token secret is accepted or configured.
+The release workflow runs only for `v*` tags, checks out complete history,
+fetches remote `main`, verifies an exact semantic tag match to `pyproject.toml`,
+and requires the tag commit to be an ancestor of remote `main`. Tag/version
+equality alone is insufficient. It then builds once in an unprivileged job,
+uploads checked artifacts, and publishes those same artifacts in a protected
+`pypi` environment using OIDC. No token secret is accepted or configured.
 
 ## Product Behavior
 

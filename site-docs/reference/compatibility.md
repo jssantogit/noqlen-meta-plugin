@@ -5,8 +5,10 @@ filesystem workflow.
 
 ## Python
 
-Release CI covers Python 3.10, 3.11, 3.12, 3.13, and 3.14. Package metadata
-requires Python 3.10 or later.
+Python 3.10 through 3.14 are supported and covered by release CI. Package
+metadata declares `Requires-Python >=3.10,<3.15`. Python 3.15 is not claimed by
+Noqlen Meta 1.0.0; supporting a future Python release requires a new package
+release after compatibility is tested.
 
 ## beets
 

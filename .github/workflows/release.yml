@@ -15,6 +15,18 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+          fetch-depth: 0
+      - name: Verify release commit is contained in main
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin \
+            +refs/heads/main:refs/remotes/origin/main
+          tag_commit="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          git merge-base --is-ancestor \
+            "${tag_commit}" \
+            refs/remotes/origin/main
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"

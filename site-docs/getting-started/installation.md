@@ -5,6 +5,10 @@ load the command.
 
 ## Required Steps
 
+Use Python 3.10 through 3.14. Noqlen Meta 1.0.0 declares
+`Requires-Python >=3.10,<3.15`; a future Python release requires a new tested
+Noqlen Meta package release.
+
 Install the package in the same Python environment that provides `beet`:
 
 ```bash

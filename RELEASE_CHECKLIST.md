@@ -4,6 +4,7 @@
 
 - [ ] Reviewer PASS recorded for the release-candidate branch.
 - [ ] Version, package name, metadata, README, and changelog agree.
+- [ ] Package and wheel `Requires-Python` are semantically `>=3.10,<3.15`; Python 3.15 is not claimed.
 - [ ] Full Python and beets compatibility CI is green.
 - [ ] Offline tests, Ruff, repository hygiene, and diff checks pass.
 - [ ] Public documentation coverage and strict MkDocs build pass.
@@ -24,6 +25,7 @@
 - [ ] Release-candidate branch merged to `main` only after reviewer PASS.
 - [ ] `v1.0.0` tag created only after reviewer PASS and main merge.
 - [ ] Tag version exactly matches `pyproject.toml`.
+- [ ] Tag resolves to a commit contained in remote `main`; tag/version equality alone is insufficient.
 - [ ] Tag workflow builds, checks, and publishes the same artifacts through OIDC.
 - [ ] No API token or long-lived publishing credential is used.
 - [ ] GitHub/PyPI release notes use `CHANGELOG.md` and do not claim external integrations.

@@ -38,6 +38,9 @@ configuration defaults, packaging contents, or compatibility boundaries.
 22. No new provider or metadata feature enters v1 hardening.
 23. Block 028 is the final development block.
 24. Work stops after release preparation; external publication is an owner ceremony.
+25. v1.0.0 package support is bounded to tested Python 3.10 through 3.14; Python 3.15 is not claimed.
+26. Wheel and source `Requires-Python` equivalence is a semantic release gate.
+27. A release tag must resolve to a commit contained in remote `main`; tag/version equality alone is insufficient.
 
 ## Consequences
 

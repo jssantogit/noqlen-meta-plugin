@@ -14,3 +14,6 @@
 - [x] Run focused documentation, release, UX, package, media, and full offline validation.
 - [x] Record final counts/results and clean generated output.
 - [x] Review and stage the scoped diff for the release commit.
+- [x] Bound v1 Python support to 3.10-3.14 and verify wheel metadata semantically.
+- [x] Require release tags to resolve to commits contained in remote `main` before build.
+- [x] Add and validate focused Python metadata and release-workflow contract regressions.

@@ -13,6 +13,7 @@ All notable user-facing changes are recorded here.
   M4A/MP4, Ogg Vorbis, and Opus tags.
 - Discogs, anchored MusicBrainz, Last.fm, iTunes, and LRCLIB adapters.
 - A beginner-first MkDocs manual and package/release validation.
+- Tested package support bounded to Python 3.10 through 3.14.
 
 ### Safety
 

@@ -39,7 +39,10 @@ Block 028 prepared the final v1.0.0 release candidate. The public manual lives u
 `site-docs`, while internal ADR/spec/context material remains excluded from MkDocs. README is a short
 GitHub/PyPI landing page. Package metadata, command help, documentation/default coverage checks,
 synthetic release workflows, CI compatibility/docs/package jobs, and a tag-only trusted-publishing
-workflow are complete. Validation passes 1,097 offline tests with 5 live tests deselected, 165 focused
+workflow are complete. Python support is bounded to 3.10-3.14 in source and wheel metadata; v1.0.0
+does not claim Python 3.15. Release tags must match the package version and resolve to commits
+contained in remote `main` before build or OIDC publication. Validation passes 1,105 offline tests
+with 5 live tests deselected, 165 focused
 tests on both beets 2.12.0 and 2.13.1, focused Python 3.10-3.14 smoke tests, strict documentation,
 Ruff, hygiene, package/Twine/content inspection, and clean-install discovery/help. No provider,
 field, matcher, command, or write behavior was added.

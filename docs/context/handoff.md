@@ -15,15 +15,17 @@ have been prepared without adding product behavior.
 - Version 1.0.0 package metadata with no invented author or license.
 - Documentation drift checks, archive inspection, and synthetic release workflows.
 - Python 3.10-3.14, beets-boundary, docs, package, and hygiene CI jobs.
-- Tag-only build-once OIDC publication workflow with protected `pypi` environment.
+- Source/wheel `Requires-Python >=3.10,<3.15` release gate; Python 3.15 is not claimed.
+- Tag-only build-once OIDC publication workflow with protected `pypi` environment and a pre-build remote-main ancestry guard.
 - Canonical changelog/contribution/security documents and explicit owner release checklist.
 
 ## Validation
 
-- 1,097 offline tests passed; 5 live tests were deselected.
+- 1,105 offline tests passed; 5 live tests were deselected.
 - 165 focused tests passed on beets 2.12.0 and current 2.13.1.
 - Python 3.10-3.14 focused release/documentation/plugin smoke tests passed.
 - Strict docs, Ruff, hygiene, wheel/sdist, Twine, archive inspection, and clean-install plugin help passed.
+- 17 focused docs/release tests passed, including semantic Python metadata and static release-workflow contracts.
 
 ## External Owner Ceremony
 
@@ -31,5 +33,9 @@ After reviewer PASS and merge, the owner decides/adds licensing (or explicitly
 distributes without an open-source grant), imports Read the Docs, confirms PyPI
 ownership, configures trusted publishing and the `pypi` environment, creates
 the v1.0.0 tag, and verifies GitHub/PyPI/Read the Docs publication.
+
+Tag/version equality alone is insufficient: the release workflow requires the
+tagged commit to be contained in remote `main`. No merge, tag, upload, or
+publication occurred during Block 028 or its final fix.
 
 There is no next development block. STOP after Block 028 release preparation.
