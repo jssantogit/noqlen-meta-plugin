@@ -47,11 +47,30 @@ class SelectedIdentityTagFile:
         if self.local_key != f"identity-tag-item:{self.item_id}":
             raise ValueError("identity tag local key is invalid")
 
+
+@dataclass(frozen=True, slots=True)
+class BlockedIdentityTagFile:
+    item_id: int
+    album_id: int | None
+    local_key: str = field(repr=False)
+    item: Item = field(repr=False)
+
+    def __post_init__(self) -> None:
+        if isinstance(self.item_id, bool) or not isinstance(self.item_id, int) or self.item_id <= 0:
+            raise ValueError("blocked identity tag Item ID is invalid")
+        if type(self.item) is not Item or self.item.id != self.item_id:
+            raise TypeError("blocked identity tag Item is invalid")
+        if self.item.album_id != self.album_id:
+            raise ValueError("blocked identity tag Album membership is invalid")
+        if self.local_key != f"identity-tag-item:{self.item_id}":
+            raise ValueError("blocked identity tag local key is invalid")
+
+
 @dataclass(frozen=True, slots=True)
 class IdentityTagDatabaseSnapshot:
     item_id: int
     album_id: int | None
-    path: bytes = field(repr=False)
+    path: object = field(repr=False)
     mtime: float
     mb_albumid: object = field(repr=False)
     mb_releasegroupid: object = field(repr=False)
@@ -79,7 +98,7 @@ class IdentityTagExpectedValues:
 
 @dataclass(frozen=True, slots=True)
 class IdentityTagPreparedDatabaseFile:
-    selected: SelectedIdentityTagFile
+    selected: SelectedIdentityTagFile | BlockedIdentityTagFile
     database_snapshot: IdentityTagDatabaseSnapshot
     expected: IdentityTagExpectedValues | None
     target_snapshot: IdentityTagTargetDatabaseSnapshot
@@ -119,14 +138,23 @@ def prepare_identity_tag_database_target(
     target_snapshot = IdentityTagTargetDatabaseSnapshot(
         fresh.kind, fresh.album_id, album_identity, database_snapshots
     )
-    reason = _coherence_reason(target_snapshot)
+    reason = _path_reason(target_snapshot) or _coherence_reason(target_snapshot)
     selected_files = tuple(
-        SelectedIdentityTagFile(
-            entry.item_id,
-            fresh.album_id,
-            f"identity-tag-item:{entry.item_id}",
-            entry.item,
-            entry.item.path,
+        (
+            SelectedIdentityTagFile(
+                entry.item_id,
+                fresh.album_id,
+                f"identity-tag-item:{entry.item_id}",
+                entry.item,
+                entry.item.path,
+            )
+            if type(entry.item.path) is bytes and bool(entry.item.path)
+            else BlockedIdentityTagFile(
+                entry.item_id,
+                fresh.album_id,
+                f"identity-tag-item:{entry.item_id}",
+                entry.item,
+            )
         )
         for entry in fresh.items
     )
@@ -178,8 +206,6 @@ def _library_target_from_prepared(
 
 def _database_snapshot(item: Item) -> IdentityTagDatabaseSnapshot:
     path = item.path
-    if type(path) is not bytes or not path:
-        raise ValueError("identity tag database path is empty")
     return IdentityTagDatabaseSnapshot(
         item.id,
         item.album_id or None,
@@ -190,6 +216,12 @@ def _database_snapshot(item: Item) -> IdentityTagDatabaseSnapshot:
         item.get("mb_trackid", with_album=False),
         item.get("mb_releasetrackid", with_album=False),
     )
+
+
+def _path_reason(snapshot: IdentityTagTargetDatabaseSnapshot) -> str | None:
+    if any(type(item.path) is not bytes or not item.path for item in snapshot.item_snapshots):
+        return "database file path is unavailable"
+    return None
 
 
 def _coherence_reason(snapshot: IdentityTagTargetDatabaseSnapshot) -> str | None:

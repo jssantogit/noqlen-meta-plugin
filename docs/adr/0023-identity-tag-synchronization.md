@@ -30,8 +30,9 @@ boundary that does not become another matcher or generic metadata writer.
    There is no preserve-existing policy or force flag.
 10. The writable allowlist is exactly `mb_albumid`, `mb_releasegroupid`, `mb_trackid`, and
     `mb_releasetrackid`. MediaFile owns FLAC, ID3, MP4, Vorbis, and Opus mappings.
-11. Unsupported/unreadable formats block before replacement. Paths, filenames, local keys, temporary
-    names, raw malformed values, and raw operating-system/MediaFile errors remain private.
+11. Unsupported/unreadable formats and empty or invalid persisted paths block before replacement.
+    Paths, filenames, local keys, temporary names, raw malformed values, and raw
+    operating-system/MediaFile errors remain private. A valid file in the same command may continue.
 12. Symlinks, nonregular files, duplicate selected paths, and pre-existing hard-link sets are blocked.
 13. An exact device/inode/mode/size/mtime/ctime/link-count fingerprint is an ordinary-concurrency
     stale guard. It does not claim protection from a malicious process capable of preserving every
@@ -54,9 +55,11 @@ boundary that does not become another matcher or generic metadata writer.
 21. Only operational `items.mtime` may change in the database. A fixed-column named SQLite savepoint
     verifies the Item/target before update, checks the row, and fresh-verifies after commit. Identity
     database columns never change.
-22. Standard `write(item, path, tags)` and `database_change(lib, model)` notifications occur only
-    after file verification, mtime commit, and fresh verification. No-op, preview, blocked, and
-    restored attempts emit no event. Listener failure reports committed state.
+22. Beets' `write(item, path, tags)` event is a mutable pre-write hook and is intentionally not emitted
+    by the immutable candidate workflow. `after_write(item, path)` followed by
+    `database_change(lib, model)` occurs only after replaced-source verification, mtime commit, and
+    fresh Item verification. No-op, preview, blocked, and restored attempts emit no event. Listener
+    failure reports committed state and does not restore the committed file.
 23. No-op files create no artifacts, database update, replacement, or event.
 24. Expected pre-replacement blockers coexist with eligible files. Internal contract and
     integrity-critical failures are not swallowed.
@@ -64,7 +67,13 @@ boundary that does not become another matcher or generic metadata writer.
     earlier per-file commits in place and is marked committed; no command-wide rollback is claimed.
 26. Tiny committed FLAC, MP3, M4A, Ogg Vorbis, and Opus fixtures contain generated silence only and
     exercise real MediaFile round trips without runtime encoders or network access.
-27. Block 028 v1.0 Hardening and Release is next, then STOP.
+27. Application tracks source-unchanged, source-replaced, and mtime-committed phases explicitly. A
+    safely rolled-back mtime failure restores the original. An integrity-critical uncertain mtime
+    state reports `committed=True`, retains the original backup as a path-private recovery artifact,
+    and never performs blind restoration. The finalizer does not delete a retained recovery backup.
+28. Preview never claims candidate verification. Per-file capability is proven only by an actual
+    `--write` candidate round trip.
+29. Block 028 v1.0 Hardening and Release is next, then STOP.
 
 ## Consequences
 

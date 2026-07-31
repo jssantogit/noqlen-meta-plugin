@@ -7,6 +7,7 @@ import pytest
 from beets.library import Album, Item, Library
 
 from beetsplug.noqlenmeta.identity import (
+    BlockedIdentityTagFile,
     IdentityTagDatabaseVerdict,
     LibraryIdentityTargetKind,
     prepare_identity_tag_database_target,
@@ -166,3 +167,26 @@ def test_snapshots_are_immutable_and_hide_paths_and_raw_identity(
     rendered = repr(snapshot)
     assert str(tmp_path) not in rendered
     assert mbid(20) not in rendered
+
+
+def test_empty_persisted_path_is_a_blocked_non_write_eligible_file(
+    library: Library,
+) -> None:
+    item = Item(
+        path=b"",
+        artist="Example Artist",
+        title="No Path",
+        mb_albumid=mbid(30),
+        mb_releasegroupid=mbid(31),
+        mb_trackid=mbid(32),
+        mb_releasetrackid=mbid(33),
+    )
+    library.add(item)
+
+    prepared = _prepare(library, f"id:{item.id}")
+
+    assert prepared.blocked_reason == "database file path is unavailable"
+    assert len(prepared.files) == 1
+    assert type(prepared.files[0].selected) is BlockedIdentityTagFile
+    assert prepared.files[0].expected is None
+    assert "path" not in repr(prepared.files[0].selected).lower()

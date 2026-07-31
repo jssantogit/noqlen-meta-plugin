@@ -107,6 +107,7 @@ from .tag_mapping import (
 )
 from .tag_sync import (
     IDENTITY_TAG_FIELDS,
+    BlockedIdentityTagFile,
     IdentityTagDatabaseSnapshot,
     IdentityTagDatabaseVerdict,
     IdentityTagExpectedValues,
@@ -120,6 +121,7 @@ from .tag_sync import (
 
 __all__ = [
     "BeetsMusicBrainzIdentitySource",
+    "BlockedIdentityTagFile",
     "IdentityAlbumContext",
     "IdentityAssignmentResult",
     "IdentityAuditError",

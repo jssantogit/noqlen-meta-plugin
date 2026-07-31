@@ -7,6 +7,7 @@ import secrets
 import shutil
 import tempfile
 from dataclasses import dataclass
+from enum import Enum
 from hashlib import sha256
 
 from beets import plugins, ui
@@ -29,6 +30,7 @@ from .tag_mapping import IdentityTagFilePlan, map_identity_tag_file
 from .tag_sync import (
     IDENTITY_TAG_FIELDS,
     IdentityTagPreparedDatabaseTarget,
+    SelectedIdentityTagFile,
     verify_identity_tag_database_target,
 )
 
@@ -44,6 +46,12 @@ class _SafeMtimeFailure(RuntimeError):
     pass
 
 
+class _IdentityTagCommitPhase(Enum):
+    SOURCE_UNCHANGED = "source_unchanged"
+    SOURCE_REPLACED = "source_replaced"
+    MTIME_COMMITTED = "mtime_committed"
+
+
 class IdentityTagApplicationError(RuntimeError, ui.UserError):
     def __init__(
         self,
@@ -51,10 +59,14 @@ class IdentityTagApplicationError(RuntimeError, ui.UserError):
         *,
         integrity_critical: bool = False,
         committed: bool = False,
+        state_uncertain: bool = False,
+        recovery_artifact_retained: bool = False,
     ) -> None:
         super().__init__(message)
         self.integrity_critical = integrity_critical
         self.committed = committed
+        self.state_uncertain = state_uncertain
+        self.recovery_artifact_retained = recovery_artifact_retained
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,14 +126,16 @@ def apply_identity_tag_file_plan(
     assert plan.file_snapshot is not None
     expected = plan.database.expected
     assert expected is not None
+    if type(plan.database.selected) is not SelectedIdentityTagFile:
+        raise IdentityTagApplicationError("identity tag write-eligible selection is invalid")
     path = plan.database.selected.path
     candidate: bytes | None = None
     backup: bytes | None = None
     backup_digest: bytes | None = None
     backup_source_fingerprint: IdentityTagFileFingerprint | None = None
     backup_source_metadata: IdentityTagFilesystemMetadata | None = None
-    replaced = False
-    mtime_committed = False
+    phase = _IdentityTagCommitPhase.SOURCE_UNCHANGED
+    retain_backup = False
     try:
         _require_fresh(library, target, plan)
         candidate = _candidate_path(path)
@@ -155,7 +169,7 @@ def apply_identity_tag_file_plan(
         )
         os.replace(candidate, path)
         candidate = None
-        replaced = True
+        phase = _IdentityTagCommitPhase.SOURCE_REPLACED
         _fsync_directory(path)
         replaced_snapshot = snapshot_identity_tag_file(path)
         _verify_logical_snapshot(replaced_snapshot, plan.file_snapshot, expected.as_tuple())
@@ -163,10 +177,9 @@ def apply_identity_tag_file_plan(
         verify_candidate_metadata(path, plan.file_snapshot.filesystem_metadata)
         new_mtime = os.stat(path, follow_symlinks=False).st_mtime
         fresh_item = _store_operational_mtime(library, target, plan, new_mtime)
-        mtime_committed = True
+        phase = _IdentityTagCommitPhase.MTIME_COMMITTED
         try:
-            tags = dict(expected.as_tuple())
-            plugins.send("write", item=fresh_item, path=path, tags=tags)
+            plugins.send("after_write", item=fresh_item, path=path)
             plugins.send("database_change", lib=library, model=fresh_item)
         except Exception as error:
             raise IdentityTagApplicationError(
@@ -181,36 +194,122 @@ def apply_identity_tag_file_plan(
             )
         backup = None
         return IdentityTagApplicationResult(item_id, tuple(change.field for change in plan.changes))
-    except IdentityTagApplicationError:
-        if mtime_committed:
-            _remove_artifact(backup)
-            backup = None
-        raise
-    except Exception as error:
-        if replaced:
-            if mtime_committed:
-                _remove_artifact(backup)
-                backup = None
+    except IdentityTagApplicationError as error:
+        if phase is _IdentityTagCommitPhase.SOURCE_REPLACED:
+            if error.committed:
+                if error.integrity_critical and error.state_uncertain:
+                    retain_backup = _artifact_exists(backup)
+                elif not _remove_artifact(backup):
+                    raise IdentityTagApplicationError(
+                        "identity tag synchronization committed but artifact cleanup failed",
+                        committed=True,
+                    ) from error
+                else:
+                    backup = None
+                raise
+            if error.integrity_critical or error.state_uncertain:
+                retain_backup = _artifact_exists(backup)
                 raise IdentityTagApplicationError(
-                    "identity tag synchronization committed but finalization failed",
+                    "identity tag synchronization state is uncertain; original recovery "
+                    "artifact was retained",
+                    integrity_critical=True,
                     committed=True,
+                    state_uncertain=True,
+                    recovery_artifact_retained=retain_backup,
                 ) from error
             try:
                 _restore_original(path, backup, backup_digest, plan.file_snapshot)
                 backup = None
             except Exception as restore_error:
+                retain_backup = _artifact_exists(backup)
                 raise IdentityTagApplicationError(
                     "identity tag restoration failed; committed state is uncertain",
                     integrity_critical=True,
+                    committed=True,
+                    state_uncertain=True,
+                    recovery_artifact_retained=retain_backup,
                 ) from restore_error
             return IdentityTagApplicationResult(
                 item_id,
                 blocked_reason="identity tag original restored after failed synchronization",
             )
+        if phase is _IdentityTagCommitPhase.MTIME_COMMITTED:
+            if error.integrity_critical and error.state_uncertain:
+                retain_backup = _artifact_exists(backup)
+            elif not _remove_artifact(backup):
+                raise IdentityTagApplicationError(
+                    "identity tag synchronization committed but artifact cleanup failed",
+                    committed=True,
+                ) from error
+            else:
+                backup = None
+            if error.committed:
+                raise
+            raise IdentityTagApplicationError(
+                "identity tag synchronization committed but finalization failed",
+                integrity_critical=error.integrity_critical,
+                committed=True,
+                state_uncertain=error.state_uncertain,
+                recovery_artifact_retained=retain_backup,
+            ) from error
+        raise
+    except Exception as error:
+        if phase is _IdentityTagCommitPhase.SOURCE_REPLACED:
+            try:
+                _restore_original(path, backup, backup_digest, plan.file_snapshot)
+                backup = None
+            except Exception as restore_error:
+                retain_backup = _artifact_exists(backup)
+                raise IdentityTagApplicationError(
+                    "identity tag restoration failed; committed state is uncertain",
+                    integrity_critical=True,
+                    committed=True,
+                    state_uncertain=True,
+                    recovery_artifact_retained=retain_backup,
+                ) from restore_error
+            return IdentityTagApplicationResult(
+                item_id,
+                blocked_reason="identity tag original restored after failed synchronization",
+            )
+        if phase is _IdentityTagCommitPhase.MTIME_COMMITTED:
+            if not _remove_artifact(backup):
+                raise IdentityTagApplicationError(
+                    "identity tag synchronization committed but artifact cleanup failed",
+                    committed=True,
+                ) from error
+            backup = None
+            raise IdentityTagApplicationError(
+                "identity tag synchronization committed but finalization failed",
+                committed=True,
+            ) from error
         return IdentityTagApplicationResult(item_id, blocked_reason=_safe_blocked_reason(error))
+    except BaseException as error:
+        if phase is _IdentityTagCommitPhase.SOURCE_REPLACED:
+            retain_backup = _artifact_exists(backup)
+            raise IdentityTagApplicationError(
+                "identity tag synchronization state is uncertain; original recovery "
+                "artifact was retained",
+                integrity_critical=True,
+                committed=True,
+                state_uncertain=True,
+                recovery_artifact_retained=retain_backup,
+            ) from error
+        if phase is _IdentityTagCommitPhase.MTIME_COMMITTED:
+            if not _remove_artifact(backup):
+                raise IdentityTagApplicationError(
+                    "identity tag synchronization committed but artifact cleanup failed",
+                    committed=True,
+                ) from error
+            backup = None
+            raise IdentityTagApplicationError(
+                "identity tag synchronization committed but finalization was interrupted",
+                committed=True,
+            ) from error
+        raise
     finally:
         _remove_artifact(candidate)
-        _remove_artifact(backup)
+        if not retain_backup:
+            _remove_artifact(backup)
 
 
 def _validate_plan(
@@ -240,6 +339,10 @@ def _validate_plan(
         if canonical_mbid(change.expected_value) != change.expected_value:
             raise IdentityTagApplicationError("identity tag application UUID is invalid")
         seen.add(change.field)
+    if plan.blocked_reason is not None:
+        return
+    if type(plan.database.selected) is not SelectedIdentityTagFile:
+        raise IdentityTagApplicationError("identity tag write-eligible selection is invalid")
     if plan.database.database_snapshot.path != plan.database.selected.path:
         raise IdentityTagApplicationError("identity tag application path relation is invalid")
 
@@ -421,6 +524,7 @@ def _store_operational_mtime(
         raise IdentityTagApplicationError(
             "identity tag mtime transaction failed; commit state is uncertain",
             integrity_critical=True,
+            state_uncertain=True,
         ) from error
     item = library.get_item(item_id)
     if type(item) is not Item:
@@ -451,6 +555,7 @@ def _rollback_mtime(tx: Transaction, original_error: Exception) -> None:
         raise IdentityTagApplicationError(
             "identity tag mtime rollback failed; database integrity is uncertain",
             integrity_critical=True,
+            state_uncertain=True,
         ) from rollback_error
     raise _SafeMtimeFailure("identity tag mtime update failed") from original_error
 
@@ -537,3 +642,7 @@ def _remove_artifact(path: bytes | None) -> bool:
     except OSError:
         return False
     return True
+
+
+def _artifact_exists(path: bytes | None) -> bool:
+    return path is not None and os.path.lexists(path)

@@ -45,8 +45,14 @@ MediaFile fields. Planning snapshots every selected database target, exact sourc
 current identity, unrelated writable logical tags, and supported filesystem metadata before a
 command-wide preflight. Writes use verified same-directory candidates and rollback backups, reopen
 the replaced source, update only Item `mtime` under a fixed-column savepoint, and emit post-success
-events. Paths and raw errors remain private. Tiny generated-silence fixtures prove real FLAC, MP3,
-M4A, Ogg Vorbis, and Opus round trips offline.
+`after_write` then `database_change` events. The mutable pre-write `write` hook is intentionally not
+emitted. Explicit source/mtime phases restore safely rolled-back failures and retain a path-private
+original backup when commit state is uncertain; such uncertainty is integrity-critical and committed.
+Preview claims capability only after a real candidate round trip, and empty paths block without
+filesystem access while valid files continue. Paths and raw errors remain private. Tiny
+generated-silence fixtures prove real FLAC, MP3, M4A, Ogg Vorbis, and Opus round trips offline.
+Validation passes 52 focused fix tests, 278 identity tests, and 1,078 full offline tests with 5 live
+tests skipped. Ruff, repository contamination, and diff-whitespace checks pass.
 
 ## Stop Condition
 

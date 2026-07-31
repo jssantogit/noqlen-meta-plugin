@@ -11,6 +11,7 @@ from .tag_sync import (
     IDENTITY_TAG_FIELDS,
     IdentityTagPreparedDatabaseFile,
     IdentityTagPreparedDatabaseTarget,
+    SelectedIdentityTagFile,
 )
 
 
@@ -90,6 +91,10 @@ def plan_identity_tag_targets(
     path_counts: dict[bytes, int] = {}
     for target in targets:
         for database in target.files:
+            if database.blocked_reason is not None:
+                continue
+            if type(database.selected) is not SelectedIdentityTagFile:
+                raise ValueError("identity tag ready file selection is invalid")
             path = database.selected.path
             path_counts[path] = path_counts.get(path, 0) + 1
     planned_targets = []
@@ -99,6 +104,8 @@ def plan_identity_tag_targets(
             if database.blocked_reason is not None:
                 plans.append(map_identity_tag_file(database, None))
                 continue
+            if type(database.selected) is not SelectedIdentityTagFile:
+                raise ValueError("identity tag ready file selection is invalid")
             if path_counts[database.selected.path] > 1:
                 plans.append(
                     map_identity_tag_file(

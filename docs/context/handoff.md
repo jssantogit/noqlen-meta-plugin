@@ -20,9 +20,16 @@ Block 027 is complete. Database-to-file MusicBrainz identity synchronization exi
 - Same-directory rollback backup before `os.replace`, replaced-source verification, safe restoration,
   and integrity-critical restore failure handling.
 - Fixed-column savepoint update of only Item `mtime`, followed by fresh verification and standard
-  post-success events.
+  post-success `after_write` and `database_change` events. The mutable pre-write `write` hook is not
+  emitted.
+- Explicit source/mtime commit phases, safe restoration, and retained path-private recovery backup for
+  integrity-critical uncertain commit state.
+- Truthful per-file capability rendering and blocked empty/invalid persisted paths without filesystem
+  access or interruption of valid files.
 - Immediate privacy-safe rendering, no-op behavior, and truthful later committed-state reporting.
 - Offline generated-silence production round trips for FLAC, MP3, M4A, Ogg Vorbis, and Opus.
+- Validation: 52 focused fix tests, 278 identity tests, and 1,078 full offline tests pass with 5 live
+  tests skipped; Ruff, contamination, and diff-whitespace checks pass.
 
 ## Important Decisions
 

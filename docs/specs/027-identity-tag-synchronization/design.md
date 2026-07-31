@@ -13,7 +13,7 @@ validate exclusive CLI mode
   -> write and reopen/verify four fields plus unrelated tags and filesystem metadata
   -> rollback backup, os.replace, and replaced-source verification
   -> fixed-column mtime savepoint and fresh verification
-  -> post-success write/database_change events
+  -> post-success after_write/database_change events
   -> immediate privacy-safe result
 ```
 
@@ -29,3 +29,15 @@ validate exclusive CLI mode
 The fingerprint is a conservative stale guard for ordinary concurrency, not a hostile-process
 security boundary. MediaFile remains the sole owner of format-specific mappings. File/database
 atomicity is per Item; previously completed files are never represented as command-wide rolled back.
+
+Application explicitly tracks source-unchanged, source-replaced, and mtime-committed phases. Safe
+mtime rollback restores the backup. Commit-uncertain or rollback-failed mtime state is
+integrity-critical and committed because source replacement occurred; its original backup is retained
+as a path-private recovery artifact and excluded from finalizer deletion. Confirmed post-commit
+failure never triggers blind restoration.
+
+The beets `write` event is intentionally omitted because it is a mutable pre-write hook incompatible
+with the immutable verified candidate. Successful delivery is `after_write(item, path)` followed by
+`database_change(lib, model)` only after file/database verification. Preview creates no candidate and
+does not claim per-file round-trip capability. Invalid persisted paths use a separate blocked boundary
+and never enter stat, MediaFile, candidate, or replacement code.

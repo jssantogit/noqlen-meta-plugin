@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from beets import ui
+from beets.dbcore.db import Transaction
 from beets.library import Item, Library
 from mediafile import MediaFile
 
@@ -26,6 +27,7 @@ FIXTURE = Path(__file__).parents[1] / "fixtures" / "identity_tags" / "silence.fl
 
 
 def _case(tmp_path: Path, *, synchronized: bool = False):
+    tmp_path.mkdir(parents=True, exist_ok=True)
     path = tmp_path / "track.flac"
     shutil.copy2(FIXTURE, path)
     media = MediaFile(path)
@@ -287,6 +289,7 @@ def test_restore_failure_is_integrity_critical(
         apply_identity_tag_file_plan(library, target, plan)
 
     assert captured.value.integrity_critical is True
+    assert captured.value.committed is True
     assert "private" not in str(captured.value)
 
 
@@ -295,17 +298,175 @@ def test_mtime_update_failure_restores_original(
 ) -> None:
     library, target, plan, path = _case(tmp_path)
     before = path.read_bytes()
+    events: list[str] = []
+    original_mutate = Transaction.mutate
+
+    def fail_update(
+        transaction: Transaction, statement: str, subvals: object = ()
+    ) -> object:
+        if statement == application_module._UPDATE_MTIME_SQL:
+            raise OSError("private database failure")
+        return original_mutate(transaction, statement, subvals)
+
+    monkeypatch.setattr(Transaction, "mutate", fail_update)
     monkeypatch.setattr(
-        application_module,
-        "_store_operational_mtime",
-        lambda *args: (_ for _ in ()).throw(ValueError("private database failure")),
+        application_module.plugins,
+        "send",
+        lambda event, **kwargs: events.append(event),
     )
 
     result = apply_identity_tag_file_plan(library, target, plan)
 
     assert result.is_blocked
     assert path.read_bytes() == before
+    restored = MediaFile(path)
+    assert all(getattr(restored, field) is None for field in IDENTITY_TAG_FIELDS)
     assert library.get_item(plan.database.selected.item_id).mtime == 17.0  # type: ignore[union-attr]
+    assert events == []
+    assert _artifacts(tmp_path) == []
+
+
+def test_mtime_rollback_failure_retains_recovery_backup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    library, target, plan, path = _case(tmp_path)
+    original_mutate = Transaction.mutate
+    removed: list[bytes | None] = []
+    original_remove = application_module._remove_artifact
+    events: list[str] = []
+
+    def fail_update_and_rollback(
+        transaction: Transaction, statement: str, subvals: object = ()
+    ) -> object:
+        if statement == application_module._UPDATE_MTIME_SQL:
+            raise OSError("private update failure")
+        if statement == application_module._ROLLBACK_SQL:
+            raise OSError("private rollback SQL failure")
+        return original_mutate(transaction, statement, subvals)
+
+    def record_remove(artifact: bytes | None) -> bool:
+        removed.append(artifact)
+        return original_remove(artifact)
+
+    monkeypatch.setattr(Transaction, "mutate", fail_update_and_rollback)
+    monkeypatch.setattr(application_module, "_remove_artifact", record_remove)
+    monkeypatch.setattr(
+        application_module.plugins,
+        "send",
+        lambda event, **kwargs: events.append(event),
+    )
+
+    with pytest.raises(IdentityTagApplicationError) as captured:
+        apply_identity_tag_file_plan(library, target, plan)
+
+    error = captured.value
+    artifacts = _artifacts(tmp_path)
+    assert error.integrity_critical is True
+    assert error.committed is True
+    assert error.state_uncertain is True
+    assert error.recovery_artifact_retained is True
+    assert MediaFile(path).mb_albumid == mbid(1)
+    assert len(artifacts) == 1 and "backup" in artifacts[0].name
+    assert str(artifacts[0]) not in str(error)
+    assert mbid(1) not in str(error)
+    assert "SQL" not in str(error)
+    assert os.fsencode(artifacts[0]) not in tuple(entry for entry in removed if entry)
+    assert events == []
+    artifacts[0].unlink()
+
+
+def test_root_transaction_commit_uncertainty_retains_recovery_backup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    library, target, plan, path = _case(tmp_path)
+    original_transaction = library.transaction
+    original_store = application_module._store_operational_mtime
+    first = True
+
+    class UncertainTransaction:
+        def __init__(self) -> None:
+            self.context = original_transaction()
+
+        def __enter__(self):
+            return self.context.__enter__()
+
+        def __exit__(self, exc_type: object, exc: object, traceback: object) -> object:
+            result = self.context.__exit__(exc_type, exc, traceback)
+            if exc_type is None:
+                raise OSError("private root commit uncertainty")
+            return result
+
+    def transaction():
+        nonlocal first
+        if first:
+            first = False
+            return UncertainTransaction()
+        return original_transaction()
+
+    def uncertain_store(*args: object, **kwargs: object):
+        monkeypatch.setattr(library, "transaction", transaction)
+        return original_store(*args, **kwargs)
+
+    monkeypatch.setattr(application_module, "_store_operational_mtime", uncertain_store)
+
+    with pytest.raises(IdentityTagApplicationError) as captured:
+        apply_identity_tag_file_plan(library, target, plan)
+
+    error = captured.value
+    artifacts = _artifacts(tmp_path)
+    assert error.integrity_critical is True
+    assert error.committed is True
+    assert error.recovery_artifact_retained is True
+    assert MediaFile(path).mb_albumid == mbid(1)
+    assert len(artifacts) == 1
+    artifacts[0].unlink()
+
+
+def test_confirmed_post_commit_verification_failure_does_not_restore(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    library, target, plan, path = _case(tmp_path)
+    original_store = application_module._store_operational_mtime
+
+    def fail_after_commit(*args: object, **kwargs: object):
+        original_store(*args, **kwargs)
+        raise IdentityTagApplicationError(
+            "identity tag mtime committed but fresh verification failed",
+            committed=True,
+        )
+
+    monkeypatch.setattr(application_module, "_store_operational_mtime", fail_after_commit)
+
+    with pytest.raises(IdentityTagApplicationError) as captured:
+        apply_identity_tag_file_plan(library, target, plan)
+
+    assert captured.value.committed is True
+    assert MediaFile(path).mb_albumid == mbid(1)
+    assert _artifacts(tmp_path) == []
+
+
+def test_post_replacement_interruption_retains_recovery_backup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    library, target, plan, path = _case(tmp_path)
+    monkeypatch.setattr(
+        application_module,
+        "_store_operational_mtime",
+        lambda *args: (_ for _ in ()).throw(KeyboardInterrupt()),
+    )
+
+    with pytest.raises(IdentityTagApplicationError) as captured:
+        apply_identity_tag_file_plan(library, target, plan)
+
+    error = captured.value
+    artifacts = _artifacts(tmp_path)
+    assert error.integrity_critical is True
+    assert error.committed is True
+    assert error.recovery_artifact_retained is True
+    assert isinstance(error.__cause__, KeyboardInterrupt)
+    assert MediaFile(path).mb_albumid == mbid(1)
+    assert len(artifacts) == 1
+    artifacts[0].unlink()
 
 
 def test_backup_copy_fallback_succeeds(
@@ -328,16 +489,44 @@ def test_backup_copy_fallback_succeeds(
 def test_only_mtime_changes_and_events_follow_full_success(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    library, target, plan, _ = _case(tmp_path)
+    library, target, plan, path = _case(tmp_path)
     item_id = plan.database.selected.item_id
     before = library.get_item(item_id)
     assert before is not None
     identity_before = tuple(before.get(field, with_album=False) for field in IDENTITY_TAG_FIELDS)
-    events: list[str] = []
+    events: list[tuple[str, dict[str, object]]] = []
+    source_verified = False
+    mtime_verified = False
+    original_verify = application_module._verify_logical_snapshot
+    original_store = application_module._store_operational_mtime
+
+    def verify(*args: object, **kwargs: object) -> None:
+        nonlocal source_verified
+        original_verify(*args, **kwargs)
+        if os.fsdecode(args[0].format_name or "") == "":
+            return
+        if MediaFile(path).mb_albumid == mbid(1):
+            source_verified = True
+
+    def store(*args: object, **kwargs: object):
+        nonlocal mtime_verified
+        fresh = original_store(*args, **kwargs)
+        mtime_verified = True
+        return fresh
+
+    def send(event: str, **kwargs: object) -> None:
+        assert source_verified
+        assert mtime_verified
+        persisted = library.get_item(item_id)
+        assert persisted is not None and persisted.mtime != 17.0
+        events.append((event, kwargs))
+
+    monkeypatch.setattr(application_module, "_verify_logical_snapshot", verify)
+    monkeypatch.setattr(application_module, "_store_operational_mtime", store)
     monkeypatch.setattr(
         application_module.plugins,
         "send",
-        lambda event, **kwargs: events.append(event),
+        send,
     )
 
     result = apply_identity_tag_file_plan(library, target, plan)
@@ -350,17 +539,32 @@ def test_only_mtime_changes_and_events_follow_full_success(
         tuple(after.get(field, with_album=False) for field in IDENTITY_TAG_FIELDS)
         == identity_before
     )
-    assert events == ["write", "database_change"]
+    assert [event for event, _ in events] == ["after_write", "database_change"]
+    after_write = events[0][1]
+    assert set(after_write) == {"item", "path"}
+    assert after_write["path"] == str(path).encode()
+    assert after_write["item"] is not plan.database.selected.item
+    assert after_write["item"].mtime == after.mtime  # type: ignore[union-attr]
+    assert "tags" not in after_write
+    assert all(event != "write" for event, _ in events)
 
 
+@pytest.mark.parametrize("failed_event", ["after_write", "database_change"])
 def test_event_failure_reports_committed_without_restoring(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failed_event: str
 ) -> None:
     library, target, plan, path = _case(tmp_path)
+    events: list[str] = []
+
+    def fail_selected(event: str, **kwargs: object) -> None:
+        events.append(event)
+        if event == failed_event:
+            raise RuntimeError(f"private listener at {path}")
+
     monkeypatch.setattr(
         application_module.plugins,
         "send",
-        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("private listener")),
+        fail_selected,
     )
 
     with pytest.raises(IdentityTagApplicationError) as captured:
@@ -370,4 +574,42 @@ def test_event_failure_reports_committed_without_restoring(
     assert isinstance(captured.value, ui.UserError)
     assert MediaFile(path).mb_albumid == mbid(1)
     assert "private" not in str(captured.value)
+    assert str(path) not in str(captured.value)
     assert _artifacts(tmp_path) == []
+    assert events == (["after_write"] if failed_event == "after_write" else [
+        "after_write",
+        "database_change",
+    ])
+
+
+def test_noop_blocked_and_restored_attempts_emit_no_events(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    noop_library, noop_target, noop_plan, _ = _case(tmp_path / "noop", synchronized=True)
+    blocked_library, blocked_target, blocked_plan, _ = _case(tmp_path / "blocked")
+    restored_library, restored_target, restored_plan, _ = _case(tmp_path / "restored")
+    events: list[str] = []
+    monkeypatch.setattr(
+        application_module.plugins,
+        "send",
+        lambda event, **kwargs: events.append(event),
+    )
+    assert apply_identity_tag_file_plan(noop_library, noop_target, noop_plan).is_noop
+
+    blocked_plan = type(blocked_plan)(
+        blocked_plan.database,
+        None,
+        (),
+        "identity tag file unavailable",
+    )
+    assert apply_identity_tag_file_plan(blocked_library, blocked_target, blocked_plan).is_blocked
+
+    monkeypatch.setattr(
+        application_module,
+        "_store_operational_mtime",
+        lambda *args: (_ for _ in ()).throw(ValueError()),
+    )
+    assert apply_identity_tag_file_plan(
+        restored_library, restored_target, restored_plan
+    ).is_blocked
+    assert events == []

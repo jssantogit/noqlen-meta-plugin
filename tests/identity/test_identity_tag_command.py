@@ -9,8 +9,13 @@ from beets.library import Item, Library
 from mediafile import MediaFile
 
 import beetsplug.noqlenmeta as plugin_module
+import beetsplug.noqlenmeta.identity.tag_application as application_module
+import beetsplug.noqlenmeta.identity.tag_mapping as mapping_module
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
-from beetsplug.noqlenmeta.identity import IDENTITY_TAG_FIELDS, IdentityTagApplicationError
+from beetsplug.noqlenmeta.identity import (
+    IDENTITY_TAG_FIELDS,
+    IdentityTagApplicationError,
+)
 
 from .helpers import mbid
 
@@ -160,6 +165,11 @@ def test_empty_selection_and_preview_create_no_artifacts_or_database_write(
     _invoke(plugin, library, ["--identity-tags", "--all"])
 
     assert all("application: disabled" in entry for entry in output)
+    assert all(
+        "write capability: requires --write candidate verification" in entry
+        for entry in output
+    )
+    assert not any("verified by candidate round trip" in entry for entry in output)
     assert tuple(item.get_fresh_from_db().mtime for item in album.items()) == before
     assert list(tmp_path.glob(".noqlen-identity-*")) == []
 
@@ -327,6 +337,9 @@ def test_mixed_preview_and_write_integration(
     assert "application: synchronized/no changes" in output[0]
     assert "application: replaced and verified" in output[1]
     assert "application: blocked" in output[2]
+    assert "write capability: not required; tags already synchronized" in output[0]
+    assert "write capability: verified by candidate round trip" in output[1]
+    assert "write capability: unavailable" in output[2]
 
 
 def test_apply_and_importer_identity_config_cannot_authorize_file_writes(
@@ -366,3 +379,176 @@ def test_output_hides_paths_local_keys_and_raw_errors(
     assert Path(private_path).name not in rendered
     assert "identity-tag-item:" not in rendered
     assert "private-malformed-value" not in rendered
+
+
+def test_safe_application_blocker_reports_capability_not_verified(
+    monkeypatch: pytest.MonkeyPatch, library: Library, tmp_path: Path
+) -> None:
+    _singleton(library, tmp_path)
+    plugin = NoqlenMetaPlugin()
+    output = _output(monkeypatch)
+    monkeypatch.setattr(
+        application_module.MediaFile,
+        "save",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("private save failure")),
+    )
+
+    _invoke(plugin, library, ["--identity-tags", "--write", "--all"])
+
+    assert len(output) == 1
+    assert "application: blocked" in output[0]
+    assert "write capability: not verified" in output[0]
+    assert "private" not in output[0]
+
+
+def test_empty_path_is_blocked_while_valid_singleton_continues(
+    monkeypatch: pytest.MonkeyPatch, library: Library, tmp_path: Path
+) -> None:
+    empty = Item(
+        path=b"",
+        artist="Example Artist",
+        title="No Path",
+        mb_albumid=mbid(201),
+        mb_releasegroupid=mbid(202),
+        mb_trackid=mbid(203),
+        mb_releasetrackid=mbid(204),
+    )
+    library.add(empty)
+    valid = _singleton(library, tmp_path, "Valid")
+    original_snapshot = mapping_module.snapshot_identity_tag_file
+    seen_paths: list[bytes] = []
+
+    def snapshot(path: bytes):
+        assert path
+        seen_paths.append(path)
+        return original_snapshot(path)
+
+    monkeypatch.setattr(mapping_module, "snapshot_identity_tag_file", snapshot)
+    plugin = NoqlenMetaPlugin()
+    output = _output(monkeypatch)
+
+    _invoke(plugin, library, ["--identity-tags", "--all"])
+
+    assert len(output) == 2
+    assert "library entry: Example Artist - No Path" in output[0]
+    assert "database identity: blocked" in output[0]
+    assert "write capability: unavailable" in output[0]
+    assert "library entry: Example Artist - Valid" in output[1]
+    assert seen_paths == [valid.path]
+    output.clear()
+
+    _invoke(plugin, library, ["--identity-tags", "--write", "--all"])
+
+    assert len(output) == 2
+    assert "application: blocked" in output[0]
+    assert "application: replaced and verified" in output[1]
+    assert MediaFile(Path(valid.path.decode())).mb_albumid == mbid(101)
+    assert list(tmp_path.glob(".noqlen-identity-*")) == []
+    assert b"" not in seen_paths
+
+
+def test_later_post_replacement_uncertainty_preserves_earlier_rendered_commit(
+    monkeypatch: pytest.MonkeyPatch, library: Library, tmp_path: Path
+) -> None:
+    first = _singleton(library, tmp_path, "First")
+    second = _singleton(library, tmp_path, "Second")
+    plugin = NoqlenMetaPlugin()
+    output = _output(monkeypatch)
+    original_apply = plugin_module.apply_identity_tag_file_plan
+    original_store = application_module._store_operational_mtime
+    calls = 0
+
+    def apply(*args: object, **kwargs: object):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return original_apply(*args, **kwargs)  # type: ignore[arg-type]
+        application_module._store_operational_mtime = lambda *store_args: (
+            _ for _ in ()
+        ).throw(
+            IdentityTagApplicationError(
+                "private uncertain failure",
+                integrity_critical=True,
+                state_uncertain=True,
+            )
+        )
+        try:
+            return original_apply(*args, **kwargs)  # type: ignore[arg-type]
+        finally:
+            application_module._store_operational_mtime = original_store
+
+    monkeypatch.setattr(plugin_module, "apply_identity_tag_file_plan", apply)
+
+    with pytest.raises(IdentityTagApplicationError) as captured:
+        _invoke(plugin, library, ["--identity-tags", "--write", "--all"])
+
+    error = captured.value
+    assert error.integrity_critical is True
+    assert error.committed is True
+    assert error.recovery_artifact_retained is True
+    assert len(output) == 1
+    assert "library entry: Example Artist - First" in output[0]
+    assert "application: replaced and verified" in output[0]
+    assert MediaFile(Path(first.path.decode())).mb_albumid == mbid(101)
+    assert MediaFile(Path(second.path.decode())).mb_albumid == mbid(101)
+    assert "rolled back" not in str(error)
+    assert str(tmp_path) not in str(error)
+    assert mbid(101) not in str(error)
+    artifacts = list(tmp_path.glob(".noqlen-identity-backup-*"))
+    assert len(artifacts) == 1
+    artifacts[0].unlink()
+
+
+def test_first_file_pre_replacement_failure_reports_not_committed(
+    monkeypatch: pytest.MonkeyPatch, library: Library, tmp_path: Path
+) -> None:
+    item = _singleton(library, tmp_path)
+    before = Path(item.path.decode()).read_bytes()
+    plugin = NoqlenMetaPlugin()
+    output = _output(monkeypatch)
+    monkeypatch.setattr(
+        application_module,
+        "_candidate_path",
+        lambda *args: (_ for _ in ()).throw(
+            IdentityTagApplicationError("identity tag candidate unavailable")
+        ),
+    )
+
+    with pytest.raises(IdentityTagApplicationError) as captured:
+        _invoke(plugin, library, ["--identity-tags", "--write", "--all"])
+
+    assert captured.value.committed is False
+    assert output == []
+    assert Path(item.path.decode()).read_bytes() == before
+
+
+def test_first_file_post_replacement_uncertainty_reports_committed(
+    monkeypatch: pytest.MonkeyPatch, library: Library, tmp_path: Path
+) -> None:
+    item = _singleton(library, tmp_path)
+    plugin = NoqlenMetaPlugin()
+    output = _output(monkeypatch)
+    monkeypatch.setattr(
+        application_module,
+        "_store_operational_mtime",
+        lambda *args: (_ for _ in ()).throw(
+            IdentityTagApplicationError(
+                "private uncertain failure",
+                integrity_critical=True,
+                state_uncertain=True,
+            )
+        ),
+    )
+
+    with pytest.raises(IdentityTagApplicationError) as captured:
+        _invoke(plugin, library, ["--identity-tags", "--write", "--all"])
+
+    error = captured.value
+    assert error.committed is True
+    assert error.integrity_critical is True
+    assert error.recovery_artifact_retained is True
+    assert output == []
+    assert MediaFile(Path(item.path.decode())).mb_albumid == mbid(101)
+    artifacts = list(tmp_path.glob(".noqlen-identity-backup-*"))
+    assert len(artifacts) == 1
+    artifacts[0].unlink()

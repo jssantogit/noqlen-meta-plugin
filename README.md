@@ -385,6 +385,21 @@ rollback backup is created before atomic source-path replacement. The replaced s
 verified before only the Item's operational database `mtime` is updated. Paths, filenames, temporary
 names, and raw malformed values are not shown.
 
+Preview does not create a candidate and therefore reports that per-file write capability still
+requires `--write` candidate verification. Capability is reported as verified only after that exact
+file completes a real candidate round trip. Empty or invalid persisted paths are blocked safely and
+do not prevent another valid selected file from being processed.
+
+Beets' `write` event is a mutable pre-write hook, so this immutable candidate workflow intentionally
+does not emit it. After replaced-source verification, committed `mtime`, and fresh Item verification,
+Noqlen emits `after_write(item, path)` followed by `database_change(lib, model)`. A listener failure is
+post-commit and never causes restoration of a correct committed file.
+
+Post-replacement bookkeeping tracks source replacement and `mtime` commit separately. A safely
+rolled-back mtime failure restores the original. If mtime commit state is uncertain, the replacement
+is reported as committed, processing stops, and the original path-private backup is retained as a
+recovery artifact rather than being deleted or used for a blind restoration.
+
 Writes are atomic per file, not across the complete command. Results render as each file completes;
 if a later file fails, earlier verified replacements may remain committed and are reported as such.
 

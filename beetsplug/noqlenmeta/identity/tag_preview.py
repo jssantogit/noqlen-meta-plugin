@@ -39,7 +39,7 @@ def render_identity_tag_plan(
         f"  file status: {file_status}",
         f"  planned tag changes: {len(plan.changes)}",
         f"  application: {_application_status(plan, result, write_requested)}",
-        "  write capability: verified during temporary-copy round trip",
+        f"  write capability: {_write_capability(plan, result, write_requested)}",
     ]
     expected = plan.database.expected
     if expected is not None:
@@ -69,3 +69,19 @@ def _application_status(
     if result.is_noop:
         return "synchronized/no changes"
     return f"replaced and verified ({len(result.applied_fields)} changed field(s))"
+
+
+def _write_capability(
+    plan: IdentityTagFilePlan,
+    result: IdentityTagApplicationResult | None,
+    write_requested: bool,
+) -> str:
+    if plan.blocked_reason is not None:
+        return "unavailable"
+    if not write_requested:
+        return "requires --write candidate verification"
+    if result is None or result.is_blocked:
+        return "not verified"
+    if result.is_noop:
+        return "not required; tags already synchronized"
+    return "verified by candidate round trip"
