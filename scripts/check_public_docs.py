@@ -42,6 +42,11 @@ SECRET_PATTERNS = (
     re.compile(r"/(?:home|Users)/[^/\s]+/"),
     re.compile(r"[A-Za-z]:\\Users\\[^\\\s]+\\"),
 )
+STALE_VISIBILITY_PHRASES = (
+    "public visibility remains unconfirmed",
+    "not complete until GitHub reports",
+    "publication remains gated on public repository confirmation",
+)
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
@@ -159,10 +164,14 @@ def check() -> list[str]:
         failures.append("release documentation does not identify the MIT License")
     if "[x] MIT License selected and added" not in checklist_text:
         failures.append("release checklist does not mark the MIT decision complete")
-    if "[ ] Repository visibility changed to public" not in checklist_text:
-        failures.append("release checklist does not preserve the pending visibility gate")
-    if "[x] Repository visibility changed to public" in checklist_text:
-        failures.append("release checklist falsely marks public visibility complete")
+    if "[x] Repository visibility changed to public" not in checklist_text:
+        failures.append("release checklist does not mark public visibility complete")
+    if "[ ] Repository visibility changed to public" in checklist_text:
+        failures.append("release checklist retains the stale pending visibility gate")
+    public_release_text = f"{readme_text}\n{public_text}".casefold()
+    for phrase in STALE_VISIBILITY_PHRASES:
+        if phrase in public_release_text:
+            failures.append(f"public release text retains stale visibility phrase: {phrase}")
 
     required_distinctions = (
         "`--apply`",

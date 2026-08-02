@@ -50,14 +50,25 @@ def test_public_license_and_visibility_statements_are_consistent() -> None:
     home = (ROOT / "site-docs/index.md").read_text(encoding="utf-8")
     release = (ROOT / "site-docs/project/release.md").read_text(encoding="utf-8")
     checklist = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
+    release_words = " ".join(release.split())
 
     assert len(readme.splitlines()) < 500
     assert "[MIT License](LICENSE)" in readme
     assert "João Pedro Rosa dos Santos" in readme
     assert "MIT licensed" in home
     assert "canonical license text" in home
+    assert "GitHub repository is public" in home
     assert "MIT License" in release
-    assert "not complete until GitHub reports" in release
+    assert "public access has been confirmed" in release
+    assert "Read the Docs is live" in release_words
+    assert "published on PyPI" in release_words
     assert "[x] MIT License selected and added" in checklist
-    assert "[ ] Repository visibility changed to public" in checklist
-    assert "[x] Repository visibility changed to public" not in checklist
+    assert "[x] Repository visibility changed to public" in checklist
+    assert "[ ] Repository visibility changed to public" not in checklist
+    stale_phrases = (
+        "public visibility remains unconfirmed",
+        "not complete until GitHub reports",
+        "publication remains gated on public repository confirmation",
+    )
+    combined = f"{readme}\n{home}\n{release}".casefold()
+    assert not any(phrase in combined for phrase in stale_phrases)

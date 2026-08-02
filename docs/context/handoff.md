@@ -32,15 +32,16 @@ adding product behavior. This is not Block 029.
 
 ## Owner-Gate State
 
-Completed: Block 028 merged, MIT selected, canonical `LICENSE` added, and PEP
-639 package license metadata prepared.
+Completed and externally confirmed: Block 028 merged after reviewer PASS,
+repository visibility changed to public, and public repository access
+confirmed. MIT is selected, the canonical `LICENSE` is added, and PEP 639
+package license metadata is prepared.
 
-Selected but not externally confirmed: public repository visibility.
-
-Still pending: make the repository public, enable private vulnerability
-reporting, configure the GitHub `pypi` environment, configure the PyPI trusted
-publisher, import and build Read the Docs, create the `v1.0.0` tag, and verify
-publication.
+Still pending: confirm private vulnerability reporting, import and publicly
+build Read the Docs, configure the GitHub `pypi` environment, configure the
+PyPI pending trusted publisher, establish PyPI project ownership through first
+publication, create the `v1.0.0` tag, publish to PyPI, and complete post-release
+checks.
 
 Tag/version equality alone is insufficient: the release workflow requires the
 tagged commit to be contained in remote `main`. Checkout does not persist

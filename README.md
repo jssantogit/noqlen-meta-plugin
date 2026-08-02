@@ -213,8 +213,9 @@ tested matrix and limitations.
 - [Issue tracker](https://github.com/jssantogit/noqlen-meta-plugin/issues)
 
 Version `1.0.0` is a prepared release candidate. Publication remains gated on
-public repository confirmation, Read the Docs setup, PyPI ownership and
-trusted-publisher setup, and creation of the release tag.
+Read the Docs setup, private vulnerability reporting confirmation, PyPI
+trusted-publisher/environment setup and first publication, and creation of the
+release tag.
 
 ## License
 

@@ -7,15 +7,18 @@ Package support is bounded to Python 3.10 through 3.14. Distribution checks
 require wheel `Requires-Python` to match `>=3.10,<3.15`; v1.0.0 does not claim
 Python 3.15 support.
 
-Block 028 received reviewer approval and was merged. The owner selected the
-MIT License and public repository visibility. The repository's root
+Block 028 received reviewer approval and was merged. The GitHub repository is
+public and public access has been confirmed. The MIT License was selected, and
+the repository's root
 [`LICENSE`](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE)
-is the canonical license text. Public visibility remains an external gate and
-is not complete until GitHub reports that public access is available.
+is the canonical license text.
 
-Publication remains owner-controlled and requires Read the Docs project
-import, PyPI ownership and trusted-publisher configuration, a protected
-`pypi` environment when used, and creation of `v1.0.0` only after those gates.
+Remaining owner-controlled work includes Read the Docs project import and
+public build confirmation, private vulnerability reporting confirmation, a
+protected `pypi` environment, PyPI pending trusted-publisher configuration,
+creation of `v1.0.0`, first publication establishing PyPI project ownership,
+and post-release checks. A public GitHub repository does not mean that Read the
+Docs is live or that the package is published on PyPI.
 
 The release workflow requires both an exact tag/version match and proof that
 the tagged commit is contained in remote `main`. Tag/version equality alone is

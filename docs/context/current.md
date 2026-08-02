@@ -39,17 +39,18 @@ None. The completed Block 028 spec remains at
 
 Block 028 received reviewer PASS and was merged to `main`. The owner selected
 MIT, and the canonical `LICENSE` plus PEP 639 package metadata are prepared.
-The owner also selected public repository visibility, but that external change
-is not complete until GitHub reports the repository as public.
+Repository visibility was changed to public, and public access is externally
+confirmed.
 
-Still pending are making the repository public, enabling private vulnerability
-reporting, configuring the GitHub `pypi` environment and PyPI trusted
-publisher, importing and building Read the Docs, creating the `v1.0.0` tag,
-and verifying publication. No tag, upload, visibility change, external setup,
-provider, field, matcher, command, or write behavior is part of this change.
+Still pending are confirming private vulnerability reporting, importing and
+building Read the Docs, configuring the GitHub `pypi` environment and PyPI
+pending trusted publisher, establishing PyPI project ownership through first
+publication, creating the `v1.0.0` tag, publishing to PyPI, and completing
+post-release checks. No tag, upload, publication, external setup, provider,
+field, matcher, command, or write behavior is part of this change.
 
 ## Stop Condition
 
 There is no next development block. After the owner-gate branch is reviewed,
 the remaining actions are the external owner release ceremony. Do not create
-Block 029, tag, publish, or claim public visibility before external confirmation.
+Block 029, tag, or publish during this administrative correction.

@@ -14,9 +14,9 @@
 ## Owner-Controlled External Checks
 
 - [x] MIT License selected and added with copyright © 2026 João Pedro Rosa dos Santos.
-- [ ] Repository visibility changed to public and public access confirmed.
+- [x] Repository visibility changed to public and public access confirmed.
 - [ ] Read the Docs project imported and public URL confirmed.
-- [ ] PyPI project/package ownership confirmed.
+- [ ] PyPI project ownership established by first publication.
 - [ ] PyPI trusted publisher configured for this repository and `.github/workflows/release.yml`.
 - [ ] GitHub environment `pypi` configured when used, with appropriate protection.
 - [ ] Repository security/private vulnerability reporting route confirmed.

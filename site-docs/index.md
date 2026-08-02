@@ -49,7 +49,7 @@ Noqlen Meta is MIT licensed. The repository's root
 [`LICENSE`](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE)
 is the canonical license text.
 
-The owner selected public repository visibility, but that change remains
-unconfirmed until GitHub reports the repository as public. The license choice
-does not imply endorsement by beets, MusicBrainz, Discogs, Navidrome, Last.fm,
-Apple, LRCLIB, or any provider.
+The GitHub repository is public and public access has been confirmed. This does
+not mean that the Read the Docs project is live or that the package has been
+published to PyPI. The license choice does not imply endorsement by beets,
+MusicBrainz, Discogs, Navidrome, Last.fm, Apple, LRCLIB, or any provider.
