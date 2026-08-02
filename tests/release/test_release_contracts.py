@@ -241,26 +241,33 @@ def test_release_workflow_requires_tag_on_main_before_single_build() -> None:
     assert "run:" not in publish_boundary
 
 
-def test_release_checklist_records_external_gates_without_release_execution() -> None:
+def test_release_checklist_records_completed_v1_release() -> None:
     checklist = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
 
     completed = (
-        "[x] Read the Docs project imported, public URL confirmed, and public "
-        "`latest` build passed.",
-        "[x] PyPI Pending Trusted Publisher configured",
+        "[x] Read the Docs project imported and public `latest`, `stable`, and `v1.0.0` builds passed.",
+        "[x] PyPI project ownership established by the first successful publication.",
+        "[x] PyPI Trusted Publisher configured",
         "[x] GitHub environment `pypi` configured with the `v*` deployment tag rule.",
         "[x] Repository security/private vulnerability reporting route confirmed.",
+        "[x] `v1.0.0` tag created",
+        "[x] Tag version exactly matches",
+        "[x] Tag resolves to a commit contained in remote `main`",
+        "[x] Tag workflow built, checked, and published",
+        "[x] No API token or long-lived publishing credential was used.",
+        "[x] PyPI project name, version, `Requires-Python`, filenames, and file count are correct.",
+        "[x] Published wheel and sdist hashes match the workflow artifacts",
+        "[x] GitHub Release `v1.0.0` was created from the existing tag.",
+        "[x] Read the Docs `stable`, `latest`, and `v1.0.0` versions are active and green.",
     )
     pending = (
-        "[ ] PyPI project ownership established by first publication.",
-        "[ ] `v1.0.0` tag created",
-        "[ ] Tag version exactly matches",
-        "[ ] Tag resolves to a commit contained in remote `main`",
-        "[ ] Tag workflow builds, checks, and publishes",
-        "[ ] PyPI metadata and rendered README are correct.",
-        "[ ] Published wheel and sdist hashes match the workflow artifacts.",
+        "[ ] PyPI rendered README has been visually reviewed.",
+        "[ ] Public wheel installs in a clean environment and beets discovers `noqlenmeta`.",
+        "[ ] `beet nm --help` works after the public clean install.",
     )
 
     assert all(item in checklist for item in completed)
     assert all(item in checklist for item in pending)
-    assert "[ ] Read the Docs canonical public build succeeds." not in checklist
+    assert "[ ] PyPI project ownership established by first publication." not in checklist
+    assert "[ ] `v1.0.0` tag created" not in checklist
+    assert "[ ] Tag workflow builds, checks, and publishes" not in checklist
