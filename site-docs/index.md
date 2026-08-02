@@ -40,8 +40,10 @@ the [command reference](reference/commands.md) when you already know beets.
 - [Troubleshooting](troubleshooting/index.md): resolve a blocked or surprising result.
 - [Advanced safety](advanced/safety.md): inspect write guarantees and limitations.
 
-The Read the Docs project is intended but is not considered live until the
-owner imports it and confirms a successful public build.
+The canonical public documentation is live at
+[https://noqlen-meta-plugin.readthedocs.io/](https://noqlen-meta-plugin.readthedocs.io/).
+The public `latest` build has passed. A versioned `v1.0.0` documentation build
+will not exist until the release tag is created and built.
 
 ## License And Repository Status
 
@@ -49,7 +51,7 @@ Noqlen Meta is MIT licensed. The repository's root
 [`LICENSE`](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE)
 is the canonical license text.
 
-The GitHub repository is public and public access has been confirmed. This does
-not mean that the Read the Docs project is live or that the package has been
-published to PyPI. The license choice does not imply endorsement by beets,
-MusicBrainz, Discogs, Navidrome, Last.fm, Apple, LRCLIB, or any provider.
+The GitHub repository is public and public access has been confirmed. The
+package has not been published to PyPI. The license choice does not imply
+endorsement by beets, MusicBrainz, Discogs, Navidrome, Last.fm, Apple, LRCLIB,
+or any provider.

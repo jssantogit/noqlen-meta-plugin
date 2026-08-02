@@ -1,7 +1,7 @@
 # Release Status
 
-Noqlen Meta 1.0.0 is prepared as a release candidate. Repository validation
-can complete without external publication.
+Noqlen Meta 1.0.0 is ready for the release tag. Repository validation can
+complete without external publication.
 
 Package support is bounded to Python 3.10 through 3.14. Distribution checks
 require wheel `Requires-Python` to match `>=3.10,<3.15`; v1.0.0 does not claim
@@ -13,12 +13,27 @@ the repository's root
 [`LICENSE`](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE)
 is the canonical license text.
 
-Remaining owner-controlled work includes Read the Docs project import and
-public build confirmation, private vulnerability reporting confirmation, a
-protected `pypi` environment, PyPI pending trusted-publisher configuration,
-creation of `v1.0.0`, first publication establishing PyPI project ownership,
-and post-release checks. A public GitHub repository does not mean that Read the
-Docs is live or that the package is published on PyPI.
+Completed external setup:
+
+- public repository;
+- MIT License;
+- private vulnerability reporting;
+- GitHub `pypi` environment with the `v*` deployment tag rule;
+- PyPI Pending Trusted Publisher for this repository and release workflow;
+- Read the Docs import and successful public `latest` build.
+
+The canonical public documentation is live at
+[https://noqlen-meta-plugin.readthedocs.io/](https://noqlen-meta-plugin.readthedocs.io/).
+
+Pending release work:
+
+- final `main` CI confirmation;
+- creation of the `v1.0.0` tag;
+- first PyPI publication, which will establish project ownership;
+- post-publication artifact verification.
+
+The package has not been published to PyPI. A versioned Read the Docs `v1.0.0`
+build does not exist before the tag is created and built.
 
 The release workflow requires both an exact tag/version match and proof that
 the tagged commit is contained in remote `main`. Tag/version equality alone is
@@ -27,10 +42,9 @@ tag history with `fetch-depth: 0` but does not persist credentials. The later
 ancestry check is fully local, requires `refs/remotes/origin/main` to exist,
 and fails closed without a post-checkout network Git command.
 
-The implementation branch does not merge itself, create a tag, publish a
-GitHub release, upload to PyPI, create credentials, or configure Read the Docs.
-The repository root `RELEASE_CHECKLIST.md` is the operational source for those
-gates and is intentionally not duplicated here.
+This administrative branch does not merge itself, create a tag, publish a
+GitHub release, or upload to PyPI. The repository root `RELEASE_CHECKLIST.md`
+is the operational source for those gates.
 
 MIT licensing does not imply endorsement by beets, MusicBrainz, Discogs,
 Navidrome, Last.fm, Apple, LRCLIB, or any provider.

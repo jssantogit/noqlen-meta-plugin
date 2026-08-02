@@ -10,12 +10,12 @@ Noqlen Meta - multi-provider metadata enrichment and MusicBrainz identity tools 
 
 ## Context Level
 
-`full` for the post-Block-028 license and public-release owner gates.
+`full` for the final pre-tag external-gate synchronization.
 
 ## Tool Mode
 
 `combo`: OpenCode native capabilities, Serena for targeted symbol/navigation work, and RTK for noisy
-shell output. External release setup and publication remain out of scope.
+shell output. This records owner-confirmed external setup; publication remains out of scope.
 
 ## Active Block
 
@@ -37,20 +37,19 @@ None. The completed Block 028 spec remains at
 
 ## Completion State
 
-Block 028 received reviewer PASS and was merged to `main`. The owner selected
-MIT, and the canonical `LICENSE` plus PEP 639 package metadata are prepared.
-Repository visibility was changed to public, and public access is externally
-confirmed.
+Block 028 is complete and merged. The owner confirms that the repository is
+public, the MIT License is merged, private vulnerability reporting is enabled,
+the GitHub `pypi` environment has a `v*` deployment tag rule, the PyPI Pending
+Trusted Publisher is configured, and the Read the Docs public `latest` build
+passed.
 
-Still pending are confirming private vulnerability reporting, importing and
-building Read the Docs, configuring the GitHub `pypi` environment and PyPI
-pending trusted publisher, establishing PyPI project ownership through first
-publication, creating the `v1.0.0` tag, publishing to PyPI, and completing
-post-release checks. No tag, upload, publication, external setup, provider,
-field, matcher, command, or write behavior is part of this change.
+Remaining work is to merge this administrative sync, confirm final `main` CI,
+create `v1.0.0`, verify the release workflow and PyPI publication, create or
+verify the GitHub Release when appropriate, and complete post-release checks.
+PyPI project ownership will be established by the first publication. No
+development scope is reopened.
 
 ## Stop Condition
 
-There is no next development block. After the owner-gate branch is reviewed,
-the remaining actions are the external owner release ceremony. Do not create
-Block 029, tag, or publish during this administrative correction.
+There is no next development block. Do not create Block 029, tag, publish,
+merge, or run the release workflow during this administrative sync.

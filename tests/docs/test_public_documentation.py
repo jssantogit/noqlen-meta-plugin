@@ -45,12 +45,13 @@ def test_command_help_explains_modes_and_write_boundaries() -> None:
     assert "all targets in the selected mode" in help_text
 
 
-def test_public_license_and_visibility_statements_are_consistent() -> None:
+def test_public_release_state_is_consistent() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     home = (ROOT / "site-docs/index.md").read_text(encoding="utf-8")
     release = (ROOT / "site-docs/project/release.md").read_text(encoding="utf-8")
     checklist = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
     release_words = " ".join(release.split())
+    combined = f"{readme}\n{home}\n{release}".casefold()
 
     assert len(readme.splitlines()) < 500
     assert "[MIT License](LICENSE)" in readme
@@ -60,8 +61,10 @@ def test_public_license_and_visibility_statements_are_consistent() -> None:
     assert "GitHub repository is public" in home
     assert "MIT License" in release
     assert "public access has been confirmed" in release
-    assert "Read the Docs is live" in release_words
-    assert "published on PyPI" in release_words
+    assert "[Read the Docs](https://noqlen-meta-plugin.readthedocs.io/)" in readme
+    assert "canonical public documentation is live" in release_words
+    assert "package has not been published to PyPI" in release_words
+    assert "versioned Read the Docs `v1.0.0` build does not exist" in release_words
     assert "[x] MIT License selected and added" in checklist
     assert "[x] Repository visibility changed to public" in checklist
     assert "[ ] Repository visibility changed to public" not in checklist
@@ -69,6 +72,13 @@ def test_public_license_and_visibility_statements_are_consistent() -> None:
         "public visibility remains unconfirmed",
         "not complete until GitHub reports",
         "publication remains gated on public repository confirmation",
+        "until the owner imports the project",
+        "read the docs project is intended",
+        "read the docs is not considered live",
+        "owner still needs to import",
+        "public build remains pending",
     )
-    combined = f"{readme}\n{home}\n{release}".casefold()
     assert not any(phrase in combined for phrase in stale_phrases)
+    assert "package is published on pypi" not in combined
+    assert "package has been published to pypi" not in combined
+    assert "readthedocs.io/en/v1.0.0" not in combined

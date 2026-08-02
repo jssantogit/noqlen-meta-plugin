@@ -21,6 +21,7 @@ COMMAND_REFERENCE = DOCS / "reference" / "commands.md"
 CONFIG_REFERENCE = DOCS / "reference" / "configuration.md"
 FULL_CONFIG = DOCS / "examples" / "full-config.yaml"
 RELEASE_PAGE = DOCS / "project" / "release.md"
+READTHEDOCS_URL = "https://noqlen-meta-plugin.readthedocs.io/"
 
 FORBIDDEN_README_TERMS = (
     "Block 0",
@@ -46,6 +47,13 @@ STALE_VISIBILITY_PHRASES = (
     "public visibility remains unconfirmed",
     "not complete until GitHub reports",
     "publication remains gated on public repository confirmation",
+)
+STALE_EXTERNAL_GATE_PHRASES = (
+    "until the owner imports the project",
+    "read the docs project is intended",
+    "read the docs is not considered live",
+    "owner still needs to import",
+    "public build remains pending",
 )
 
 
@@ -112,6 +120,7 @@ def check() -> list[str]:
     release_text = RELEASE_PAGE.read_text(encoding="utf-8")
     public_pages = _public_markdown()
     public_text = "\n".join(path.read_text(encoding="utf-8") for path in public_pages)
+    folded = public_text.casefold()
 
     command = NoqlenMetaPlugin().commands()[0]
     long_options = sorted(
@@ -172,6 +181,42 @@ def check() -> list[str]:
     for phrase in STALE_VISIBILITY_PHRASES:
         if phrase in public_release_text:
             failures.append(f"public release text retains stale visibility phrase: {phrase}")
+    if f"[Read the Docs]({READTHEDOCS_URL})" not in readme_text:
+        failures.append("README does not link to the live Read the Docs site")
+    if READTHEDOCS_URL not in public_text or "canonical public documentation is live" not in folded:
+        failures.append("public docs do not identify the canonical live Read the Docs site")
+    for phrase in STALE_EXTERNAL_GATE_PHRASES:
+        if phrase in public_release_text:
+            failures.append(f"public release text retains stale external gate phrase: {phrase}")
+
+    required_checklist_items = (
+        "[x] Read the Docs project imported, public URL confirmed, and public "
+        "`latest` build passed.",
+        "[x] PyPI Pending Trusted Publisher configured",
+        "[x] GitHub environment `pypi` configured with the `v*` deployment tag rule.",
+        "[x] Repository security/private vulnerability reporting route confirmed.",
+        "[ ] PyPI project ownership established by first publication.",
+        "[ ] `v1.0.0` tag created",
+        "[ ] Tag workflow builds, checks, and publishes",
+    )
+    for item in required_checklist_items:
+        if item not in checklist_text:
+            failures.append(f"release checklist omits required state: {item}")
+
+    if "package has not been published to PyPI" not in public_text:
+        failures.append("public docs do not state that PyPI publication remains pending")
+    unsupported_publication_claims = (
+        "package is published on pypi",
+        "package has been published to pypi",
+        "package is available on pypi",
+    )
+    for phrase in unsupported_publication_claims:
+        if phrase in public_release_text:
+            failures.append(f"public release text claims PyPI publication: {phrase}")
+    if "readthedocs.io/en/v1.0.0" in public_release_text:
+        failures.append("public text links to an unbuilt Read the Docs v1.0.0 version")
+    if "versioned Read the Docs `v1.0.0` build exists" in public_release_text:
+        failures.append("public text claims an unbuilt Read the Docs v1.0.0 version")
 
     required_distinctions = (
         "`--apply`",
@@ -183,7 +228,6 @@ def check() -> list[str]:
         "partial is not force",
         "`providers.musicbrainz.enabled`",
     )
-    folded = public_text.casefold()
     for phrase in required_distinctions:
         if phrase.casefold() not in folded:
             failures.append(f"public docs omit required distinction: {phrase}")

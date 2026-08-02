@@ -2,9 +2,9 @@
 
 ## State
 
-Block 028 received reviewer PASS and was merged. The post-Block-028 owner-gate
-change records the MIT decision and prepares package license metadata without
-adding product behavior. This is not Block 029.
+Block 028 is complete and merged. This final administrative sync records
+owner-confirmed external gates without adding product behavior. This is not
+Block 029.
 
 ## Prepared
 
@@ -32,16 +32,16 @@ adding product behavior. This is not Block 029.
 
 ## Owner-Gate State
 
-Completed and externally confirmed: Block 028 merged after reviewer PASS,
-repository visibility changed to public, and public repository access
-confirmed. MIT is selected, the canonical `LICENSE` is added, and PEP 639
-package license metadata is prepared.
+Completed and externally confirmed: Block 028 merged after reviewer PASS, the
+repository is public, the MIT License is merged, private vulnerability
+reporting is enabled, the GitHub `pypi` environment has a `v*` deployment tag
+rule, the PyPI Pending Trusted Publisher is configured, and the Read the Docs
+public `latest` build passed.
 
-Still pending: confirm private vulnerability reporting, import and publicly
-build Read the Docs, configure the GitHub `pypi` environment, configure the
-PyPI pending trusted publisher, establish PyPI project ownership through first
-publication, create the `v1.0.0` tag, publish to PyPI, and complete post-release
-checks.
+Remaining: merge this administrative sync, confirm final `main` CI, create
+`v1.0.0`, verify the release workflow and PyPI publication, create or verify
+the GitHub Release when appropriate, and complete post-release checks. The
+first successful publication will establish PyPI project ownership.
 
 Tag/version equality alone is insufficient: the release workflow requires the
 tagged commit to be contained in remote `main`. Checkout does not persist
@@ -50,5 +50,5 @@ credentials; the local ancestry step performs no fetch and fails closed when
 publication occurred during Block 028 or its final fixes.
 
 There is no next development block. Do not create Block 029. The next action
-after this administrative branch is reviewer audit, followed by the remaining
-owner-controlled external ceremony.
+after this branch is reviewer audit and merge, followed by final `main` CI and
+the owner-controlled release ceremony.

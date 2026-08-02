@@ -239,3 +239,28 @@ def test_release_workflow_requires_tag_on_main_before_single_build() -> None:
     assert "pypa/gh-action-pypi-publish@release/v1" in workflow
     assert "uses:" not in publish_boundary
     assert "run:" not in publish_boundary
+
+
+def test_release_checklist_records_external_gates_without_release_execution() -> None:
+    checklist = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
+
+    completed = (
+        "[x] Read the Docs project imported, public URL confirmed, and public "
+        "`latest` build passed.",
+        "[x] PyPI Pending Trusted Publisher configured",
+        "[x] GitHub environment `pypi` configured with the `v*` deployment tag rule.",
+        "[x] Repository security/private vulnerability reporting route confirmed.",
+    )
+    pending = (
+        "[ ] PyPI project ownership established by first publication.",
+        "[ ] `v1.0.0` tag created",
+        "[ ] Tag version exactly matches",
+        "[ ] Tag resolves to a commit contained in remote `main`",
+        "[ ] Tag workflow builds, checks, and publishes",
+        "[ ] PyPI metadata and rendered README are correct.",
+        "[ ] Published wheel and sdist hashes match the workflow artifacts.",
+    )
+
+    assert all(item in checklist for item in completed)
+    assert all(item in checklist for item in pending)
+    assert "[ ] Read the Docs canonical public build succeeds." not in checklist

@@ -3,23 +3,23 @@
 ## Automated And Repository Checks
 
 - [x] Reviewer PASS recorded for the Block 028 release-candidate branch.
-- [ ] Version, package name, metadata, README, and changelog agree.
-- [ ] Package and wheel `Requires-Python` are semantically `>=3.10,<3.15`; Python 3.15 is not claimed.
+- [x] Version, package name, metadata, README, and changelog agree.
+- [x] Package and wheel `Requires-Python` are semantically `>=3.10,<3.15`; Python 3.15 is not claimed.
 - [ ] Full Python and beets compatibility CI is green.
-- [ ] Offline tests, Ruff, repository hygiene, and diff checks pass.
-- [ ] Public documentation coverage and strict MkDocs build pass.
-- [ ] Wheel and sdist build once, pass Twine, content inspection, and clean-install smoke tests.
-- [ ] No generated `site/`, `build/`, `dist/`, egg-info, credential, or private path is committed.
+- [x] Offline tests, Ruff, repository hygiene, and diff checks pass locally.
+- [x] Public documentation coverage and strict MkDocs build pass locally.
+- [x] Wheel and sdist build, Twine, content inspection, and clean-install smoke tests pass locally.
+- [x] No generated `site/`, `build/`, `dist/`, egg-info, credential, or private path is committed.
 
 ## Owner-Controlled External Checks
 
 - [x] MIT License selected and added with copyright © 2026 João Pedro Rosa dos Santos.
 - [x] Repository visibility changed to public and public access confirmed.
-- [ ] Read the Docs project imported and public URL confirmed.
+- [x] Read the Docs project imported, public URL confirmed, and public `latest` build passed.
 - [ ] PyPI project ownership established by first publication.
-- [ ] PyPI trusted publisher configured for this repository and `.github/workflows/release.yml`.
-- [ ] GitHub environment `pypi` configured when used, with appropriate protection.
-- [ ] Repository security/private vulnerability reporting route confirmed.
+- [x] PyPI Pending Trusted Publisher configured for this repository and `.github/workflows/release.yml`.
+- [x] GitHub environment `pypi` configured with the `v*` deployment tag rule.
+- [x] Repository security/private vulnerability reporting route confirmed.
 
 ## Release Execution
 
@@ -37,5 +37,4 @@
 - [ ] PyPI metadata and rendered README are correct.
 - [ ] Wheel installs in a clean environment and beets discovers `noqlenmeta`.
 - [ ] `beet nm --help` works after the clean install.
-- [ ] Read the Docs canonical public build succeeds.
 - [ ] Published wheel and sdist hashes match the workflow artifacts.

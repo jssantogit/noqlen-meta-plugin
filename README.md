@@ -25,10 +25,10 @@ Navidrome APIs; Navidrome is a possible consumer of resulting file tags.
 
 ## Documentation
 
-The complete manual is prepared for
-[Read the Docs](https://noqlen-meta-plugin.readthedocs.io/). Until the owner
-imports the project there, browse the public source in
-[`site-docs/`](https://github.com/jssantogit/noqlen-meta-plugin/tree/main/site-docs).
+The complete manual is available on
+[Read the Docs](https://noqlen-meta-plugin.readthedocs.io/). The
+[`site-docs/`](https://github.com/jssantogit/noqlen-meta-plugin/tree/main/site-docs)
+source is available for contributions.
 
 Start with:
 
@@ -212,10 +212,9 @@ tested matrix and limitations.
 - [Release status and owner gates](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/RELEASE_CHECKLIST.md)
 - [Issue tracker](https://github.com/jssantogit/noqlen-meta-plugin/issues)
 
-Version `1.0.0` is a prepared release candidate. Publication remains gated on
-Read the Docs setup, private vulnerability reporting confirmation, PyPI
-trusted-publisher/environment setup and first publication, and creation of the
-release tag.
+Version `1.0.0` is ready for the release tag. The first successful OIDC
+publication will create and establish ownership of the PyPI project. The
+package has not been published to PyPI yet.
 
 ## License
 
