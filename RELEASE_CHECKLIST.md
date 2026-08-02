@@ -5,7 +5,7 @@
 - [x] Reviewer PASS recorded for the Block 028 release-candidate branch.
 - [x] Version, package name, metadata, README, and changelog agree.
 - [x] Package and wheel `Requires-Python` are semantically `>=3.10,<3.15`; Python 3.15 is not claimed.
-- [ ] Full Python and beets compatibility CI is green.
+- [x] Full Python and beets compatibility CI is green.
 - [x] Final `main` CI atime-sensitive test hotfix prepared without weakening the stale-source guard.
 - [x] Offline tests, Ruff, repository hygiene, and diff checks pass locally.
 - [x] Public documentation coverage and strict MkDocs build pass locally.
