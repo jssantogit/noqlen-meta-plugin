@@ -1,52 +1,56 @@
 # Release Status
 
-Noqlen Meta 1.0.0 is ready for the release tag. Final `main` CI is green across
-Python 3.10 through 3.14, the supported beets compatibility boundaries,
-documentation, and package validation.
+Noqlen Meta 1.0.0 was released on 2026-08-02. The package is published on
+[PyPI](https://pypi.org/project/beets-noqlenmeta/), and the corresponding
+[GitHub Release](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v1.0.0)
+uses the existing `v1.0.0` tag.
 
 Package support is bounded to Python 3.10 through 3.14. Distribution checks
 require wheel `Requires-Python` to match `>=3.10,<3.15`; v1.0.0 does not claim
 Python 3.15 support.
 
-Block 028 received reviewer approval and was merged. The GitHub repository is
-public and public access has been confirmed. The MIT License was selected, and
-the repository's root
-[`LICENSE`](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE)
-is the canonical license text.
+Block 028 received reviewer approval and was merged. Final `main` CI passed
+across Python 3.10 through 3.14, the supported beets compatibility boundaries,
+documentation, and package validation. The GitHub repository is public, the
+root [`LICENSE`](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE)
+is the canonical MIT License text, and private vulnerability reporting is
+enabled.
 
-Completed external setup:
+## Publication
 
-- public repository;
-- MIT License;
-- private vulnerability reporting;
-- GitHub `pypi` environment with the `v*` deployment tag rule;
-- PyPI Pending Trusted Publisher for this repository and release workflow;
-- Read the Docs import and successful public `latest` build.
+The release workflow:
+
+- verified that the tag version matched `pyproject.toml`;
+- proved that the tagged commit was contained in remote `main`;
+- checked out complete history without persisting credentials;
+- built wheel and sdist once;
+- validated metadata and archive contents;
+- published the checked artifacts through PyPI Trusted Publishing and OIDC;
+- used no API token or long-lived publishing credential.
+
+PyPI project ownership was established by the first successful publication.
+The published wheel and sdist hashes match the workflow artifacts attached to
+the GitHub Release.
+
+## Documentation
 
 The canonical public documentation is live at
 [https://noqlen-meta-plugin.readthedocs.io/](https://noqlen-meta-plugin.readthedocs.io/).
+The `latest`, `stable`, and versioned `v1.0.0` builds are active and green.
+Version 1.0.0 is also available directly at
+[https://noqlen-meta-plugin.readthedocs.io/en/v1.0.0/](https://noqlen-meta-plugin.readthedocs.io/en/v1.0.0/).
 
-Pending release work:
+## Remaining Verification
 
-- creation of the `v1.0.0` tag;
-- the first PyPI publication, which will establish project ownership;
-- creation or verification of the GitHub Release;
-- the versioned Read the Docs `v1.0.0` build;
-- post-publication package and artifact verification.
+The release itself is complete. The operational checklist still leaves two
+local consumer checks explicit until they are run against the public package:
 
-The package has not been published to PyPI. A versioned Read the Docs `v1.0.0`
-build does not exist before the tag is created and built.
+- install `beets-noqlenmeta==1.0.0` in a fresh environment and confirm beets
+  discovers `noqlenmeta`;
+- run `beet nm --help` from that public clean installation.
 
-The release workflow requires both an exact tag/version match and proof that
-the tagged commit is contained in remote `main`. Tag/version equality alone is
-not sufficient to publish. Authenticated checkout obtains complete branch and
-tag history with `fetch-depth: 0` but does not persist credentials. The later
-ancestry check is fully local, requires `refs/remotes/origin/main` to exist,
-and fails closed without a post-checkout network Git command.
-
-This pre-tag state does not create a tag, publish a GitHub release, or upload to
-PyPI. The repository root `RELEASE_CHECKLIST.md` is the operational source for
-those gates.
+The repository root `RELEASE_CHECKLIST.md` is the operational source for these
+post-release checks.
 
 MIT licensing does not imply endorsement by beets, MusicBrainz, Discogs,
 Navidrome, Last.fm, Apple, LRCLIB, or any provider.
