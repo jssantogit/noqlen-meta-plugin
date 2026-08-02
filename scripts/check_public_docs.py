@@ -16,9 +16,11 @@ from beetsplug.noqlenmeta.configuration import default_config
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "site-docs"
 README = ROOT / "README.md"
+RELEASE_CHECKLIST = ROOT / "RELEASE_CHECKLIST.md"
 COMMAND_REFERENCE = DOCS / "reference" / "commands.md"
 CONFIG_REFERENCE = DOCS / "reference" / "configuration.md"
 FULL_CONFIG = DOCS / "examples" / "full-config.yaml"
+RELEASE_PAGE = DOCS / "project" / "release.md"
 
 FORBIDDEN_README_TERMS = (
     "Block 0",
@@ -101,6 +103,8 @@ def check() -> list[str]:
     command_text = COMMAND_REFERENCE.read_text(encoding="utf-8")
     config_text = CONFIG_REFERENCE.read_text(encoding="utf-8")
     readme_text = README.read_text(encoding="utf-8")
+    checklist_text = RELEASE_CHECKLIST.read_text(encoding="utf-8")
+    release_text = RELEASE_PAGE.read_text(encoding="utf-8")
     public_pages = _public_markdown()
     public_text = "\n".join(path.read_text(encoding="utf-8") for path in public_pages)
 
@@ -149,6 +153,16 @@ def check() -> list[str]:
     for term in FORBIDDEN_README_TERMS:
         if term.casefold() in readme_text.casefold():
             failures.append(f"README contains internal term: {term}")
+    if "[MIT License](LICENSE)" not in readme_text:
+        failures.append("README does not identify and link the MIT License")
+    if "MIT License" not in release_text:
+        failures.append("release documentation does not identify the MIT License")
+    if "[x] MIT License selected and added" not in checklist_text:
+        failures.append("release checklist does not mark the MIT decision complete")
+    if "[ ] Repository visibility changed to public" not in checklist_text:
+        failures.append("release checklist does not preserve the pending visibility gate")
+    if "[x] Repository visibility changed to public" in checklist_text:
+        failures.append("release checklist falsely marks public visibility complete")
 
     required_distinctions = (
         "`--apply`",

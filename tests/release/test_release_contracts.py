@@ -23,6 +23,9 @@ assert _SCRIPT_SPEC is not None and _SCRIPT_SPEC.loader is not None
 _SCRIPT_MODULE = importlib.util.module_from_spec(_SCRIPT_SPEC)
 _SCRIPT_SPEC.loader.exec_module(_SCRIPT_MODULE)
 _requires_python_failures = _SCRIPT_MODULE._requires_python_failures
+_sdist_license_failures = _SCRIPT_MODULE._sdist_license_failures
+_source_license_failures = _SCRIPT_MODULE._source_license_failures
+_wheel_license_failures = _SCRIPT_MODULE._wheel_license_failures
 
 
 def _metadata(requires_python: str | None) -> Message:
@@ -37,6 +40,22 @@ def _pyproject(tmp_path: Path, requires_python: str) -> Path:
     path.write_text(
         f'[project]\nname = "example"\nversion = "1.0.0"\n'
         f'requires-python = "{requires_python}"\n',
+        encoding="utf-8",
+    )
+    return path
+
+
+def _license_metadata(
+    tmp_path: Path,
+    *,
+    expression: str = "MIT",
+    license_files: str = '["LICENSE"]',
+    classifier: str = "",
+) -> Path:
+    path = tmp_path / "pyproject.toml"
+    classifiers = f'\nclassifiers = ["{classifier}"]' if classifier else ""
+    path.write_text(
+        f'[project]\nlicense = "{expression}"\nlicense-files = {license_files}{classifiers}\n',
         encoding="utf-8",
     )
     return path
@@ -71,6 +90,92 @@ def test_requires_python_validation_rejects_unsafe_boundaries(
     )
 
     assert any(expected in failure for failure in failures)
+
+
+def test_source_license_metadata_and_canonical_text_are_exact() -> None:
+    project_data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert project_data["build-system"]["requires"] == ["setuptools>=77"]
+    assert project_data["project"]["license"] == "MIT"
+    assert project_data["project"]["license-files"] == ["LICENSE"]
+    assert not any(
+        classifier.startswith("License ::")
+        for classifier in project_data["project"]["classifiers"]
+    )
+    assert _source_license_failures(ROOT / "pyproject.toml", ROOT / "LICENSE") == []
+
+
+@pytest.mark.parametrize(
+    ("expression", "license_files", "classifier", "expected"),
+    [
+        ("Apache-2.0", '["LICENSE"]', "", "project.license"),
+        ("MIT", '["COPYING"]', "", "project.license-files"),
+        ("MIT", '["LICENSE"]', "License :: OSI Approved :: MIT License", "legacy"),
+    ],
+)
+def test_source_license_validation_rejects_metadata_regressions(
+    tmp_path: Path,
+    expression: str,
+    license_files: str,
+    classifier: str,
+    expected: str,
+) -> None:
+    license_path = tmp_path / "LICENSE"
+    license_path.write_text((ROOT / "LICENSE").read_text(encoding="utf-8"), encoding="utf-8")
+
+    failures = _source_license_failures(
+        _license_metadata(
+            tmp_path,
+            expression=expression,
+            license_files=license_files,
+            classifier=classifier,
+        ),
+        license_path,
+    )
+
+    assert any(expected in failure for failure in failures)
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("João Pedro Rosa dos Santos", "GitHub User"),
+        ("2026", "2025"),
+    ],
+)
+def test_source_license_validation_rejects_wrong_holder_or_year(
+    tmp_path: Path, old: str, new: str
+) -> None:
+    license_path = tmp_path / "LICENSE"
+    license_path.write_text(
+        (ROOT / "LICENSE").read_text(encoding="utf-8").replace(old, new),
+        encoding="utf-8",
+    )
+
+    failures = _source_license_failures(_license_metadata(tmp_path), license_path)
+
+    assert any("exact 2026 copyright holder" in failure for failure in failures)
+
+
+def test_wheel_and_sdist_license_contracts() -> None:
+    metadata = Message()
+    metadata["License-Expression"] = "MIT"
+    wheel_names = {"beets_noqlenmeta-1.0.0.dist-info/licenses/LICENSE"}
+    sdist_names = {"beets_noqlenmeta-1.0.0/LICENSE"}
+
+    assert _wheel_license_failures(metadata, wheel_names) == []
+    assert _sdist_license_failures(sdist_names) == []
+
+
+def test_archive_license_validation_rejects_missing_or_wrong_data() -> None:
+    metadata = Message()
+    metadata["License-Expression"] = "Apache-2.0"
+
+    failures = _wheel_license_failures(metadata, set())
+    assert any("License-Expression" in failure for failure in failures)
+    assert any("licenses/LICENSE" in failure for failure in failures)
+    assert _sdist_license_failures(set())
+    assert _sdist_license_failures({"beets_noqlenmeta-1.0.0/package/LICENSE"})
 
 
 def test_python_metadata_docs_and_ci_matrix_agree() -> None:

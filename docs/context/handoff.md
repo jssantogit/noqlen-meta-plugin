@@ -2,9 +2,9 @@
 
 ## State
 
-Block 028 implementation is complete. Noqlen Meta 1.0.0 package,
-public MkDocs source, concise README, release checks, and publication workflow
-have been prepared without adding product behavior.
+Block 028 received reviewer PASS and was merged. The post-Block-028 owner-gate
+change records the MIT decision and prepares package license metadata without
+adding product behavior. This is not Block 029.
 
 ## Prepared
 
@@ -12,7 +12,8 @@ have been prepared without adding product behavior.
 - Pinned Material for MkDocs and version-2 Read the Docs configuration.
 - Complete command/config/provider/field/beets/compatibility/troubleshooting references.
 - Fresh centralized configuration defaults and release-quality command help.
-- Version 1.0.0 package metadata with no invented author or license.
+- Version 1.0.0 package metadata with the owner-selected MIT license and no
+  invented author or maintainer.
 - Documentation drift checks, archive inspection, and synthetic release workflows.
 - Python 3.10-3.14, beets-boundary, docs, package, and hygiene CI jobs.
 - Source/wheel `Requires-Python >=3.10,<3.15` release gate; Python 3.15 is not claimed.
@@ -21,18 +22,25 @@ have been prepared without adding product behavior.
 
 ## Validation
 
-- 1,105 offline tests passed; 5 live tests were deselected.
+- 1,114 offline tests passed; 5 live tests were deselected.
 - 165 focused tests passed on beets 2.12.0 and current 2.13.1.
 - Python 3.10-3.14 focused release/documentation/plugin smoke tests passed.
-- Strict docs, Ruff, hygiene, wheel/sdist, Twine, archive inspection, and clean-install plugin help passed.
-- 17 focused docs/release tests passed, including semantic Python metadata and static release-workflow contracts.
+- Strict docs, Ruff, hygiene and reachable-history inspection, wheel/sdist,
+  Twine, archive inspection, and clean-install plugin help passed.
+- 26 focused docs/release tests passed, including license metadata/artifact
+  contracts, semantic Python metadata, and static release-workflow contracts.
 
-## External Owner Ceremony
+## Owner-Gate State
 
-After reviewer PASS and merge, the owner decides/adds licensing (or explicitly
-distributes without an open-source grant), imports Read the Docs, confirms PyPI
-ownership, configures trusted publishing and the `pypi` environment, creates
-the v1.0.0 tag, and verifies GitHub/PyPI/Read the Docs publication.
+Completed: Block 028 merged, MIT selected, canonical `LICENSE` added, and PEP
+639 package license metadata prepared.
+
+Selected but not externally confirmed: public repository visibility.
+
+Still pending: make the repository public, enable private vulnerability
+reporting, configure the GitHub `pypi` environment, configure the PyPI trusted
+publisher, import and build Read the Docs, create the `v1.0.0` tag, and verify
+publication.
 
 Tag/version equality alone is insufficient: the release workflow requires the
 tagged commit to be contained in remote `main`. Checkout does not persist
@@ -40,4 +48,6 @@ credentials; the local ancestry step performs no fetch and fails closed when
 `origin/main` is absent. No merge, tag, upload, workflow publication run, or
 publication occurred during Block 028 or its final fixes.
 
-There is no next development block. STOP after Block 028 release preparation.
+There is no next development block. Do not create Block 029. The next action
+after this administrative branch is reviewer audit, followed by the remaining
+owner-controlled external ceremony.

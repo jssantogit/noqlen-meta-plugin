@@ -10,20 +10,22 @@ Noqlen Meta - multi-provider metadata enrichment and MusicBrainz identity tools 
 
 ## Context Level
 
-`full` for final Block 028 v1.0 hardening, documentation, and release preparation.
+`full` for the post-Block-028 license and public-release owner gates.
 
 ## Tool Mode
 
 `combo`: OpenCode native capabilities, Serena for targeted symbol/navigation work, and RTK for noisy
-shell output.
+shell output. External release setup and publication remain out of scope.
 
 ## Active Block
 
-Block 028 - v1.0 Hardening, Documentation Site, and Release Preparation (complete).
+No development block. Block 028 is complete and merged; this is a small
+administrative owner-gate change, not Block 029.
 
 ## Active Spec
 
-`docs/specs/028-v1-hardening-docs-release/`
+None. The completed Block 028 spec remains at
+`docs/specs/028-v1-hardening-docs-release/` for historical context.
 
 ## Active ADRs
 
@@ -35,22 +37,19 @@ Block 028 - v1.0 Hardening, Documentation Site, and Release Preparation (complet
 
 ## Completion State
 
-Block 028 prepared the final v1.0.0 release candidate. The public manual lives under
-`site-docs`, while internal ADR/spec/context material remains excluded from MkDocs. README is a short
-GitHub/PyPI landing page. Package metadata, command help, documentation/default coverage checks,
-synthetic release workflows, CI compatibility/docs/package jobs, and a tag-only trusted-publishing
-workflow are complete. Python support is bounded to 3.10-3.14 in source and wheel metadata; v1.0.0
-does not claim Python 3.15. Release tags must match the package version and resolve to commits
-contained in remote `main` before build or OIDC publication. Authenticated checkout obtains complete
-refs without persisting credentials; the workflow then validates local `origin/main` and ancestry
-without a network Git operation, failing closed when the ref is absent. Validation passes 1,105 offline tests
-with 5 live tests deselected, 165 focused
-tests on both beets 2.12.0 and 2.13.1, focused Python 3.10-3.14 smoke tests, strict documentation,
-Ruff, hygiene, package/Twine/content inspection, and clean-install discovery/help. No provider,
-field, matcher, command, or write behavior was added.
+Block 028 received reviewer PASS and was merged to `main`. The owner selected
+MIT, and the canonical `LICENSE` plus PEP 639 package metadata are prepared.
+The owner also selected public repository visibility, but that external change
+is not complete until GitHub reports the repository as public.
+
+Still pending are making the repository public, enabling private vulnerability
+reporting, configuring the GitHub `pypi` environment and PyPI trusted
+publisher, importing and building Read the Docs, creating the `v1.0.0` tag,
+and verifying publication. No tag, upload, visibility change, external setup,
+provider, field, matcher, command, or write behavior is part of this change.
 
 ## Stop Condition
 
-Block 028 implementation is complete and the v1.0.0 release candidate is prepared. After reviewer
-PASS and merge there is no next development block: STOP. Owner-controlled external release ceremony
-remains.
+There is no next development block. After the owner-gate branch is reviewed,
+the remaining actions are the external owner release ceremony. Do not create
+Block 029, tag, publish, or claim public visibility before external confirmation.

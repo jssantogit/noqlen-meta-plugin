@@ -14,6 +14,7 @@ All notable user-facing changes are recorded here.
 - Discogs, anchored MusicBrainz, Last.fm, iTunes, and LRCLIB adapters.
 - A beginner-first MkDocs manual and package/release validation.
 - Tested package support bounded to Python 3.10 through 3.14.
+- Distribution under the MIT License.
 
 ### Safety
 

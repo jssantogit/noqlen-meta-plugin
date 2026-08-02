@@ -213,5 +213,11 @@ tested matrix and limitations.
 - [Issue tracker](https://github.com/jssantogit/noqlen-meta-plugin/issues)
 
 Version `1.0.0` is a prepared release candidate. Publication remains gated on
-review, merge, owner license decision, Read the Docs setup, PyPI ownership and
+public repository confirmation, Read the Docs setup, PyPI ownership and
 trusted-publisher setup, and creation of the release tag.
+
+## License
+
+Noqlen Meta is distributed under the [MIT License](LICENSE).
+
+Copyright © 2026 João Pedro Rosa dos Santos.

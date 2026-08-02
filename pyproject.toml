@@ -7,6 +7,8 @@ name = "beets-noqlenmeta"
 version = "1.0.0"
 description = "Multi-provider metadata enrichment and MusicBrainz identity tools for beets"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10,<3.15"
 dependencies = [
     "beets>=2.12,<3",

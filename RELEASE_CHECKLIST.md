@@ -2,7 +2,7 @@
 
 ## Automated And Repository Checks
 
-- [ ] Reviewer PASS recorded for the release-candidate branch.
+- [x] Reviewer PASS recorded for the Block 028 release-candidate branch.
 - [ ] Version, package name, metadata, README, and changelog agree.
 - [ ] Package and wheel `Requires-Python` are semantically `>=3.10,<3.15`; Python 3.15 is not claimed.
 - [ ] Full Python and beets compatibility CI is green.
@@ -13,7 +13,8 @@
 
 ## Owner-Controlled External Checks
 
-- [ ] The repository owner selected and added the intended license, or explicitly decided to distribute without granting an open-source license.
+- [x] MIT License selected and added with copyright © 2026 João Pedro Rosa dos Santos.
+- [ ] Repository visibility changed to public and public access confirmed.
 - [ ] Read the Docs project imported and public URL confirmed.
 - [ ] PyPI project/package ownership confirmed.
 - [ ] PyPI trusted publisher configured for this repository and `.github/workflows/release.yml`.
@@ -22,7 +23,7 @@
 
 ## Release Execution
 
-- [ ] Release-candidate branch merged to `main` only after reviewer PASS.
+- [x] Block 028 release-candidate branch merged to `main` after reviewer PASS.
 - [ ] `v1.0.0` tag created only after reviewer PASS and main merge.
 - [ ] Tag version exactly matches `pyproject.toml`.
 - [ ] Tag resolves to a commit contained in remote `main`; tag/version equality alone is insufficient.

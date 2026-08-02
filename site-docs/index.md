@@ -42,3 +42,14 @@ the [command reference](reference/commands.md) when you already know beets.
 
 The Read the Docs project is intended but is not considered live until the
 owner imports it and confirms a successful public build.
+
+## License And Repository Status
+
+Noqlen Meta is MIT licensed. The repository's root
+[`LICENSE`](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE)
+is the canonical license text.
+
+The owner selected public repository visibility, but that change remains
+unconfirmed until GitHub reports the repository as public. The license choice
+does not imply endorsement by beets, MusicBrainz, Discogs, Navidrome, Last.fm,
+Apple, LRCLIB, or any provider.
