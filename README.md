@@ -206,15 +206,17 @@ tested matrix and limitations.
 
 ## Project
 
+- [PyPI](https://pypi.org/project/beets-noqlenmeta/)
+- [GitHub releases](https://github.com/jssantogit/noqlen-meta-plugin/releases)
 - [Changelog](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/CHANGELOG.md)
 - [Contributing](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/CONTRIBUTING.md)
 - [Security](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/SECURITY.md)
 - [Release status and owner gates](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/RELEASE_CHECKLIST.md)
 - [Issue tracker](https://github.com/jssantogit/noqlen-meta-plugin/issues)
 
-Version `1.0.0` is ready for the release tag. The first successful OIDC
-publication will create and establish ownership of the PyPI project. The
-package has not been published to PyPI yet.
+Version `1.0.0` was published on PyPI and released on GitHub on 2026-08-02.
+Versioned documentation is available through the Read the Docs `stable` and
+`v1.0.0` versions.
 
 ## License
 
