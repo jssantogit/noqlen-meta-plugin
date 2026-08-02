@@ -1,7 +1,8 @@
 # Release Status
 
-Noqlen Meta 1.0.0 is ready for the release tag. Repository validation can
-complete without external publication.
+Noqlen Meta 1.0.0 is ready for the release tag. Final `main` CI is green across
+Python 3.10 through 3.14, the supported beets compatibility boundaries,
+documentation, and package validation.
 
 Package support is bounded to Python 3.10 through 3.14. Distribution checks
 require wheel `Requires-Python` to match `>=3.10,<3.15`; v1.0.0 does not claim
@@ -27,10 +28,11 @@ The canonical public documentation is live at
 
 Pending release work:
 
-- final `main` CI confirmation;
 - creation of the `v1.0.0` tag;
-- first PyPI publication, which will establish project ownership;
-- post-publication artifact verification.
+- the first PyPI publication, which will establish project ownership;
+- creation or verification of the GitHub Release;
+- the versioned Read the Docs `v1.0.0` build;
+- post-publication package and artifact verification.
 
 The package has not been published to PyPI. A versioned Read the Docs `v1.0.0`
 build does not exist before the tag is created and built.
@@ -42,9 +44,9 @@ tag history with `fetch-depth: 0` but does not persist credentials. The later
 ancestry check is fully local, requires `refs/remotes/origin/main` to exist,
 and fails closed without a post-checkout network Git command.
 
-This administrative branch does not merge itself, create a tag, publish a
-GitHub release, or upload to PyPI. The repository root `RELEASE_CHECKLIST.md`
-is the operational source for those gates.
+This pre-tag state does not create a tag, publish a GitHub release, or upload to
+PyPI. The repository root `RELEASE_CHECKLIST.md` is the operational source for
+those gates.
 
 MIT licensing does not imply endorsement by beets, MusicBrainz, Discogs,
 Navidrome, Last.fm, Apple, LRCLIB, or any provider.
