@@ -10,17 +10,17 @@ Noqlen Meta - multi-provider metadata enrichment and MusicBrainz identity tools 
 
 ## Context Level
 
-`full` for the pre-release CI test hotfix.
+`full` for the final pre-tag v1.0.0 release-state synchronization.
 
 ## Tool Mode
 
-`combo`: OpenCode native capabilities, Serena for targeted symbol/navigation work, and RTK for noisy
-shell output. This prepares a test-only hotfix; publication remains out of scope.
+Direct repository administration for documentation-only release-state updates.
+No product behavior, package metadata, workflow, tag, or publication is changed.
 
 ## Active Block
 
-No development block. Block 028 is complete and merged; this is a narrow
-pre-release CI test hotfix, not Block 029.
+No development block. Block 028 is complete and merged; this is a final
+pre-tag administrative state update, not Block 029.
 
 ## Active Spec
 
@@ -37,19 +37,19 @@ None. The completed Block 028 spec remains at
 
 ## Completion State
 
-Block 028 is complete and merged. Final `main` CI exposed two atime-sensitive
-identity-tag test bugs; the production stale-source guard remained unchanged
-and this test-only hotfix is prepared with all local release gates passing. The
-owner-confirmed external setup gates remain complete; full Python CI is still
-pending on a new `main` run.
+Block 028 and the atime-sensitive test hotfix are complete and merged. Final
+`main` CI is green across Python 3.10-3.14, the supported beets boundaries,
+documentation, and package validation. The production stale-source guard remains
+unchanged. All owner-confirmed external setup gates required before tagging are
+complete.
 
-Remaining work is to audit and merge this hotfix, confirm a new final `main` CI,
-create `v1.0.0`, verify the release workflow and PyPI publication, create or
-verify the GitHub Release when appropriate, and complete post-release checks.
-PyPI project ownership will be established by the first publication. No
-development scope is reopened.
+Remaining work is to merge this documentation-only release-state update, wait
+for its resulting `main` CI to pass, create `v1.0.0`, verify the release workflow
+and first PyPI publication, create or verify the GitHub Release and versioned
+Read the Docs build, and complete post-release checks. PyPI project ownership
+will be established by the first publication. No development scope is reopened.
 
 ## Stop Condition
 
-There is no next development block. Do not create Block 029, tag, publish,
-merge, or run the release workflow during this test hotfix.
+There is no next development block. Do not create Block 029, tag, publish, or
+run the release workflow during this pre-tag state update.
