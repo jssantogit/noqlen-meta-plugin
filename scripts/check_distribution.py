@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 import argparse
-import email
 import sys
 import tarfile
 import zipfile
+from email import message_from_bytes
+from email.message import Message
 from pathlib import Path
 
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
@@ -36,13 +37,13 @@ FORBIDDEN_PARTS = {
 FORBIDDEN_NAMES = {"AGENTS.md", "RELEASE_CHECKLIST.md", "opencode.json", "RTK.md"}
 
 
-def _wheel_metadata(path: Path) -> tuple[email.message.Message, set[str]]:
+def _wheel_metadata(path: Path) -> tuple[Message, set[str]]:
     with zipfile.ZipFile(path) as archive:
         names = set(archive.namelist())
         metadata_names = [name for name in names if name.endswith(".dist-info/METADATA")]
         if len(metadata_names) != 1:
             raise ValueError("wheel must contain exactly one METADATA file")
-        metadata = email.message_from_bytes(archive.read(metadata_names[0]))
+        metadata = message_from_bytes(archive.read(metadata_names[0]))
     return metadata, names
 
 
@@ -52,7 +53,7 @@ def _sdist_names(path: Path) -> set[str]:
 
 
 def _requires_python_failures(
-    metadata: email.message.Message, pyproject_path: Path
+    metadata: Message, pyproject_path: Path
 ) -> list[str]:
     """Return release-boundary failures for wheel and source Python metadata."""
     failures: list[str] = []

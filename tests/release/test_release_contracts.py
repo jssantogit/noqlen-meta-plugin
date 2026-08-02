@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import email
 import importlib.util
+from email.message import Message
 from pathlib import Path
 
 import pytest
@@ -25,8 +25,8 @@ _SCRIPT_SPEC.loader.exec_module(_SCRIPT_MODULE)
 _requires_python_failures = _SCRIPT_MODULE._requires_python_failures
 
 
-def _metadata(requires_python: str | None) -> email.message.Message:
-    metadata = email.message.Message()
+def _metadata(requires_python: str | None) -> Message:
+    metadata = Message()
     if requires_python is not None:
         metadata["Requires-Python"] = requires_python
     return metadata
@@ -99,8 +99,13 @@ def test_python_metadata_docs_and_ci_matrix_agree() -> None:
 def test_release_workflow_requires_tag_on_main_before_single_build() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     trigger = workflow.split("permissions:", 1)[0]
+    ancestry_step = workflow.split(
+        "- name: Verify release commit is contained in main", 1
+    )[1].split("- uses: actions/setup-python", 1)[0]
     ancestry_index = workflow.index("git merge-base --is-ancestor")
+    version_index = workflow.index("- name: Verify tag matches package version")
     build_index = workflow.index("python -m build")
+    publish_boundary = workflow.split("uses: pypa/gh-action-pypi-publish@release/v1", 1)[1]
 
     assert 'tags:\n      - "v*"' in trigger
     assert "branches:" not in trigger
@@ -108,13 +113,24 @@ def test_release_workflow_requires_tag_on_main_before_single_build() -> None:
     assert "workflow_dispatch:" not in trigger
     assert "tag != f\"v{version}\"" in workflow
     assert "fetch-depth: 0" in workflow
-    assert "+refs/heads/main:refs/remotes/origin/main" in workflow
-    assert 'git rev-parse "${RELEASE_TAG}^{commit}"' in workflow
-    assert ancestry_index < build_index
+    assert "persist-credentials: false" in workflow
+    assert "git fetch" not in workflow
+    assert "git show-ref --verify --quiet refs/remotes/origin/main" in ancestry_step
+    assert 'git rev-parse "${RELEASE_TAG}^{commit}"' in ancestry_step
+    assert 'git rev-parse "refs/remotes/origin/main^{commit}"' in ancestry_step
+    assert '"${tag_commit}"' in ancestry_step
+    assert '"${main_commit}"' in ancestry_step
+    assert ancestry_step.index("git show-ref") < ancestry_step.index("tag_commit=")
+    assert ancestry_step.index("tag_commit=") < ancestry_step.index("main_commit=")
+    assert ancestry_step.index("main_commit=") < ancestry_step.index("git merge-base")
+    assert ancestry_index < version_index < build_index
     assert workflow.count("python -m build") == 1
     assert "needs: build" in workflow
     assert "id-token: write" in workflow
     assert "secrets." not in workflow
+    assert "github.token" not in workflow
     assert "actions/upload-artifact@v5" in workflow
     assert "actions/download-artifact@v6" in workflow
     assert "pypa/gh-action-pypi-publish@release/v1" in workflow
+    assert "uses:" not in publish_boundary
+    assert "run:" not in publish_boundary

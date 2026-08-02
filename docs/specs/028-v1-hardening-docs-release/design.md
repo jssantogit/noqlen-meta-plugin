@@ -31,12 +31,15 @@ boundary, required source, and forbidden runtime/internal content. CI separates
 the claimed Python matrix, beets boundary tests, strict documentation, and
 package smoke tests.
 
-The release workflow runs only for `v*` tags, checks out complete history,
-fetches remote `main`, verifies an exact semantic tag match to `pyproject.toml`,
-and requires the tag commit to be an ancestor of remote `main`. Tag/version
-equality alone is insufficient. It then builds once in an unprivileged job,
-uploads checked artifacts, and publishes those same artifacts in a protected
-`pypi` environment using OIDC. No token secret is accepted or configured.
+The release workflow runs only for `v*` tags. Authenticated checkout obtains
+all branch/tag history with `fetch-depth: 0`, then removes its credentials.
+The workflow performs no later network Git operation: it requires the local
+`refs/remotes/origin/main` ref, resolves both tag and main to commits, and
+checks ancestry locally before verifying the exact tag match to
+`pyproject.toml`. A missing main ref fails closed, and tag/version equality
+alone is insufficient. It then builds once in an unprivileged job, uploads
+checked artifacts, and publishes those same artifacts in a protected `pypi`
+environment using OIDC. No token secret is accepted or configured.
 
 ## Product Behavior
 

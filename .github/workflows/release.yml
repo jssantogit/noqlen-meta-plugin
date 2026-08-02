@@ -21,12 +21,12 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin \
-            +refs/heads/main:refs/remotes/origin/main
+          git show-ref --verify --quiet refs/remotes/origin/main
           tag_commit="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          main_commit="$(git rev-parse "refs/remotes/origin/main^{commit}")"
           git merge-base --is-ancestor \
             "${tag_commit}" \
-            refs/remotes/origin/main
+            "${main_commit}"
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"

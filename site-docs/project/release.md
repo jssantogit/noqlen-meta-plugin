@@ -14,7 +14,10 @@ creation of `v1.0.0` only after those gates.
 
 The release workflow requires both an exact tag/version match and proof that
 the tagged commit is contained in remote `main`. Tag/version equality alone is
-not sufficient to publish.
+not sufficient to publish. Authenticated checkout obtains complete branch and
+tag history with `fetch-depth: 0` but does not persist credentials. The later
+ancestry check is fully local, requires `refs/remotes/origin/main` to exist,
+and fails closed without a post-checkout network Git command.
 
 The implementation branch does not merge itself, create a tag, publish a
 GitHub release, upload to PyPI, create credentials, or configure Read the Docs.

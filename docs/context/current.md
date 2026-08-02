@@ -41,7 +41,9 @@ GitHub/PyPI landing page. Package metadata, command help, documentation/default 
 synthetic release workflows, CI compatibility/docs/package jobs, and a tag-only trusted-publishing
 workflow are complete. Python support is bounded to 3.10-3.14 in source and wheel metadata; v1.0.0
 does not claim Python 3.15. Release tags must match the package version and resolve to commits
-contained in remote `main` before build or OIDC publication. Validation passes 1,105 offline tests
+contained in remote `main` before build or OIDC publication. Authenticated checkout obtains complete
+refs without persisting credentials; the workflow then validates local `origin/main` and ancestry
+without a network Git operation, failing closed when the ref is absent. Validation passes 1,105 offline tests
 with 5 live tests deselected, 165 focused
 tests on both beets 2.12.0 and 2.13.1, focused Python 3.10-3.14 smoke tests, strict documentation,
 Ruff, hygiene, package/Twine/content inspection, and clean-install discovery/help. No provider,

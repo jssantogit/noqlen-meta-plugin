@@ -17,3 +17,4 @@
 - [x] Bound v1 Python support to 3.10-3.14 and verify wheel metadata semantically.
 - [x] Require release tags to resolve to commits contained in remote `main` before build.
 - [x] Add and validate focused Python metadata and release-workflow contract regressions.
+- [x] Verify release ancestry locally after full-history checkout without persisted credentials or a later fetch.

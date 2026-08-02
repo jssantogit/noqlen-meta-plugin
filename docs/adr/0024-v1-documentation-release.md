@@ -41,6 +41,7 @@ configuration defaults, packaging contents, or compatibility boundaries.
 25. v1.0.0 package support is bounded to tested Python 3.10 through 3.14; Python 3.15 is not claimed.
 26. Wheel and source `Requires-Python` equivalence is a semantic release gate.
 27. A release tag must resolve to a commit contained in remote `main`; tag/version equality alone is insufficient.
+28. Authenticated checkout fetches complete history without persisting credentials; ancestry is then verified locally and a missing `origin/main` fails closed.
 
 ## Consequences
 

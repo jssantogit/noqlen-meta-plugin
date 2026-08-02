@@ -43,8 +43,8 @@
 
 No provider, field, matcher, command, database behavior, or file-write behavior was added. Production changes are limited to fresh centralized defaults and clearer help text.
 
-The tag-only workflow now checks out complete history, fetches remote `main`, resolves the tag to a commit, and requires that commit to be an ancestor of remote `main` before the sole package build. Tag/version equality remains required but is insufficient alone. GitHub-hosted workflows cannot execute until pushed. Read the Docs and PyPI publication are intentionally not validated as live external services. Provider live tests remain opt-in and were not required.
+The tag-only workflow uses authenticated full-history checkout with credentials not persisted. It performs no post-checkout `git fetch`: local verification requires `refs/remotes/origin/main`, resolves both tag and main to commits, and checks ancestry before the sole package build. A missing main ref fails closed. Tag/version equality remains required but is insufficient alone. Static workflow contracts pass, but the GitHub-hosted tag workflow did not execute on this branch. Read the Docs and PyPI publication are intentionally not validated as live external services. Provider live tests remain opt-in and were not required.
 
 ## Owner Gates
 
-The unresolved owner-controlled actions are an explicit license decision, Read the Docs import/public URL confirmation, PyPI ownership and trusted-publisher setup, protected `pypi` environment setup when used, reviewer PASS and merge, creation of the v1.0.0 tag on a commit contained in main, GitHub/PyPI release, and post-release verification. No merge, tag, upload, or external publication occurred.
+The unresolved owner-controlled actions are an explicit license decision, Read the Docs import/public URL confirmation, PyPI ownership and trusted-publisher setup, protected `pypi` environment setup when used, reviewer PASS and merge, creation of the v1.0.0 tag on a commit contained in main, GitHub/PyPI release, and post-release verification. No merge, tag, upload, workflow publication run, or external publication occurred.

@@ -34,6 +34,7 @@ performing external publication.
 - Require wheel `Requires-Python` to match the bounded source declaration semantically.
 - Prepare a tag-only OIDC trusted-publishing workflow that builds once.
 - Require the release tag's commit to be contained in remote `main` before building.
+- Obtain complete refs during authenticated checkout, persist no credentials, perform no later network Git operation, and fail closed when local `origin/main` is absent.
 - Record license, Read the Docs, PyPI ownership, environment, trusted
   publisher, tag, and publication as owner gates.
 - Do not merge, tag, upload, publish, create credentials, or touch real music.

@@ -26,6 +26,7 @@
 - [ ] `v1.0.0` tag created only after reviewer PASS and main merge.
 - [ ] Tag version exactly matches `pyproject.toml`.
 - [ ] Tag resolves to a commit contained in remote `main`; tag/version equality alone is insufficient.
+- [ ] Full-history checkout fetched `origin/main` without persisting credentials; local ancestry validation fails closed if the ref is absent.
 - [ ] Tag workflow builds, checks, and publishes the same artifacts through OIDC.
 - [ ] No API token or long-lived publishing credential is used.
 - [ ] GitHub/PyPI release notes use `CHANGELOG.md` and do not claim external integrations.
