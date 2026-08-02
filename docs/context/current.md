@@ -10,17 +10,17 @@ Noqlen Meta - multi-provider metadata enrichment and MusicBrainz identity tools 
 
 ## Context Level
 
-`full` for the final pre-tag external-gate synchronization.
+`full` for the pre-release CI test hotfix.
 
 ## Tool Mode
 
 `combo`: OpenCode native capabilities, Serena for targeted symbol/navigation work, and RTK for noisy
-shell output. This records owner-confirmed external setup; publication remains out of scope.
+shell output. This prepares a test-only hotfix; publication remains out of scope.
 
 ## Active Block
 
-No development block. Block 028 is complete and merged; this is a small
-administrative owner-gate change, not Block 029.
+No development block. Block 028 is complete and merged; this is a narrow
+pre-release CI test hotfix, not Block 029.
 
 ## Active Spec
 
@@ -37,13 +37,13 @@ None. The completed Block 028 spec remains at
 
 ## Completion State
 
-Block 028 is complete and merged. The owner confirms that the repository is
-public, the MIT License is merged, private vulnerability reporting is enabled,
-the GitHub `pypi` environment has a `v*` deployment tag rule, the PyPI Pending
-Trusted Publisher is configured, and the Read the Docs public `latest` build
-passed.
+Block 028 is complete and merged. Final `main` CI exposed two atime-sensitive
+identity-tag test bugs; the production stale-source guard remained unchanged
+and this test-only hotfix is prepared with all local release gates passing. The
+owner-confirmed external setup gates remain complete; full Python CI is still
+pending on a new `main` run.
 
-Remaining work is to merge this administrative sync, confirm final `main` CI,
+Remaining work is to audit and merge this hotfix, confirm a new final `main` CI,
 create `v1.0.0`, verify the release workflow and PyPI publication, create or
 verify the GitHub Release when appropriate, and complete post-release checks.
 PyPI project ownership will be established by the first publication. No
@@ -52,4 +52,4 @@ development scope is reopened.
 ## Stop Condition
 
 There is no next development block. Do not create Block 029, tag, publish,
-merge, or run the release workflow during this administrative sync.
+merge, or run the release workflow during this test hotfix.

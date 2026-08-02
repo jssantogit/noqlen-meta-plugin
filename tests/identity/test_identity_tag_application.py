@@ -262,7 +262,8 @@ def test_post_replacement_failure_restores_original(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     library, target, plan, path = _case(tmp_path)
-    before = path.read_bytes()
+    # Preserve the plan's exact source atime snapshot.
+    before = _read_without_atime(path)
     original_verify = application_module._verify_logical_snapshot
     calls = 0
 
@@ -278,7 +279,7 @@ def test_post_replacement_failure_restores_original(
     result = apply_identity_tag_file_plan(library, target, plan)
 
     assert result.blocked_reason == "identity tag original restored after failed synchronization"
-    assert path.read_bytes() == before
+    assert _read_without_atime(path) == before
     assert _artifacts(tmp_path) == []
 
 
@@ -831,15 +832,15 @@ def test_only_mtime_changes_and_events_follow_full_success(
     events: list[tuple[str, dict[str, object]]] = []
     source_verified = False
     mtime_verified = False
+    verification_calls = 0
     original_verify = application_module._verify_logical_snapshot
     original_store = application_module._store_operational_mtime
 
     def verify(*args: object, **kwargs: object) -> None:
-        nonlocal source_verified
+        nonlocal source_verified, verification_calls
         original_verify(*args, **kwargs)
-        if os.fsdecode(args[0].format_name or "") == "":
-            return
-        if MediaFile(path).mb_albumid == mbid(1):
+        verification_calls += 1
+        if verification_calls == 2:
             source_verified = True
 
     def store(*args: object, **kwargs: object):

@@ -2,9 +2,9 @@
 
 ## State
 
-Block 028 is complete and merged. This final administrative sync records
-owner-confirmed external gates without adding product behavior. This is not
-Block 029.
+Block 028 is complete and merged. Final `main` CI exposed two atime-sensitive
+identity-tag test bugs. The test-only hotfix preserves the production
+stale-source guard unchanged. This is not Block 029.
 
 ## Prepared
 
@@ -22,6 +22,12 @@ Block 029.
 
 ## Validation
 
+- Final `main` CI failed only the two atime-sensitive identity-tag application
+  tests on Python 3.10-3.14; lint, documentation, package, and both beets
+  compatibility jobs passed.
+- On the hotfix branch, 1,115 offline tests passed and 5 live tests were
+  deselected; focused repetition, identity tests, Ruff, docs, hygiene, and
+  package gates also passed. Full Python CI remains pending on `main`.
 - 1,114 offline tests passed; 5 live tests were deselected.
 - 165 focused tests passed on beets 2.12.0 and current 2.13.1.
 - Python 3.10-3.14 focused release/documentation/plugin smoke tests passed.
@@ -38,7 +44,7 @@ reporting is enabled, the GitHub `pypi` environment has a `v*` deployment tag
 rule, the PyPI Pending Trusted Publisher is configured, and the Read the Docs
 public `latest` build passed.
 
-Remaining: merge this administrative sync, confirm final `main` CI, create
+Remaining: audit and merge this test hotfix, confirm a new final `main` CI, create
 `v1.0.0`, verify the release workflow and PyPI publication, create or verify
 the GitHub Release when appropriate, and complete post-release checks. The
 first successful publication will establish PyPI project ownership.
@@ -50,5 +56,5 @@ credentials; the local ancestry step performs no fetch and fails closed when
 publication occurred during Block 028 or its final fixes.
 
 There is no next development block. Do not create Block 029. The next action
-after this branch is reviewer audit and merge, followed by final `main` CI and
+after this branch is reviewer audit and merge, followed by a new final `main` CI and
 the owner-controlled release ceremony.
