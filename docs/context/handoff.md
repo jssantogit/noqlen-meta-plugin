@@ -2,9 +2,9 @@
 
 ## State
 
-Block 028 is complete and merged. Final `main` CI exposed two atime-sensitive
-identity-tag test bugs. The test-only hotfix preserves the production
-stale-source guard unchanged. This is not Block 029.
+Block 028 and the atime-sensitive test hotfix are complete and merged. Final
+`main` CI is green across all supported Python versions and release-validation
+jobs. This documentation-only pre-tag update is not Block 029.
 
 ## Prepared
 
@@ -22,13 +22,12 @@ stale-source guard unchanged. This is not Block 029.
 
 ## Validation
 
-- Final `main` CI failed only the two atime-sensitive identity-tag application
-  tests on Python 3.10-3.14; lint, documentation, package, and both beets
-  compatibility jobs passed.
+- Final `main` CI passed on Python 3.10-3.14, beets 2.12.0, the latest supported
+  beets below 3, documentation, and package validation after the atime-safe test
+  hotfix.
 - On the hotfix branch, 1,115 offline tests passed and 5 live tests were
   deselected; focused repetition, identity tests, Ruff, docs, hygiene, and
-  package gates also passed. Full Python CI remains pending on `main`.
-- 1,114 offline tests passed; 5 live tests were deselected.
+  package gates also passed.
 - 165 focused tests passed on beets 2.12.0 and current 2.13.1.
 - Python 3.10-3.14 focused release/documentation/plugin smoke tests passed.
 - Strict docs, Ruff, hygiene and reachable-history inspection, wheel/sdist,
@@ -41,20 +40,20 @@ stale-source guard unchanged. This is not Block 029.
 Completed and externally confirmed: Block 028 merged after reviewer PASS, the
 repository is public, the MIT License is merged, private vulnerability
 reporting is enabled, the GitHub `pypi` environment has a `v*` deployment tag
-rule, the PyPI Pending Trusted Publisher is configured, and the Read the Docs
-public `latest` build passed.
+rule, the PyPI Pending Trusted Publisher is configured, the Read the Docs
+public `latest` build passed, and final `main` CI is green.
 
-Remaining: audit and merge this test hotfix, confirm a new final `main` CI, create
-`v1.0.0`, verify the release workflow and PyPI publication, create or verify
-the GitHub Release when appropriate, and complete post-release checks. The
-first successful publication will establish PyPI project ownership.
+Remaining: merge this documentation-only release-state update, wait for the
+resulting `main` CI, create `v1.0.0`, verify the release workflow and first PyPI
+publication, create or verify the GitHub Release and versioned Read the Docs
+build, and complete post-release checks. The first successful publication will
+establish PyPI project ownership.
 
 Tag/version equality alone is insufficient: the release workflow requires the
 tagged commit to be contained in remote `main`. Checkout does not persist
 credentials; the local ancestry step performs no fetch and fails closed when
-`origin/main` is absent. No merge, tag, upload, workflow publication run, or
+`origin/main` is absent. No tag, upload, workflow publication run, or package
 publication occurred during Block 028 or its final fixes.
 
-There is no next development block. Do not create Block 029. The next action
-after this branch is reviewer audit and merge, followed by a new final `main` CI and
-the owner-controlled release ceremony.
+There is no next development block. Do not create Block 029. After this branch
+is reviewed and merged, wait for green `main` CI and then create `v1.0.0`.
