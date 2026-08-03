@@ -10,8 +10,13 @@
 - [x] Record the Forge-to-Meta parity matrix.
 - [x] Write requirements and architecture for recording-level evidence.
 - [x] Propose ADR 0025.
-- [ ] Receive reviewer approval for the Block 029 scope and ADR.
-- [ ] Freeze final public option and configuration names before product code.
+- [x] Receive owner approval for the Block 029 scope and ADR after green CI.
+- [x] Freeze final public option and configuration names before product code.
+- [x] Freeze domain, lookup, evidence, mapping, preview, and coexistence
+  contracts in `contracts.md`.
+- [x] Resolve initial lookup metadata to `recordingids` and keep title, artist,
+  duration, position, and release scoring exclusively in the MusicBrainz audit.
+- [x] Record that repository work from this chat is documentation-only.
 
 ## Domain And Policy
 
@@ -85,12 +90,14 @@
 - [ ] Normalize bounded AcoustID groups to AcoustID UUID plus canonical recording
   MBID sets.
 - [ ] Ignore release, release-group, medium, and release-track payload data.
-- [ ] Aggregate support by recording while retaining competing result groups.
-- [ ] Apply minimum score, minimum margin, uniqueness, duration, title, and
-  artist policies.
+- [ ] Aggregate support by recording using the highest eligible group score;
+  duplicate result groups do not accumulate support.
+- [ ] Apply minimum score, minimum margin, and unique-top-recording policy.
 - [ ] Produce stable path-free machine reasons.
 - [ ] Prove that a first-release/first-track shortcut cannot enter the model.
 - [ ] Prove that conflicting high-scoring recording mappings remain ambiguous.
+- [ ] Prove that local textual metadata and duration do not create or adjust an
+  AcoustID verdict.
 
 ## Preview, Mapping, And Application
 
@@ -118,7 +125,7 @@
   their existing assignments are calculated.
 - [ ] Preserve every existing score component and threshold unchanged.
 - [ ] Treat unavailable, no-match, and ambiguous evidence as neutral.
-- [ ] Return a distinct ambiguous result when decisive evidence rejects every
+- [ ] Return `acoustid_recording_conflict` when decisive evidence rejects every
   candidate.
 - [ ] Generate four-field findings only from the selected complete MusicBrainz
   release candidate.
