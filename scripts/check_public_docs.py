@@ -208,7 +208,8 @@ def check() -> list[str]:
             failures.append(f"public release text retains stale release phrase: {phrase}")
 
     required_checklist_items = (
-        "[x] Read the Docs project imported and public `latest`, `stable`, and `v1.0.0` builds passed.",
+        "[x] Read the Docs project imported and public `latest`, `stable`, and "
+        "`v1.0.0` builds passed.",
         "[x] PyPI project ownership established by the first successful publication.",
         "[x] PyPI Trusted Publisher configured",
         "[x] GitHub environment `pypi` configured with the `v*` deployment tag rule.",
