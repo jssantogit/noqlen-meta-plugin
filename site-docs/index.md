@@ -42,8 +42,7 @@ the [command reference](reference/commands.md) when you already know beets.
 
 The canonical public documentation is live at
 [https://noqlen-meta-plugin.readthedocs.io/](https://noqlen-meta-plugin.readthedocs.io/).
-The public `latest` build has passed. A versioned `v1.0.0` documentation build
-will not exist until the release tag is created and built.
+The public `latest`, `stable`, and versioned `v1.0.0` builds have passed.
 
 ## License And Repository Status
 
@@ -51,7 +50,8 @@ Noqlen Meta is MIT licensed. The repository's root
 [`LICENSE`](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE)
 is the canonical license text.
 
-The GitHub repository is public and public access has been confirmed. The
-package has not been published to PyPI. The license choice does not imply
-endorsement by beets, MusicBrainz, Discogs, Navidrome, Last.fm, Apple, LRCLIB,
-or any provider.
+The GitHub repository is public. Version `1.0.0` is available from
+[PyPI](https://pypi.org/project/beets-noqlenmeta/) and the corresponding
+[GitHub Release](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v1.0.0).
+The license choice does not imply endorsement by beets, MusicBrainz, Discogs,
+Navidrome, Last.fm, Apple, LRCLIB, or any provider.

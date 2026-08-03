@@ -10,17 +10,19 @@ Noqlen Meta - multi-provider metadata enrichment and MusicBrainz identity tools 
 
 ## Context Level
 
-`full` for the final pre-tag v1.0.0 release-state synchronization.
+`full` for post-v1.0.0 release synchronization and the start of update planning.
 
 ## Tool Mode
 
-Direct repository administration for documentation-only release-state updates.
-No product behavior, package metadata, workflow, tag, or publication is changed.
+Direct repository administration for release-state documentation and validation
+contracts. No product behavior, package metadata, workflow, or published tag is
+changed in this branch.
 
 ## Active Block
 
-No development block. Block 028 is complete and merged; this is a final
-pre-tag administrative state update, not Block 029.
+No active development block. Block 028 is complete, and version 1.0.0 has been
+published. This post-release synchronization does not reopen the frozen v1
+release scope.
 
 ## Active Spec
 
@@ -37,19 +39,25 @@ None. The completed Block 028 spec remains at
 
 ## Completion State
 
-Block 028 and the atime-sensitive test hotfix are complete and merged. Final
-`main` CI is green across Python 3.10-3.14, the supported beets boundaries,
-documentation, and package validation. The production stale-source guard remains
-unchanged. All owner-confirmed external setup gates required before tagging are
-complete.
+Version 1.0.0 was released on 2026-08-02. The `v1.0.0` tag, GitHub Release,
+PyPI Trusted Publishing workflow, PyPI project ownership, published wheel and
+sdist, matching artifact hashes, and Read the Docs `latest`, `stable`, and
+`v1.0.0` builds are complete. Final release CI passed across Python 3.10-3.14,
+the supported beets boundaries, documentation, and package validation.
 
-Remaining work is to merge this documentation-only release-state update, wait
-for its resulting `main` CI to pass, create `v1.0.0`, verify the release workflow
-and first PyPI publication, create or verify the GitHub Release and versioned
-Read the Docs build, and complete post-release checks. PyPI project ownership
-will be established by the first publication. No development scope is reopened.
+The public-package clean-install discovery check and public `beet nm --help`
+check remain explicit in `RELEASE_CHECKLIST.md` until run. They do not make the
+published release incomplete.
+
+## Next Planned Work
+
+Plan the first post-v1 update around AcoustID/Chromaprint identity evidence.
+Begin with a parity audit against Noqlen Forge Core and the existing beets
+integration surface, then define safety boundaries, configuration, target
+mapping, dependency strategy, tests, and documentation before implementation.
+No AcoustID product scope is frozen yet.
 
 ## Stop Condition
 
-There is no next development block. Do not create Block 029, tag, publish, or
-run the release workflow during this pre-tag state update.
+This branch records the completed release state only. Do not add AcoustID code,
+bump the package version, alter release workflows, or create a new tag here.

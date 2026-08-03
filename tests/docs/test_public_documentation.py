@@ -47,6 +47,7 @@ def test_command_help_explains_modes_and_write_boundaries() -> None:
 
 def test_public_release_state_is_consistent() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     home = (ROOT / "site-docs/index.md").read_text(encoding="utf-8")
     release = (ROOT / "site-docs/project/release.md").read_text(encoding="utf-8")
     checklist = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
@@ -60,13 +61,27 @@ def test_public_release_state_is_consistent() -> None:
     assert "canonical license text" in home
     assert "GitHub repository is public" in home
     assert "MIT License" in release
-    assert "public access has been confirmed" in release
     assert "[Read the Docs](https://noqlen-meta-plugin.readthedocs.io/)" in readme
     assert "canonical public documentation is live" in release_words
-    assert "package has not been published to PyPI" in release_words
-    assert "versioned Read the Docs `v1.0.0` build does not exist" in release_words
+    assert "https://pypi.org/project/beets-noqlenmeta/" in readme
+    assert "https://pypi.org/project/beets-noqlenmeta/" in home
+    assert (
+        "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v1.0.0"
+        in release
+    )
+    assert "https://noqlen-meta-plugin.readthedocs.io/en/v1.0.0/" in release
+    assert "Version `1.0.0` was published on PyPI" in readme
+    assert "## Unreleased" in changelog
+    assert changelog.index("## Unreleased") < changelog.index("## 1.0.0")
     assert "[x] MIT License selected and added" in checklist
     assert "[x] Repository visibility changed to public" in checklist
+    assert "[x] PyPI project ownership established" in checklist
+    assert "[x] `v1.0.0` tag created" in checklist
+    assert "[x] Tag workflow built, checked, and published" in checklist
+    assert "[x] GitHub Release `v1.0.0` was created" in checklist
+    assert "[x] Read the Docs `stable`, `latest`, and `v1.0.0`" in checklist
+    assert "[ ] Public wheel installs in a clean environment" in checklist
+    assert "[ ] `beet nm --help` works after the public clean install." in checklist
     assert "[ ] Repository visibility changed to public" not in checklist
     stale_phrases = (
         "public visibility remains unconfirmed",
@@ -77,8 +92,9 @@ def test_public_release_state_is_consistent() -> None:
         "read the docs is not considered live",
         "owner still needs to import",
         "public build remains pending",
+        "ready for the release tag",
+        "package has not been published to pypi",
+        "first successful oidc publication will create",
+        "versioned read the docs `v1.0.0` build does not exist",
     )
     assert not any(phrase in combined for phrase in stale_phrases)
-    assert "package is published on pypi" not in combined
-    assert "package has been published to pypi" not in combined
-    assert "readthedocs.io/en/v1.0.0" not in combined

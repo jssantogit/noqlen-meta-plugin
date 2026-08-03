@@ -16,12 +16,18 @@ from beetsplug.noqlenmeta.configuration import default_config
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "site-docs"
 README = ROOT / "README.md"
+CHANGELOG = ROOT / "CHANGELOG.md"
 RELEASE_CHECKLIST = ROOT / "RELEASE_CHECKLIST.md"
 COMMAND_REFERENCE = DOCS / "reference" / "commands.md"
 CONFIG_REFERENCE = DOCS / "reference" / "configuration.md"
 FULL_CONFIG = DOCS / "examples" / "full-config.yaml"
 RELEASE_PAGE = DOCS / "project" / "release.md"
 READTHEDOCS_URL = "https://noqlen-meta-plugin.readthedocs.io/"
+VERSIONED_DOCS_URL = "https://noqlen-meta-plugin.readthedocs.io/en/v1.0.0/"
+PYPI_URL = "https://pypi.org/project/beets-noqlenmeta/"
+GITHUB_RELEASE_URL = (
+    "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v1.0.0"
+)
 
 FORBIDDEN_README_TERMS = (
     "Block 0",
@@ -54,6 +60,14 @@ STALE_EXTERNAL_GATE_PHRASES = (
     "read the docs is not considered live",
     "owner still needs to import",
     "public build remains pending",
+)
+STALE_RELEASE_STATE_PHRASES = (
+    "ready for the release tag",
+    "package has not been published to pypi",
+    "first successful oidc publication will create",
+    "versioned read the docs `v1.0.0` build does not exist",
+    "will not exist until the release tag is created",
+    "creation of the `v1.0.0` tag",
 )
 
 
@@ -116,6 +130,7 @@ def check() -> list[str]:
     command_text = COMMAND_REFERENCE.read_text(encoding="utf-8")
     config_text = CONFIG_REFERENCE.read_text(encoding="utf-8")
     readme_text = README.read_text(encoding="utf-8")
+    changelog_text = CHANGELOG.read_text(encoding="utf-8")
     checklist_text = RELEASE_CHECKLIST.read_text(encoding="utf-8")
     release_text = RELEASE_PAGE.read_text(encoding="utf-8")
     public_pages = _public_markdown()
@@ -188,35 +203,42 @@ def check() -> list[str]:
     for phrase in STALE_EXTERNAL_GATE_PHRASES:
         if phrase in public_release_text:
             failures.append(f"public release text retains stale external gate phrase: {phrase}")
+    for phrase in STALE_RELEASE_STATE_PHRASES:
+        if phrase in public_release_text:
+            failures.append(f"public release text retains stale release phrase: {phrase}")
 
     required_checklist_items = (
-        "[x] Read the Docs project imported, public URL confirmed, and public "
-        "`latest` build passed.",
-        "[x] PyPI Pending Trusted Publisher configured",
+        "[x] Read the Docs project imported and public `latest`, `stable`, and "
+        "`v1.0.0` builds passed.",
+        "[x] PyPI project ownership established by the first successful publication.",
+        "[x] PyPI Trusted Publisher configured",
         "[x] GitHub environment `pypi` configured with the `v*` deployment tag rule.",
         "[x] Repository security/private vulnerability reporting route confirmed.",
-        "[ ] PyPI project ownership established by first publication.",
-        "[ ] `v1.0.0` tag created",
-        "[ ] Tag workflow builds, checks, and publishes",
+        "[x] `v1.0.0` tag created",
+        "[x] Tag workflow built, checked, and published",
+        "[x] No API token or long-lived publishing credential was used.",
+        "[x] Published wheel and sdist hashes match the workflow artifacts",
+        "[x] GitHub Release `v1.0.0` was created from the existing tag.",
+        "[x] Read the Docs `stable`, `latest`, and `v1.0.0` versions are active and green.",
+        "[ ] Public wheel installs in a clean environment and beets discovers `noqlenmeta`.",
+        "[ ] `beet nm --help` works after the public clean install.",
     )
     for item in required_checklist_items:
         if item not in checklist_text:
             failures.append(f"release checklist omits required state: {item}")
 
-    if "package has not been published to PyPI" not in public_text:
-        failures.append("public docs do not state that PyPI publication remains pending")
-    unsupported_publication_claims = (
-        "package is published on pypi",
-        "package has been published to pypi",
-        "package is available on pypi",
-    )
-    for phrase in unsupported_publication_claims:
-        if phrase in public_release_text:
-            failures.append(f"public release text claims PyPI publication: {phrase}")
-    if "readthedocs.io/en/v1.0.0" in public_release_text:
-        failures.append("public text links to an unbuilt Read the Docs v1.0.0 version")
-    if "versioned Read the Docs `v1.0.0` build exists" in public_release_text:
-        failures.append("public text claims an unbuilt Read the Docs v1.0.0 version")
+    if PYPI_URL not in readme_text or PYPI_URL not in public_text:
+        failures.append("public release text does not link to the published PyPI project")
+    if GITHUB_RELEASE_URL not in public_text:
+        failures.append("public release text does not link to the v1.0.0 GitHub Release")
+    if VERSIONED_DOCS_URL not in public_text:
+        failures.append("public release text does not link to versioned v1.0.0 documentation")
+    if "was published on pypi" not in readme_text.casefold():
+        failures.append("README does not record the v1.0.0 PyPI publication")
+    if "## Unreleased" not in changelog_text:
+        failures.append("CHANGELOG.md does not contain an Unreleased section")
+    if changelog_text.index("## Unreleased") > changelog_text.index("## 1.0.0"):
+        failures.append("CHANGELOG.md Unreleased section must precede v1.0.0")
 
     required_distinctions = (
         "`--apply`",
