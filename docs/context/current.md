@@ -10,30 +10,37 @@ Noqlen Meta - multi-provider metadata enrichment and MusicBrainz identity tools 
 
 ## Context Level
 
-`full` for Block 029 AcoustID/Chromaprint identity-evidence planning.
+`full` for the accepted Block 029 AcoustID/Chromaprint contract freeze.
 
 ## Tool Mode
 
-Direct repository planning and architecture review. This branch may change only
-internal specs, ADRs, and context. It does not change product behavior, package
-metadata, dependencies, public documentation, workflows, tags, or publication.
+Documentation-only repository administration from the project chat. Work here
+is limited to specs, ADRs, context, handoff, and documentation-only PRs. Product
+code, tests, dependencies, package metadata, workflows, versions, tags, and
+releases are outside this chat boundary.
 
 ## Active Block
 
 Block 029 - AcoustID recording-level identity evidence.
 
-Block 029 is in planning/spec review. No implementation stage is active.
+The planning PR was approved, passed CI, and was squash-merged to `main` as
+commit `6ad71d68347e23cecd45225900a10a8287acca54`.
+
+No implementation stage is active in this chat.
 
 ## Active Spec
 
 - `docs/specs/029-acoustid-identity-evidence/requirements.md`
 - `docs/specs/029-acoustid-identity-evidence/design.md`
 - `docs/specs/029-acoustid-identity-evidence/parity-matrix.md`
+- `docs/specs/029-acoustid-identity-evidence/contracts.md`
 - `docs/specs/029-acoustid-identity-evidence/tasks.md`
+
+`contracts.md` is normative when earlier provisional planning wording differs.
 
 ## Active ADRs
 
-- Proposed: `docs/adr/0025-acoustid-recording-evidence.md`
+- Accepted: `docs/adr/0025-acoustid-recording-evidence.md`
 - Existing identity foundation:
   - `docs/adr/0020-musicbrainz-identity-audit-engine.md`
   - `docs/adr/0021-importer-identity-preview-repair.md`
@@ -44,36 +51,50 @@ Block 029 is in planning/spec review. No implementation stage is active.
 
 Version 1.0.0 was released on 2026-08-02. The tag, PyPI Trusted Publishing,
 GitHub Release, matching artifact hashes, and Read the Docs `latest`, `stable`,
-and `v1.0.0` builds are complete. The Block 029 branch starts from post-release
-`main` commit `cb8e8afd40998a1240f93528a7e8584b77f167d1`.
+and `v1.0.0` builds remain complete.
 
-## Planning Decision
+Block 029 remains intended for the 1.1.0 release family, but no version bump has
+been made.
+
+## Frozen Decision
 
 AcoustID is a separate recording-level identity-evidence subsystem, not an
-ordinary metadata provider. It may identify or support a MusicBrainz recording
-MBID, but it cannot directly select or write release, release-group, or release-
-track MBIDs. Complete four-field identity continues to come only from complete
-MusicBrainz release candidates and the existing structural audit.
+ordinary metadata provider. The first scope is existing-library Albums and
+singletons.
 
-The first scope is existing-library Albums and singletons. It reuses existing
-beets AcoustID fields, calculates missing fingerprints only with explicit
-authority, uses a bounded HTTPS lookup boundary, previews evidence, and may
-store only AcoustID fields in the beets database. It writes no audio files,
-has no force mode, performs no submission, and does not duplicate native beets
-`chroma` importer matching.
+The frozen standalone interface is:
 
-Decisive recording evidence filters MusicBrainz candidates after their existing
-structural assignments are calculated. It adds no structural score and cannot
-rescue weak or ambiguous candidates.
+```text
+--acoustid
+--fingerprint-missing
+```
 
-## Next Gate
+It composes with existing `--apply` and `--all`. Application is database-only
+and may target only `acoustid_id` and `acoustid_fingerprint`.
 
-Review the planning diff and ADR 0025. After reviewer approval, mark the ADR
-Accepted, freeze public option/configuration names, and begin the first focused
-implementation stage for immutable domain and configuration contracts.
+The exact configuration subtree, validation bounds, environment variable,
+domain vocabulary, evidence algorithm, preview states, and beets `chroma`
+coexistence rules are frozen in `contracts.md`.
+
+The service lookup uses bounded HTTPS POST and requests `meta=recordingids`.
+AcoustID evidence uses provider score, competing recording support, and
+canonical recording IDs only. Title, artist, duration, position, complete
+assignment, structural score, and release margin remain exclusively within the
+existing MusicBrainz audit.
+
+Decisive evidence can reject incompatible complete MusicBrainz release
+candidates after structural assignment. It adds no score and cannot write a
+MusicBrainz ID directly.
+
+## Next External Implementation Stage
+
+Outside this chat, implementation may begin with immutable domain, evidence
+policy, and configuration contracts only. The first implementation stage must
+not include network transport, subprocess execution, database mutation,
+MusicBrainz integration, packaging changes, or public release work.
 
 ## Stop Condition
 
-Do not add AcoustID production code, dependency metadata, public commands,
-version changes, tags, or publication behavior on this planning branch. Do not
-begin implementation until the Block 029 planning PR is reviewed and merged.
+This documentation branch stops after ADR acceptance, interface freeze, context
+synchronization, green CI, and merge. Do not add product code or implementation
+tests from this chat.
