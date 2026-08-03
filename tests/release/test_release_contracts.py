@@ -245,7 +245,8 @@ def test_release_checklist_records_completed_v1_release() -> None:
     checklist = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
 
     completed = (
-        "[x] Read the Docs project imported and public `latest`, `stable`, and `v1.0.0` builds passed.",
+        "[x] Read the Docs project imported and public `latest`, `stable`, and "
+        "`v1.0.0` builds passed.",
         "[x] PyPI project ownership established by the first successful publication.",
         "[x] PyPI Trusted Publisher configured",
         "[x] GitHub environment `pypi` configured with the `v*` deployment tag rule.",
