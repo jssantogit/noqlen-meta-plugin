@@ -1,7 +1,8 @@
 # ADR 0025: Add AcoustID as recording-level identity evidence
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-03
+- Accepted after: Block 029 planning PR #2 and green CI
 
 ## Context
 
@@ -57,8 +58,11 @@ with that surface rather than create a competing autotagger.
     decisive.
 17. Decisive evidence requires a validated minimum score, minimum margin, and
     exactly one defensible canonical recording MBID.
-18. Local duration, artist, and title are corroborating or veto evidence only;
-    they cannot create a recording identity.
+18. The initial AcoustID classifier uses only provider score, competing
+    recording support, and canonical recording IDs. Local title, artist,
+    duration, position, and release structure remain exclusively within the
+    existing MusicBrainz structural audit and cannot create or adjust acoustic
+    evidence.
 19. AcoustID does not write any MusicBrainz field directly.
 20. A complete four-field identity continues to originate only from a complete
     MusicBrainz release candidate.
@@ -87,8 +91,11 @@ with that surface rather than create a competing autotagger.
 33. The base package remains free of unnecessary AcoustID dependencies. Any
     optional Python extra is selected only after a supported-Python backend
     compatibility spike.
-34. Block 029 planning does not bump the package version, modify production
-    behavior, create a tag, or publish a release.
+34. The exact Block 029 command, configuration, domain, lookup, evidence,
+    mapping, preview, and coexistence contracts are frozen in
+    `docs/specs/029-acoustid-identity-evidence/contracts.md`.
+35. Accepting this ADR does not itself change product behavior, dependencies,
+    package metadata, workflows, version, tag, or publication state.
 
 ## Consequences
 
@@ -109,5 +116,6 @@ force paths, submission, automatic whole-library fingerprinting, and duplicate
 import-time matching. This requires more explicit domain and stale-state code,
 but keeps the new capability compatible with the v1 safety contracts.
 
-The ADR remains Proposed until the Block 029 planning branch receives reviewer
-approval. Implementation must not begin by weakening any decision above.
+The ADR is accepted. Implementation must follow the frozen contracts and may
+not weaken them without a reviewed amendment. Work performed from the project
+chat remains documentation-only.
