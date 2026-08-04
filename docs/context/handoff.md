@@ -2,34 +2,33 @@
 
 ## State
 
-Noqlen Meta 1.0.0 is released. Block 029 planning was approved, passed CI, and
-was squash-merged to `main` as commit
-`6ad71d68347e23cecd45225900a10a8287acca54`.
+Noqlen Meta 1.0.0 is released. Block 029 planning and contract freeze were
+approved, passed CI, and were squash-merged to `main` as:
 
-The current branch, `docs/029-acoustid-contract-freeze`, is documentation-only.
-It accepts ADR 0025 and freezes the implementation contracts. No production
-code, test, dependency, package metadata, workflow, version, tag, or release
-change belongs here.
+```text
+6ad71d68347e23cecd45225900a10a8287acca54
+9945ed9cd693abc04b250d10239151b3281a7762
+```
+
+ADR 0025 is Accepted. The command, configuration, credential, lookup, domain,
+evidence, mapping, preview, privacy, and beets `chroma` coexistence contracts are
+frozen in `contracts.md`.
+
+The current documentation branch prepares the first external implementation
+brief. It contains no product code, implementation tests, dependency, package
+metadata, workflow, version, tag, or release change.
 
 ## Documentation-Only Chat Rule
 
 Repository changes performed from the project chat are limited to:
 
-- specifications;
+- specifications and stage briefs;
 - ADRs;
 - context and handoff documents;
 - documentation-only PR administration.
 
-Implementation must happen outside this chat after the corresponding contract
-has been approved.
-
-## Block 029 Goal
-
-Add conservative AcoustID/Chromaprint recording evidence for existing-library
-Albums and singletons. The subsystem will reuse or explicitly calculate
-fingerprints, perform bounded AcoustID lookup, preview and optionally store
-AcoustID fields in the beets database, and let decisive recording evidence
-filter incompatible complete MusicBrainz release candidates.
+Implementation happens outside this chat after the corresponding brief is
+approved.
 
 ## Normative Artifacts
 
@@ -39,43 +38,40 @@ filter incompatible complete MusicBrainz release candidates.
   `docs/specs/029-acoustid-identity-evidence/design.md`
 - Forge-to-Meta parity matrix:
   `docs/specs/029-acoustid-identity-evidence/parity-matrix.md`
-- Frozen implementation contracts:
+- Frozen contracts:
   `docs/specs/029-acoustid-identity-evidence/contracts.md`
 - Task sequence:
   `docs/specs/029-acoustid-identity-evidence/tasks.md`
+- Stage 01 implementation brief:
+  `docs/specs/029-acoustid-identity-evidence/stage-01-domain-policy-configuration.md`
 - Accepted architecture decision:
   `docs/adr/0025-acoustid-recording-evidence.md`
 
-`contracts.md` is normative when provisional text in the earlier planning docs
-differs.
+`contracts.md` wins over provisional planning text. The Stage 01 brief narrows
+only the first external implementation branch and cannot weaken the frozen
+contracts.
 
 ## Accepted Architecture
 
-AcoustID is a separate identity-evidence subsystem. It is not added to the
-ordinary provider registry and does not emit ordinary `MetadataCandidate`
-values.
+AcoustID is a separate recording-level identity-evidence subsystem. It is not
+an ordinary provider and cannot emit ordinary `MetadataCandidate` values.
 
-The first implementation scope is:
+The first complete product scope remains:
 
 - existing-library Albums and singletons;
 - reuse of valid beets AcoustID fields;
 - explicit missing-fingerprint calculation;
-- bounded AcoustID lookup;
+- bounded HTTPS POST lookup with `meta=recordingids`;
 - path-free and fingerprint-free preview;
 - database-only storage of `acoustid_id` and `acoustid_fingerprint`;
 - optional recording compatibility filtering for the existing MusicBrainz
   identity audit.
 
-Explicit exclusions remain:
+AcoustID adds no structural score, writes no MusicBrainz field, chooses no
+release occurrence, writes no audio file, submits no fingerprint, and provides
+no duplicate importer autotagger.
 
-- importer autotagger duplication;
-- fingerprint submission;
-- direct audio-file writes;
-- direct MusicBrainz writes from AcoustID;
-- release, release-group, medium, or release-track inference from provider data;
-- force or partial identity behavior.
-
-## Frozen Command Contract
+## Frozen Interface Summary
 
 New intended options:
 
@@ -84,25 +80,9 @@ New intended options:
 --fingerprint-missing
 ```
 
-They compose only with existing `--apply` and `--all` as defined in
-`contracts.md`.
+They compose with existing `--apply` and `--all` as defined in `contracts.md`.
 
-`--acoustid` is incompatible with:
-
-```text
---identity
---identity-tags
---write
---partial
-```
-
-`--fingerprint-missing` is invalid without `--acoustid`.
-
-No new force option exists.
-
-## Frozen Configuration Contract
-
-The intended subtree is:
+The intended settings subtree remains:
 
 ```yaml
 acoustid:
@@ -127,93 +107,81 @@ The exact environment variable is:
 NOQLENMETA_ACOUSTID_API_KEY
 ```
 
-Block 029 identity mode may reuse stored fingerprints but never calculates a
-missing fingerprint. Calculation authority exists only in standalone AcoustID
-mode through configuration or `--fingerprint-missing`.
+## Stage 01 External Implementation
 
-## Frozen Service And Evidence Contract
+The approved first implementation stage is defined in
+`stage-01-domain-policy-configuration.md`.
 
-Lookup uses form-encoded HTTPS POST to the AcoustID v2 lookup endpoint with:
+### Required scope
 
-```text
-meta=recordingids
-format=json
-```
+- immutable fingerprint-origin and evidence-verdict enums;
+- stable reason vocabulary;
+- immutable, redacted fingerprint material;
+- canonical AcoustID result groups containing recording MBIDs only;
+- validated pure evidence policy;
+- immutable track evidence and verdict invariants;
+- pure support, score, tie, and margin classification;
+- internal fresh settings/default factory matching the frozen subtree;
+- strict settings validation;
+- deterministic offline tests.
 
-The classifier retains only AcoustID UUIDs, scores, and canonical MusicBrainz
-recording MBIDs.
+### Explicit exclusions
 
-Recording support is the highest eligible group score for that recording.
-Duplicate groups do not accumulate support. Decisive evidence requires:
-
-- at least one result at or above `min_score`;
-- one unique top recording MBID;
-- no equal top competitor;
-- `min_margin` over a different runner-up recording when one exists.
-
-Title, artist, duration, position, track assignment, structural score, and
-release margin are not duplicated in the AcoustID classifier. They remain in
-the existing MusicBrainz audit.
-
-## MusicBrainz Integration Boundary
-
-Complete MusicBrainz release candidates are acquired, assigned, and scored
-unchanged. Decisive AcoustID evidence is then used only as a compatibility
-filter against the recording MBID already assigned to each local track.
-
-AcoustID:
-
-- adds no score;
-- changes no score component;
-- cannot rescue a weak candidate;
-- cannot create four-field findings;
-- cannot write a MusicBrainz field.
-
-When decisive evidence rejects every candidate, the audit remains ambiguous
-with reason:
-
-```text
-acoustid_recording_conflict
-```
-
-Unavailable, no-match, and ambiguous acoustic evidence is neutral.
-
-## Application Boundary
-
-Standalone application may map only:
-
-```text
-acoustid_id
-acoustid_fingerprint
-```
-
-The complete command application is planned before the first write. Stale
-selection, membership, path, database state, current values, or generated
-source-file snapshots block the complete application unit before mutation.
-
-No audio file is written.
-
-## Next External Implementation Stage
-
-The first implementation stage, outside this chat, is limited to:
-
-1. immutable AcoustID domain values;
-2. evidence verdict and policy validation;
-3. frozen configuration defaults and validation;
-4. redacted representations and safe machine reasons;
-5. focused offline domain/configuration tests.
-
-Do not include in that first stage:
-
-- fingerprint subprocess execution;
-- network transport;
-- library database application;
+- network transport and environment-key reading;
+- subprocess or `fpcalc` execution;
+- filesystem and source-snapshot acquisition;
+- beets target selection or database mutation;
+- command parser and public default-tree integration;
 - MusicBrainz compatibility filtering;
-- package dependency changes;
-- public documentation changes;
-- version or release work.
+- ordinary-provider registration;
+- public documentation, package, dependency, version, workflow, tag, or release
+  changes.
+
+The public plugin default tree remains unchanged in Stage 01. The exact
+AcoustID defaults are first implemented as an internal fresh settings factory;
+public configuration integration occurs only when the command and public docs
+are delivered together.
+
+## Stage 01 Critical Algorithm
+
+For already normalized result groups:
+
+1. retain groups at or above `min_score` within policy bounds;
+2. define each recording's support as its highest eligible group score;
+3. never accumulate duplicate support;
+4. return `no_match` when no eligible recording remains;
+5. return `ambiguous` for a top-score tie between different recordings;
+6. return `ambiguous` when a runner-up is closer than `min_margin`;
+7. treat a difference exactly equal to `min_margin` as passing;
+8. otherwise select the unique top recording and the highest-scoring AcoustID
+   UUID supporting it;
+9. use canonical UUID ordering only to break a same-recording tie.
+
+Title, artist, duration, position, release structure, assignment, and
+MusicBrainz score do not enter this classifier.
+
+## External Review Gate
+
+The external Stage 01 branch must provide:
+
+- focused domain, evidence, and settings test results;
+- Ruff results for the new package and tests;
+- the complete offline test-suite result;
+- a diff confined to the Stage 01 allowlist;
+- proof that fingerprint values do not appear in representations or errors;
+- proof that no network, subprocess, filesystem, beets, command, or provider
+  integration entered the stage.
+
+Stage 01 completes only after reviewer PASS, green CI, and squash merge.
+
+## Next Documentation Work
+
+After Stage 01 is externally implemented and merged, prepare a separate
+documentation brief for Stage 02: existing beets values, fresh library targets,
+and the bounded fingerprint backend. Stage 02 must still exclude network lookup
+and database application until their own briefs are approved.
 
 ## Stop Condition
 
-This documentation branch stops after contract review, green CI, and squash
-merge. No product implementation is performed from this chat.
+This chat stops at documentation, review contracts, and PR administration. No
+product implementation is performed here.

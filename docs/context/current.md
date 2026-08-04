@@ -10,7 +10,8 @@ Noqlen Meta - multi-provider metadata enrichment and MusicBrainz identity tools 
 
 ## Context Level
 
-`full` for the accepted Block 029 AcoustID/Chromaprint contract freeze.
+`full` for the accepted Block 029 contracts and the external Stage 01
+implementation brief.
 
 ## Tool Mode
 
@@ -23,10 +24,15 @@ releases are outside this chat boundary.
 
 Block 029 - AcoustID recording-level identity evidence.
 
-The planning PR was approved, passed CI, and was squash-merged to `main` as
-commit `6ad71d68347e23cecd45225900a10a8287acca54`.
+The planning and contract-freeze PRs were approved, passed CI, and were
+squash-merged to `main` as:
 
-No implementation stage is active in this chat.
+```text
+6ad71d68347e23cecd45225900a10a8287acca54
+9945ed9cd693abc04b250d10239151b3281a7762
+```
+
+No product implementation is performed from this chat.
 
 ## Active Spec
 
@@ -35,8 +41,11 @@ No implementation stage is active in this chat.
 - `docs/specs/029-acoustid-identity-evidence/parity-matrix.md`
 - `docs/specs/029-acoustid-identity-evidence/contracts.md`
 - `docs/specs/029-acoustid-identity-evidence/tasks.md`
+- `docs/specs/029-acoustid-identity-evidence/stage-01-domain-policy-configuration.md`
 
 `contracts.md` is normative when earlier provisional planning wording differs.
+The Stage 01 brief is normative only for the scope and acceptance of the first
+external implementation branch.
 
 ## Active ADRs
 
@@ -59,8 +68,8 @@ been made.
 ## Frozen Decision
 
 AcoustID is a separate recording-level identity-evidence subsystem, not an
-ordinary metadata provider. The first scope is existing-library Albums and
-singletons.
+ordinary metadata provider. The first product scope is existing-library Albums
+and singletons.
 
 The frozen standalone interface is:
 
@@ -71,10 +80,6 @@ The frozen standalone interface is:
 
 It composes with existing `--apply` and `--all`. Application is database-only
 and may target only `acoustid_id` and `acoustid_fingerprint`.
-
-The exact configuration subtree, validation bounds, environment variable,
-domain vocabulary, evidence algorithm, preview states, and beets `chroma`
-coexistence rules are frozen in `contracts.md`.
 
 The service lookup uses bounded HTTPS POST and requests `meta=recordingids`.
 AcoustID evidence uses provider score, competing recording support, and
@@ -88,13 +93,22 @@ MusicBrainz ID directly.
 
 ## Next External Implementation Stage
 
-Outside this chat, implementation may begin with immutable domain, evidence
-policy, and configuration contracts only. The first implementation stage must
-not include network transport, subprocess execution, database mutation,
-MusicBrainz integration, packaging changes, or public release work.
+Stage 01 is defined in
+`stage-01-domain-policy-configuration.md`. It is limited to:
+
+1. immutable AcoustID domain values;
+2. pure score/margin/ambiguity classification;
+3. an internal frozen settings/default factory and validation;
+4. redacted fingerprint-bearing representations;
+5. stable machine reasons;
+6. deterministic offline tests.
+
+Stage 01 explicitly excludes network transport, subprocess execution,
+filesystem access, beets database work, command integration, MusicBrainz
+filtering, public configuration integration, package changes, and release work.
 
 ## Stop Condition
 
-This documentation branch stops after ADR acceptance, interface freeze, context
-synchronization, green CI, and merge. Do not add product code or implementation
-tests from this chat.
+This documentation branch stops after the Stage 01 brief, context synchronization,
+green CI, and squash merge. Do not add product code or implementation tests from
+this chat.

@@ -17,6 +17,8 @@
 - [x] Resolve initial lookup metadata to `recordingids` and keep title, artist,
   duration, position, and release scoring exclusively in the MusicBrainz audit.
 - [x] Record that repository work from this chat is documentation-only.
+- [x] Define the external Stage 01 domain, evidence-policy, configuration,
+  privacy, test, allowlist, and reviewer brief.
 
 ## Domain And Policy
 
@@ -27,13 +29,16 @@
 - [ ] Ensure fingerprint-bearing values have redacted representations.
 - [ ] Add decisive, ambiguous, no-match, and unavailable classification tests.
 - [ ] Add boundary tests for score, margin, competing recordings, malformed
-  groups, and duration mismatch.
+  groups, deterministic ordering, and verdict invariants.
 
 ## Configuration And Command Contract
 
-- [ ] Add fresh safe AcoustID defaults with the subsystem disabled.
+- [ ] Add an internal fresh AcoustID settings/default factory with the subsystem
+  disabled and the exact frozen values.
 - [ ] Validate boolean, integer, finite-number, path, threshold, and count
   settings before backend or network work.
+- [ ] Integrate the frozen AcoustID subtree into the public plugin default tree
+  only when command and public documentation integration are delivered together.
 - [ ] Resolve `NOQLENMETA_ACOUSTID_API_KEY` without logging or persistence.
 - [ ] Add the dedicated AcoustID command mode and explicit missing-fingerprint
   authority.
