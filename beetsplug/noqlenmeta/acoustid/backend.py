@@ -391,7 +391,7 @@ def _terminate_and_reap(process: subprocess.Popen[bytes]) -> None:
             process.wait(timeout=_TERMINATION_GRACE_SECONDS)
         except subprocess.TimeoutExpired:
             process.kill()
-            process.wait()
+            process.wait(timeout=_TERMINATION_GRACE_SECONDS)
     except (OSError, subprocess.SubprocessError):
         raise _ProcessFailure from None
 

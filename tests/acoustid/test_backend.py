@@ -612,6 +612,59 @@ def test_runner_kills_and_reaps_after_termination_grace() -> None:
     assert_no_reader_threads()
 
 
+def test_runner_fails_boundedly_when_reap_after_kill_times_out(monkeypatch) -> None:
+    raw_message = "private-command-after-kill"
+    events = []
+
+    class Process:
+        stdout = pipe_stream()
+        stderr = pipe_stream()
+        returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            events.append("terminate")
+
+        def kill(self):
+            events.append("kill")
+            self.returncode = -9
+
+        def wait(self, timeout=None):
+            events.append(("wait", timeout))
+            raise subprocess.TimeoutExpired(raw_message, timeout)
+
+    process = Process()
+    monkeypatch.setattr(
+        "beetsplug.noqlenmeta.acoustid.backend.os.read",
+        lambda descriptor, size: (_ for _ in ()).throw(ValueError("private read failure")),
+    )
+    started = time.monotonic()
+
+    with pytest.raises(_ProcessFailure) as captured:
+        run_bounded_process(
+            ("private-executable", PRIVATE_PATH),
+            1,
+            popen_factory=lambda *args, **kwargs: process,
+        )
+
+    elapsed = time.monotonic() - started
+    assert elapsed < 1.0
+    assert events[0] == "terminate"
+    assert events[1][0] == "wait"
+    assert events[1][1] is not None
+    assert events[2] == "kill"
+    assert events[3] == events[1]
+    assert str(captured.value) == "fingerprint process failed"
+    assert captured.value.__cause__ is None
+    assert raw_message not in str(captured.value)
+    assert "private read failure" not in str(captured.value)
+    assert "private-executable" not in str(captured.value)
+    assert PRIVATE_PATH.decode() not in str(captured.value)
+    assert_no_reader_threads()
+
+
 def test_runner_fails_boundedly_when_descendant_keeps_pipes_open() -> None:
     script = (
         "import subprocess,sys;"
