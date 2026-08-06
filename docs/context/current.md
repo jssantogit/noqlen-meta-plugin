@@ -2,7 +2,8 @@
 
 ## Project
 
-Noqlen Meta - multi-provider metadata enrichment and MusicBrainz identity tools for beets.
+Noqlen Meta - multi-provider metadata enrichment and MusicBrainz identity tools
+for beets.
 
 ## Profile
 
@@ -10,105 +11,119 @@ Noqlen Meta - multi-provider metadata enrichment and MusicBrainz identity tools 
 
 ## Context Level
 
-`full` for the accepted Block 029 contracts and the external Stage 01
-implementation brief.
+`full` for Block 029 after completion of the AcoustID domain, evidence-policy,
+and internal-settings foundation.
 
 ## Tool Mode
 
-Documentation-only repository administration from the project chat. Work here
-is limited to specs, ADRs, context, handoff, and documentation-only PRs. Product
-code, tests, dependencies, package metadata, workflows, versions, tags, and
-releases are outside this chat boundary.
+Repository work from the project chat is documentation-only. Allowed changes are
+limited to specs, stage briefs, ADRs, context, handoff, completion records, and
+documentation-only PR administration.
+
+Product code, implementation tests, dependencies, package metadata, workflows,
+versions, tags, and releases are implemented outside this chat after their
+documentation stage is approved.
 
 ## Active Block
 
 Block 029 - AcoustID recording-level identity evidence.
 
-The planning and contract-freeze PRs were approved, passed CI, and were
-squash-merged to `main` as:
+Planning, contract freeze, Stage 01 brief, and Stage 01 implementation are now
+integrated into `main`.
+
+Important commits:
 
 ```text
-6ad71d68347e23cecd45225900a10a8287acca54
-9945ed9cd693abc04b250d10239151b3281a7762
+6ad71d68347e23cecd45225900a10a8287acca54  planning
+9945ed9cd693abc04b250d10239151b3281a7762  contract freeze
+262aa688ac552b7ebb19156ed3c9a58a0f24ed06  Stage 01 brief
+26506a79f23a899a810640b1a2bfa8d80a5c4c20  Stage 01 implementation
 ```
 
-No product implementation is performed from this chat.
+PR #5 passed CI run 45 and was squash-merged on 2026-08-06.
 
-## Active Spec
+## Normative Artifacts
 
+- `docs/specs/029-acoustid-identity-evidence/contracts.md`
+- `docs/adr/0025-acoustid-recording-evidence.md`
 - `docs/specs/029-acoustid-identity-evidence/requirements.md`
 - `docs/specs/029-acoustid-identity-evidence/design.md`
 - `docs/specs/029-acoustid-identity-evidence/parity-matrix.md`
-- `docs/specs/029-acoustid-identity-evidence/contracts.md`
 - `docs/specs/029-acoustid-identity-evidence/tasks.md`
 - `docs/specs/029-acoustid-identity-evidence/stage-01-domain-policy-configuration.md`
+- `docs/specs/029-acoustid-identity-evidence/stage-01-completion.md`
 
-`contracts.md` is normative when earlier provisional planning wording differs.
-The Stage 01 brief is normative only for the scope and acceptance of the first
-external implementation branch.
-
-## Active ADRs
-
-- Accepted: `docs/adr/0025-acoustid-recording-evidence.md`
-- Existing identity foundation:
-  - `docs/adr/0020-musicbrainz-identity-audit-engine.md`
-  - `docs/adr/0021-importer-identity-preview-repair.md`
-  - `docs/adr/0022-library-identity-audit-repair.md`
-  - `docs/adr/0023-identity-tag-synchronization.md`
+`contracts.md` remains normative when earlier planning wording differs. The
+Stage 01 brief and completion record define and report only the first external
+implementation stage.
 
 ## Released Baseline
 
-Version 1.0.0 was released on 2026-08-02. The tag, PyPI Trusted Publishing,
-GitHub Release, matching artifact hashes, and Read the Docs `latest`, `stable`,
-and `v1.0.0` builds remain complete.
+Version 1.0.0 was released on 2026-08-02. The public tag, PyPI publication,
+GitHub Release, matching artifact hashes, and Read the Docs builds remain
+complete.
 
-Block 029 remains intended for the 1.1.0 release family, but no version bump has
+Block 029 remains intended for the 1.1.0 release family. No version bump has
 been made.
 
-## Frozen Decision
+## Frozen Product Decision
 
 AcoustID is a separate recording-level identity-evidence subsystem, not an
-ordinary metadata provider. The first product scope is existing-library Albums
-and singletons.
+ordinary metadata provider.
 
-The frozen standalone interface is:
+The complete intended product scope remains existing-library Albums and
+singletons with:
+
+- reuse of valid stored fingerprints;
+- explicitly authorized missing-fingerprint calculation;
+- bounded HTTPS POST lookup requesting `meta=recordingids`;
+- path-free and fingerprint-free preview;
+- database-only storage of `acoustid_id` and `acoustid_fingerprint`;
+- optional compatibility filtering for complete MusicBrainz release candidates.
+
+AcoustID adds no structural score, writes no MusicBrainz field directly, chooses
+no release occurrence, writes no audio file, submits no fingerprint, and does
+not duplicate the native beets importer autotagger.
+
+The frozen intended command options remain:
 
 ```text
 --acoustid
 --fingerprint-missing
 ```
 
-It composes with existing `--apply` and `--all`. Application is database-only
-and may target only `acoustid_id` and `acoustid_fingerprint`.
+## Completed Stage 01 Foundation
 
-The service lookup uses bounded HTTPS POST and requests `meta=recordingids`.
-AcoustID evidence uses provider score, competing recording support, and
-canonical recording IDs only. Title, artist, duration, position, complete
-assignment, structural score, and release margin remain exclusively within the
-existing MusicBrainz audit.
+The merged implementation now provides:
 
-Decisive evidence can reject incompatible complete MusicBrainz release
-candidates after structural assignment. It adds no score and cannot write a
-MusicBrainz ID directly.
+- immutable AcoustID domain values and stable reason vocabulary;
+- canonical AcoustID UUID and recording-MBID validation;
+- redacted fingerprint material;
+- deterministic bounded result normalization;
+- pure highest-support, tie, score, and margin classification;
+- internal immutable settings and exact frozen defaults;
+- strict offline validation and synthetic tests.
 
-## Next External Implementation Stage
+The implementation performs no network, subprocess, filesystem, beets database,
+command, provider, or MusicBrainz integration.
 
-Stage 01 is defined in
-`stage-01-domain-policy-configuration.md`. It is limited to:
+## Next Documentation Stage
 
-1. immutable AcoustID domain values;
-2. pure score/margin/ambiguity classification;
-3. an internal frozen settings/default factory and validation;
-4. redacted fingerprint-bearing representations;
-5. stable machine reasons;
-6. deterministic offline tests.
+No new implementation stage is active.
 
-Stage 01 explicitly excludes network transport, subprocess execution,
-filesystem access, beets database work, command integration, MusicBrainz
-filtering, public configuration integration, package changes, and release work.
+The next repository work from this chat is a Stage 02 documentation brief for:
+
+1. existing beets AcoustID values;
+2. fresh Album and singleton target selection;
+3. stable local keys and deterministic Item order;
+4. bounded fingerprint-backend execution;
+5. source-file snapshot acquisition and stale verification.
+
+Stage 02 must still exclude HTTPS lookup, API-key resolution, database
+application, command integration, MusicBrainz filtering, package changes, and
+release work unless a reviewed brief explicitly changes that boundary.
 
 ## Stop Condition
 
-This documentation branch stops after the Stage 01 brief, context synchronization,
-green CI, and squash merge. Do not add product code or implementation tests from
-this chat.
+Do not begin Stage 02 product implementation until its documentation brief has
+passed review, CI, and squash merge.
