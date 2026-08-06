@@ -7,6 +7,8 @@ from dataclasses import InitVar, dataclass, field
 from enum import Enum
 from uuid import UUID
 
+from beets.library import Item
+
 _UUID_PATTERN = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
     r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
@@ -19,6 +21,17 @@ _MAX_RECORDINGS_PER_RESULT = 50
 class AcoustIDFingerprintOrigin(str, Enum):
     EXISTING = "existing"
     GENERATED = "generated"
+
+
+class AcoustIDLibraryTargetKind(str, Enum):
+    ALBUM = "album"
+    SINGLETON = "singleton"
+
+
+class AcoustIDStoredValueState(str, Enum):
+    MISSING = "missing"
+    VALID = "valid"
+    MALFORMED = "malformed"
 
 
 class AcoustIDEvidenceVerdict(str, Enum):
@@ -84,6 +97,190 @@ def _local_key(value: object) -> str:
     return normalized
 
 
+def _fingerprint_text(value: object, *, reject_surrounding_whitespace: bool = False) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("fingerprint must be a non-empty string")
+    if reject_surrounding_whitespace and value != value.strip():
+        raise ValueError("fingerprint must not contain surrounding whitespace")
+    if len(value) > _MAX_FINGERPRINT_LENGTH:
+        raise ValueError("fingerprint exceeds the defensive length limit")
+    return value
+
+
+def _positive_database_id(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"selected AcoustID {label} ID is invalid")
+    return value
+
+
+def _optional_album_id(value: object) -> int | None:
+    if value in (None, 0):
+        return None
+    return _positive_database_id(value, "Album")
+
+
+def _positive_duration(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    duration = float(value)
+    return duration if math.isfinite(duration) and duration > 0 else None
+
+
+@dataclass(frozen=True, slots=True)
+class AcoustIDExistingValues:
+    acoustid_id_state: AcoustIDStoredValueState
+    acoustid_id: str | None
+    fingerprint_state: AcoustIDStoredValueState
+    fingerprint: InitVar[str | None]
+    duration_seconds: float | None
+    _fingerprint: str | None = field(init=False, repr=False)
+
+    def __post_init__(self, fingerprint: str | None) -> None:
+        if not isinstance(self.acoustid_id_state, AcoustIDStoredValueState):
+            raise ValueError("stored AcoustID ID state is invalid")
+        if self.acoustid_id_state is AcoustIDStoredValueState.VALID:
+            object.__setattr__(self, "acoustid_id", canonical_acoustid_uuid(self.acoustid_id))
+        elif self.acoustid_id is not None:
+            raise ValueError("non-valid stored AcoustID ID prohibits a value")
+        if not isinstance(self.fingerprint_state, AcoustIDStoredValueState):
+            raise ValueError("stored fingerprint state is invalid")
+        if self.fingerprint_state is AcoustIDStoredValueState.VALID:
+            validated = _fingerprint_text(fingerprint, reject_surrounding_whitespace=True)
+        elif fingerprint is not None:
+            raise ValueError("non-valid stored fingerprint prohibits material")
+        else:
+            validated = None
+        object.__setattr__(self, "_fingerprint", validated)
+        duration = _positive_duration(self.duration_seconds)
+        if self.duration_seconds is not None and duration is None:
+            raise ValueError("existing duration must be finite and positive or None")
+        object.__setattr__(self, "duration_seconds", duration)
+
+    @classmethod
+    def from_stored(
+        cls, acoustid_id: object, fingerprint: object, duration_seconds: object
+    ) -> AcoustIDExistingValues:
+        id_state, canonical_id = _stored_acoustid_id(acoustid_id)
+        fingerprint_state, valid_fingerprint = _stored_fingerprint(fingerprint)
+        return cls(
+            id_state,
+            canonical_id,
+            fingerprint_state,
+            valid_fingerprint,
+            _positive_duration(duration_seconds),
+        )
+
+    @property
+    def is_fingerprint_reusable(self) -> bool:
+        return self._fingerprint is not None and self.duration_seconds is not None
+
+    def _reusable_fingerprint(self) -> str | None:
+        return self._fingerprint if self.is_fingerprint_reusable else None
+
+
+def _stored_acoustid_id(value: object) -> tuple[AcoustIDStoredValueState, str | None]:
+    if value is None or isinstance(value, str) and not value.strip():
+        return AcoustIDStoredValueState.MISSING, None
+    try:
+        return AcoustIDStoredValueState.VALID, canonical_acoustid_uuid(value)
+    except ValueError:
+        return AcoustIDStoredValueState.MALFORMED, None
+
+
+def _stored_fingerprint(value: object) -> tuple[AcoustIDStoredValueState, str | None]:
+    if value is None or isinstance(value, str) and not value.strip():
+        return AcoustIDStoredValueState.MISSING, None
+    try:
+        return (
+            AcoustIDStoredValueState.VALID,
+            _fingerprint_text(value, reject_surrounding_whitespace=True),
+        )
+    except ValueError:
+        return AcoustIDStoredValueState.MALFORMED, None
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedAcoustIDItem:
+    local_key: str
+    item_id: int
+    album_id: int | None
+    item: Item = field(repr=False, compare=False, hash=False)
+    media_path: bytes | str = field(repr=False, compare=False, hash=False)
+    existing_values: AcoustIDExistingValues
+
+    def __post_init__(self) -> None:
+        item_id = _positive_database_id(self.item_id, "Item")
+        album_id = _optional_album_id(self.album_id)
+        if self.local_key != f"library-item:{item_id}":
+            raise ValueError("selected AcoustID local key is invalid")
+        if type(self.item) is not Item or self.item.id != item_id:
+            raise TypeError("selected AcoustID Item is invalid")
+        if _optional_album_id(self.item.album_id) != album_id:
+            raise ValueError("selected AcoustID Item membership is invalid")
+        item_path = self.item.path
+        if type(item_path) not in (bytes, str) or not item_path:
+            raise ValueError("selected AcoustID media path is invalid")
+        if (
+            type(self.media_path) not in (bytes, str)
+            or not self.media_path
+            or self.media_path != item_path
+        ):
+            raise ValueError("selected AcoustID media path is invalid")
+        if not isinstance(self.existing_values, AcoustIDExistingValues):
+            raise ValueError("selected AcoustID existing values are invalid")
+        expected_values = AcoustIDExistingValues.from_stored(
+            self.item.acoustid_id,
+            self.item.acoustid_fingerprint,
+            self.item.length,
+        )
+        if self.existing_values != expected_values:
+            raise ValueError("selected AcoustID existing values are invalid")
+        object.__setattr__(self, "album_id", album_id)
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedAcoustIDTarget:
+    kind: AcoustIDLibraryTargetKind
+    album_id: int | None
+    items: tuple[SelectedAcoustIDItem, ...]
+    _refresh_source: object = field(default=None, repr=False, compare=False, hash=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.kind, AcoustIDLibraryTargetKind):
+            raise ValueError("selected AcoustID target kind is invalid")
+        items = tuple(self.items)
+        if not items or any(type(item) is not SelectedAcoustIDItem for item in items):
+            raise ValueError("selected AcoustID target requires supported Items")
+        if len({item.item_id for item in items}) != len(items) or len(
+            {item.local_key for item in items}
+        ) != len(items):
+            raise ValueError("selected AcoustID target Items are duplicated")
+        if self.kind is AcoustIDLibraryTargetKind.ALBUM:
+            album_id = _positive_database_id(self.album_id, "Album")
+            if any(item.album_id != album_id for item in items):
+                raise ValueError("selected AcoustID Album contains an unrelated Item")
+        elif self.album_id is not None or len(items) != 1 or items[0].album_id is not None:
+            raise ValueError("selected AcoustID singleton requires one standalone Item")
+        object.__setattr__(self, "items", items)
+
+
+@dataclass(frozen=True, slots=True)
+class FingerprintBackendResult:
+    duration_seconds: float
+    fingerprint: InitVar[str]
+    _fingerprint: str = field(init=False, repr=False)
+
+    def __post_init__(self, fingerprint: str) -> None:
+        duration = _positive_duration(self.duration_seconds)
+        if duration is None:
+            raise ValueError("backend duration must be finite and positive")
+        object.__setattr__(self, "duration_seconds", duration)
+        object.__setattr__(self, "_fingerprint", _fingerprint_text(fingerprint))
+
+    def _fingerprint_text(self) -> str:
+        return self._fingerprint
+
+
 def _bounded_float(value: object, field_name: str, lower: float, upper: float) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{field_name} must be a finite number from {lower} through {upper}")
@@ -127,11 +324,7 @@ class AcoustIDFingerprintMaterial:
 
     def __post_init__(self, fingerprint: str) -> None:
         object.__setattr__(self, "local_key", _local_key(self.local_key))
-        if not isinstance(fingerprint, str) or not fingerprint.strip():
-            raise ValueError("fingerprint must be a non-empty string")
-        if len(fingerprint) > _MAX_FINGERPRINT_LENGTH:
-            raise ValueError("fingerprint exceeds the defensive length limit")
-        object.__setattr__(self, "_fingerprint", fingerprint)
+        object.__setattr__(self, "_fingerprint", _fingerprint_text(fingerprint))
         if isinstance(self.duration_seconds, bool) or not isinstance(
             self.duration_seconds, (int, float)
         ):
@@ -150,6 +343,45 @@ class AcoustIDFingerprintMaterial:
             raise ValueError("existing fingerprint material prohibits a source snapshot")
         if self.origin is AcoustIDFingerprintOrigin.GENERATED and self.source_snapshot is None:
             raise ValueError("generated fingerprint material requires a source snapshot")
+
+
+@dataclass(frozen=True, slots=True)
+class FingerprintPreparationResult:
+    local_key: str
+    material: AcoustIDFingerprintMaterial | None
+    reason: AcoustIDEvidenceReason
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "local_key", _local_key(self.local_key))
+        if not isinstance(self.reason, AcoustIDEvidenceReason):
+            raise ValueError("fingerprint preparation reason is invalid")
+        successful = {
+            AcoustIDEvidenceReason.FINGERPRINT_REUSED,
+            AcoustIDEvidenceReason.FINGERPRINT_GENERATED,
+        }
+        unsuccessful = {
+            AcoustIDEvidenceReason.FINGERPRINT_MISSING,
+            AcoustIDEvidenceReason.FINGERPRINT_BACKEND_UNAVAILABLE,
+            AcoustIDEvidenceReason.FINGERPRINT_FAILED,
+            AcoustIDEvidenceReason.STALE_SOURCE_FILE,
+        }
+        if self.reason not in successful | unsuccessful:
+            raise ValueError("fingerprint preparation reason is unsupported")
+        if self.reason in unsuccessful:
+            if self.material is not None:
+                raise ValueError("unsuccessful fingerprint preparation prohibits material")
+            return
+        if not isinstance(self.material, AcoustIDFingerprintMaterial):
+            raise ValueError("successful fingerprint preparation requires material")
+        if self.material.local_key != self.local_key:
+            raise ValueError("fingerprint preparation material local key is inconsistent")
+        expected_origin = (
+            AcoustIDFingerprintOrigin.EXISTING
+            if self.reason is AcoustIDEvidenceReason.FINGERPRINT_REUSED
+            else AcoustIDFingerprintOrigin.GENERATED
+        )
+        if self.material.origin is not expected_origin:
+            raise ValueError("fingerprint preparation material origin is inconsistent")
 
 
 @dataclass(frozen=True, slots=True)

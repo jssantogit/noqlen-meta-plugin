@@ -6,11 +6,16 @@ from beetsplug.noqlenmeta.acoustid import (
     AcoustIDEvidencePolicy,
     AcoustIDEvidenceReason,
     AcoustIDEvidenceVerdict,
+    AcoustIDExistingValues,
     AcoustIDFingerprintMaterial,
     AcoustIDFingerprintOrigin,
+    AcoustIDLibraryTargetKind,
     AcoustIDResultGroup,
     AcoustIDSourceSnapshot,
+    AcoustIDStoredValueState,
     AcoustIDTrackEvidence,
+    FingerprintBackendResult,
+    FingerprintPreparationResult,
     canonical_acoustid_uuid,
     canonical_recording_mbid,
 )
@@ -385,3 +390,167 @@ def test_one_eligible_recording_allows_lower_support_in_result_groups() -> None:
     assert value.top_score == 0.95
     assert value.runner_up_score is None
     assert value.margin is None
+
+
+@pytest.mark.parametrize("raw", [None, "", "   "])
+def test_existing_values_classify_missing_ids(raw: object) -> None:
+    values = AcoustIDExistingValues.from_stored(raw, None, None)
+
+    assert values.acoustid_id_state is AcoustIDStoredValueState.MISSING
+    assert values.acoustid_id is None
+
+
+def test_existing_values_canonicalize_valid_id_and_redact_malformed_id() -> None:
+    valid = AcoustIDExistingValues.from_stored(identifier(7).upper(), None, None)
+    private_id = "malformed-private-id"
+    malformed = AcoustIDExistingValues.from_stored(private_id, None, None)
+
+    assert valid.acoustid_id_state is AcoustIDStoredValueState.VALID
+    assert valid.acoustid_id == identifier(7)
+    assert malformed.acoustid_id_state is AcoustIDStoredValueState.MALFORMED
+    assert malformed.acoustid_id is None
+    assert private_id not in repr(malformed)
+
+
+@pytest.mark.parametrize(
+    ("raw", "state"),
+    [
+        (None, AcoustIDStoredValueState.MISSING),
+        ("", AcoustIDStoredValueState.MISSING),
+        ("   ", AcoustIDStoredValueState.MISSING),
+        (" fingerprint", AcoustIDStoredValueState.MALFORMED),
+        ("fingerprint ", AcoustIDStoredValueState.MALFORMED),
+        (123, AcoustIDStoredValueState.MALFORMED),
+    ],
+)
+def test_existing_values_classify_fingerprint_state(raw: object, state) -> None:
+    values = AcoustIDExistingValues.from_stored(None, raw, 10)
+
+    assert values.fingerprint_state is state
+    assert not values.is_fingerprint_reusable
+
+
+def test_existing_fingerprint_uses_shared_exact_length_limit() -> None:
+    exact = "x" * _MAX_FINGERPRINT_LENGTH
+    valid = AcoustIDExistingValues.from_stored(None, exact, 10)
+    oversized = AcoustIDExistingValues.from_stored(None, exact + "x", 10)
+
+    assert valid.fingerprint_state is AcoustIDStoredValueState.VALID
+    assert valid.is_fingerprint_reusable
+    assert oversized.fingerprint_state is AcoustIDStoredValueState.MALFORMED
+    assert exact not in repr(valid)
+
+
+@pytest.mark.parametrize(
+    "duration", [None, True, "10", 0, -1, float("nan"), float("inf"), -float("inf")]
+)
+def test_existing_duration_must_be_finite_and_positive(duration: object) -> None:
+    values = AcoustIDExistingValues.from_stored(None, "synthetic-private-fingerprint", duration)
+
+    assert values.duration_seconds is None
+    assert not values.is_fingerprint_reusable
+
+
+def test_existing_duration_normalizes_to_float_and_id_alone_is_not_material() -> None:
+    reusable = AcoustIDExistingValues.from_stored(None, "synthetic-private-fingerprint", 12)
+    id_only = AcoustIDExistingValues.from_stored(identifier(1), None, 12)
+
+    assert reusable.duration_seconds == 12.0
+    assert reusable.is_fingerprint_reusable
+    assert not id_only.is_fingerprint_reusable
+    assert not hasattr(id_only, "verdict")
+
+
+def test_existing_values_reject_inconsistent_direct_construction_without_disclosure() -> None:
+    private_fingerprint = "private-fingerprint"
+    with pytest.raises(ValueError) as captured:
+        AcoustIDExistingValues(
+            AcoustIDStoredValueState.MALFORMED,
+            identifier(1),
+            AcoustIDStoredValueState.MALFORMED,
+            private_fingerprint,
+            None,
+        )
+    assert private_fingerprint not in str(captured.value)
+    with pytest.raises(ValueError):
+        AcoustIDExistingValues(
+            AcoustIDStoredValueState.VALID,
+            None,
+            AcoustIDStoredValueState.MISSING,
+            None,
+            None,
+        )
+
+
+@pytest.mark.parametrize("duration", [True, "1", 0, -1, float("nan"), float("inf")])
+def test_backend_result_rejects_invalid_duration(duration: object) -> None:
+    with pytest.raises(ValueError, match="duration"):
+        FingerprintBackendResult(duration, "private-fingerprint")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("fingerprint", [None, 1, "", " "])
+def test_backend_result_rejects_invalid_fingerprint_without_disclosure(fingerprint: object) -> None:
+    with pytest.raises(ValueError) as captured:
+        FingerprintBackendResult(1, fingerprint)  # type: ignore[arg-type]
+    assert repr(fingerprint) not in str(captured.value)
+
+
+def test_backend_result_is_redacted_and_accepts_shared_limit() -> None:
+    fingerprint = "z" * _MAX_FINGERPRINT_LENGTH
+    result = FingerprintBackendResult(1, fingerprint)
+
+    assert result.duration_seconds == 1.0
+    assert fingerprint not in repr(result)
+    assert fingerprint not in str(result)
+    with pytest.raises(ValueError):
+        FingerprintBackendResult(1, fingerprint + "z")
+
+
+def test_preparation_result_enforces_reason_material_and_origin() -> None:
+    existing = AcoustIDFingerprintMaterial(
+        "library-item:1", "private-existing", 1, AcoustIDFingerprintOrigin.EXISTING
+    )
+    generated = AcoustIDFingerprintMaterial(
+        "library-item:1",
+        "private-generated",
+        1,
+        AcoustIDFingerprintOrigin.GENERATED,
+        snapshot(),
+    )
+
+    assert FingerprintPreparationResult(
+        "library-item:1", existing, AcoustIDEvidenceReason.FINGERPRINT_REUSED
+    ).material is existing
+    assert FingerprintPreparationResult(
+        "library-item:1", generated, AcoustIDEvidenceReason.FINGERPRINT_GENERATED
+    ).material is generated
+    with pytest.raises(ValueError):
+        FingerprintPreparationResult(
+            "library-item:1", None, AcoustIDEvidenceReason.FINGERPRINT_REUSED
+        )
+    with pytest.raises(ValueError):
+        FingerprintPreparationResult(
+            "library-item:1", existing, AcoustIDEvidenceReason.FINGERPRINT_GENERATED
+        )
+    with pytest.raises(ValueError):
+        FingerprintPreparationResult(
+            "library-item:2", existing, AcoustIDEvidenceReason.FINGERPRINT_REUSED
+        )
+    with pytest.raises(ValueError):
+        FingerprintPreparationResult(
+            "library-item:1", existing, AcoustIDEvidenceReason.FINGERPRINT_FAILED
+        )
+    with pytest.raises(ValueError):
+        FingerprintPreparationResult(
+            "library-item:1", None, AcoustIDEvidenceReason.LOOKUP_FAILED
+        )
+
+
+def test_new_string_enums_have_frozen_serialized_values() -> None:
+    assert AcoustIDLibraryTargetKind.ALBUM.value == "album"
+    assert AcoustIDLibraryTargetKind.SINGLETON.value == "singleton"
+    assert [state.value for state in AcoustIDStoredValueState] == [
+        "missing",
+        "valid",
+        "malformed",
+    ]
