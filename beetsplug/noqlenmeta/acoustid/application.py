@@ -282,7 +282,6 @@ def _prepare_target(result: AcoustIDTargetResult) -> _PreparedTarget:
 
 
 def _apply_target(library: Library, target: _PreparedTarget) -> int:
-    released = False
     try:
         with library.transaction() as tx:
             tx.mutate(_SAVEPOINT_SQL)
@@ -294,21 +293,11 @@ def _apply_target(library: Library, target: _PreparedTarget) -> int:
                 _apply_and_verify_rows(tx, target.rows)
                 _require_current_snapshot(library, target.result, target.expected_after)
                 tx.mutate(_RELEASE_SQL)
-                released = True
             except Exception:
                 _rollback_savepoint(tx)
     except AcoustIDApplicationError:
         raise
     except Exception:
-        if released:
-            raise AcoustIDApplicationError(
-                AcoustIDApplicationFailure.POST_COMMIT_FAILURE,
-                integrity_critical=True,
-                committed=True,
-                state_uncertain=True,
-                committed_target_count=1,
-                changed_item_count=len(target.rows),
-            ) from None
         raise AcoustIDApplicationError(
             AcoustIDApplicationFailure.COMMIT_UNCERTAIN,
             integrity_critical=True,

@@ -614,7 +614,7 @@ def test_rollback_failure_is_integrity_critical_and_state_uncertain(
     assert events == []
 
 
-def test_root_exit_failure_after_release_reports_committed_state(
+def test_root_exit_failure_after_release_reports_uncertain_state(
     monkeypatch: pytest.MonkeyPatch, library: Library
 ) -> None:
     result = prepared_result(
@@ -624,6 +624,7 @@ def test_root_exit_failure_after_release_reports_committed_state(
     original_exit = Transaction.__exit__
     original_mutate = Transaction.mutate
     released_transactions = set()
+    failed_transactions = []
 
     def arm_failure_after_preflight(*args, **kwargs):
         prepared = original_preflight(*args, **kwargs)
@@ -635,10 +636,10 @@ def test_root_exit_failure_after_release_reports_committed_state(
             return value
 
         def fail_during_exit(self, *exit_args, **exit_kwargs):
-            value = original_exit(self, *exit_args, **exit_kwargs)
             if id(self) in released_transactions:
+                failed_transactions.append(self)
                 raise RuntimeError("private commit output")
-            return value
+            return original_exit(self, *exit_args, **exit_kwargs)
 
         monkeypatch.setattr(Transaction, "mutate", record_release)
         monkeypatch.setattr(Transaction, "__exit__", fail_during_exit)
@@ -646,18 +647,80 @@ def test_root_exit_failure_after_release_reports_committed_state(
 
     monkeypatch.setattr(application_module, "_preflight", arm_failure_after_preflight)
 
-    with pytest.raises(AcoustIDApplicationError) as captured:
-        apply_acoustid_results(library, (result,))
+    try:
+        with pytest.raises(AcoustIDApplicationError) as captured:
+            apply_acoustid_results(library, (result,))
+    finally:
+        for transaction in failed_transactions:
+            original_exit(transaction, None, None, None)
 
     error = captured.value
-    assert error.failure is AcoustIDApplicationFailure.POST_COMMIT_FAILURE
+    assert released_transactions
+    assert error.failure is AcoustIDApplicationFailure.COMMIT_UNCERTAIN
+    assert error.integrity_critical
+    assert error.state_uncertain
+    assert not error.committed
+    assert error.committed_target_count == 0
+    assert error.changed_item_count == 0
+    assert "private" not in str(error)
+
+
+def test_later_root_exit_uncertainty_preserves_only_proven_earlier_commit(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    first = prepared_result(
+        add_singleton(library, 1), generated_fingerprint=PRIVATE_FINGERPRINT
+    )
+    second = prepared_result(
+        add_singleton(library, 2), generated_fingerprint=PRIVATE_FINGERPRINT
+    )
+    original_preflight = application_module._preflight
+    original_exit = Transaction.__exit__
+    original_mutate = Transaction.mutate
+    release_count = 0
+    uncertain_transactions = set()
+    failed_transactions = []
+
+    def arm_failure_after_preflight(*args, **kwargs):
+        prepared = original_preflight(*args, **kwargs)
+
+        def record_second_release(self, statement, *mutate_args, **mutate_kwargs):
+            nonlocal release_count
+            value = original_mutate(self, statement, *mutate_args, **mutate_kwargs)
+            if statement == "RELEASE SAVEPOINT noqlen_acoustid_target":
+                release_count += 1
+                if release_count == 2:
+                    uncertain_transactions.add(id(self))
+            return value
+
+        def fail_second_exit(self, *exit_args, **exit_kwargs):
+            if id(self) in uncertain_transactions:
+                failed_transactions.append(self)
+                raise RuntimeError("private second commit output")
+            return original_exit(self, *exit_args, **exit_kwargs)
+
+        monkeypatch.setattr(Transaction, "mutate", record_second_release)
+        monkeypatch.setattr(Transaction, "__exit__", fail_second_exit)
+        return prepared
+
+    monkeypatch.setattr(application_module, "_preflight", arm_failure_after_preflight)
+
+    try:
+        with pytest.raises(AcoustIDApplicationError) as captured:
+            apply_acoustid_results(library, (first, second))
+    finally:
+        for transaction in failed_transactions:
+            original_exit(transaction, None, None, None)
+
+    error = captured.value
+    assert release_count == 2
+    assert error.failure is AcoustIDApplicationFailure.COMMIT_UNCERTAIN
     assert error.integrity_critical
     assert error.state_uncertain
     assert error.committed
     assert error.committed_target_count == 1
     assert error.changed_item_count == 1
-    assert persisted(library, result.planning_snapshot.items[0].item_id)[1] == PRIVATE_FINGERPRINT
-    assert "private" not in str(error)
+    assert persisted(library, first.planning_snapshot.items[0].item_id)[1] == PRIVATE_FINGERPRINT
 
 
 def test_transaction_boundary_failure_before_release_reports_uncertain_uncommitted(
