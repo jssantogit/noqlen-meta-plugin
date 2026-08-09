@@ -3,7 +3,8 @@
 ## State
 
 Noqlen Meta 1.0.0 is released. Block 029 planning, contract freeze, Stage 01,
-and Stage 02 product implementation are merged into `main`.
+Stage 02 implementation, and the Stage 02 completion record are merged into
+`main`.
 
 ```text
 Planning:            6ad71d68347e23cecd45225900a10a8287acca54
@@ -13,97 +14,62 @@ Stage 01 code:       26506a79f23a899a810640b1a2bfa8d80a5c4c20
 Stage 01 completion: 2f01c1d070d93b78bfba269439ca7b44de5c3e87
 Stage 02 brief:      56082b173c46d0ef47fc5808a9ababbc0004aa38
 Stage 02 code:       5c7bd25f7ce1a4880b96f3dea25a2f7dd9d9d5bc
+Stage 02 completion: 8fc5cff7deefa3f24e9a092f96fdcd0035eb7d54
 ```
 
-PR #9 delivered the Stage 02 implementation from reviewed head
-`32cb2b2e275e9bf3a0b5e495d3e24ae8511344b0`. CI run 53 passed on rerun after a
-GitHub Actions outage and the PR was squash-merged on 2026-08-09.
+PR #9 delivered Stage 02 product code from reviewed head
+`32cb2b2e275e9bf3a0b5e495d3e24ae8511344b0`; CI run 53 passed. PR #10 recorded
+Stage 02 completion; CI run 55 passed and the PR was squash-merged on 2026-08-09.
 
 ADR 0025 remains Accepted. `contracts.md` remains the normative product
 contract.
 
 ## Documentation-Only Chat Rule
 
-Repository changes performed from this project chat are limited to:
-
-- specifications and stage briefs;
-- ADRs;
-- context and handoff documents;
-- completion records;
-- documentation-only PR administration.
-
-Product implementation happens outside this chat after the matching brief is
-approved.
+Repository changes performed from this project chat are limited to specs, stage
+briefs, ADRs, context/handoff, completion records, and documentation-only PR
+administration. Product implementation happens outside this chat after its brief
+is approved.
 
 ## Normative Artifacts
 
-- Frozen contracts:
-  `docs/specs/029-acoustid-identity-evidence/contracts.md`
-- Accepted ADR:
-  `docs/adr/0025-acoustid-recording-evidence.md`
-- Requirements and design:
-  `docs/specs/029-acoustid-identity-evidence/requirements.md`
-  `docs/specs/029-acoustid-identity-evidence/design.md`
-- Forge-to-Meta parity matrix:
-  `docs/specs/029-acoustid-identity-evidence/parity-matrix.md`
-- Task sequence:
-  `docs/specs/029-acoustid-identity-evidence/tasks.md`
-- Stage 01 brief:
-  `docs/specs/029-acoustid-identity-evidence/stage-01-domain-policy-configuration.md`
-- Stage 01 completion record:
-  `docs/specs/029-acoustid-identity-evidence/stage-01-completion.md`
-- Stage 02 brief:
-  `docs/specs/029-acoustid-identity-evidence/stage-02-existing-values-targets-backend.md`
-- Stage 02 completion record:
-  `docs/specs/029-acoustid-identity-evidence/stage-02-completion.md`
+- `docs/specs/029-acoustid-identity-evidence/contracts.md`
+- `docs/adr/0025-acoustid-recording-evidence.md`
+- `docs/specs/029-acoustid-identity-evidence/requirements.md`
+- `docs/specs/029-acoustid-identity-evidence/design.md`
+- `docs/specs/029-acoustid-identity-evidence/parity-matrix.md`
+- `docs/specs/029-acoustid-identity-evidence/tasks.md`
+- `docs/specs/029-acoustid-identity-evidence/stage-01-domain-policy-configuration.md`
+- `docs/specs/029-acoustid-identity-evidence/stage-01-completion.md`
+- `docs/specs/029-acoustid-identity-evidence/stage-02-existing-values-targets-backend.md`
+- `docs/specs/029-acoustid-identity-evidence/stage-02-completion.md`
+- proposed: `docs/specs/029-acoustid-identity-evidence/stage-03-https-transport-lookup.md`
 
 ## Accepted Product Architecture
 
-AcoustID is recording-level identity evidence. It is not an ordinary metadata
-provider and cannot emit ordinary metadata candidates.
-
-The complete intended product scope remains:
+AcoustID is recording-level identity evidence, not an ordinary metadata
+provider. The complete intended flow remains:
 
 - existing-library Albums and singletons;
-- reuse of valid stored AcoustID fingerprints;
-- explicitly authorized missing-fingerprint calculation;
-- bounded HTTPS POST lookup with `meta=recordingids`;
-- path-free and fingerprint-free preview;
-- database-only storage of `acoustid_id` and `acoustid_fingerprint`;
+- reuse or explicitly authorized local generation of fingerprint material;
+- bounded HTTPS lookup with `meta=recordingids`;
+- path-free/fingerprint-free preview;
+- database-only `acoustid_id` and `acoustid_fingerprint` application;
 - optional recording compatibility filtering for complete MusicBrainz release
   candidates.
 
-AcoustID adds no structural score, writes no MusicBrainz field directly, chooses
-no release occurrence, writes no audio file, submits no fingerprint, and does
-not duplicate the native beets importer autotagger.
+It never adds structural score, writes MusicBrainz fields directly, chooses a
+release occurrence, writes audio files, submits fingerprints, or replaces native
+beets `chroma` importer behavior.
 
-The frozen intended options remain:
+Frozen options remain:
 
 ```text
 --acoustid
 --fingerprint-missing
 ```
 
-The frozen intended settings remain:
-
-```yaml
-acoustid:
-  enabled: false
-  reuse_existing: true
-  compute_missing: false
-  lookup: true
-  use_for_identity: true
-  min_score: 0.90
-  min_margin: 0.05
-  max_results: 5
-  max_recordings_per_result: 10
-  timeout_seconds: 15.0
-  requests_per_second: 3.0
-  cache_entries: 256
-  fpcalc: fpcalc
-```
-
-The exact future credential variable remains:
+Frozen service credential remains:
 
 ```text
 NOQLENMETA_ACOUSTID_API_KEY
@@ -113,93 +79,63 @@ NOQLENMETA_ACOUSTID_API_KEY
 
 Stage 01 provides the side-effect-free domain, evidence-policy, and internal
 configuration foundation: canonical identifiers, redacted fingerprint-bearing
-values, bounded deterministic result normalization, pure recording-support
-classification, and strict immutable settings/defaults.
+values, bounded deterministic normalization, pure evidence classification, and
+strict immutable settings/defaults.
 
 ## Completed Stage 02
 
-Stage 02 provides the local existing-library and fingerprint-generation
-boundary:
+Stage 02 provides:
 
-### Target selection
+- fresh AcoustID Album/singleton target conversion with stable local keys;
+- existing `acoustid_id`/`acoustid_fingerprint` validation;
+- fully lazy valid fingerprint reuse;
+- explicitly authorized direct `fpcalc` generation;
+- no-shell, bounded, nonblocking and sanitized subprocess execution;
+- bounded terminate/kill/post-kill reap and reader cleanup;
+- no-follow regular-file snapshots before/after generation;
+- exact generated-source snapshot verification helper;
+- deterministic offline tests across supported Python/beets CI.
 
-- reuses `beetsplug/noqlenmeta/identity/library.py` unchanged;
-- converts complete fresh Albums and fresh singletons into AcoustID targets;
-- preserves Album, singleton, and Item deterministic ordering;
-- preserves stable `library-item:<id>` local keys;
-- rejects missing targets and membership changes during refresh;
-- retains media paths privately without display conversion.
+The existing identity-library selector was not modified.
 
-### Existing values and lazy preparation
+## Proposed Stage 03
 
-- validates `acoustid_id` and `acoustid_fingerprint` as `missing`, `valid`, or
-  `malformed`;
-- treats a stored AcoustID UUID as current state only, never fresh evidence;
-- reuses stored fingerprint material only with finite positive duration;
-- reusable material performs no stat, backend construction, executable
-  discovery, or subprocess work;
-- unauthorized missing or unusable material performs no filesystem/backend work;
-- authorized generation acquires exact pre/post source snapshots.
-
-### Backend strategy
-
-The production backend directly invokes:
+The next product stage is not authorized yet. Its proposed brief is:
 
 ```text
-<configured fpcalc> -json -length 120 -- <private media path>
+docs/specs/029-acoustid-identity-evidence/stage-03-https-transport-lookup.md
 ```
 
-The runner is no-shell, disconnected-stdin, timeout-bounded, output-bounded,
-nonblocking, and sanitized. It caps retained stdout at 1 MiB and stderr at 64
-KiB. Termination, kill, post-kill reap, and reader cleanup are all bounded.
+The AcoustID service contract was revalidated against the official web-service
+documentation on 2026-08-09.
 
-`NOQLENMETA_ACOUSTID_API_KEY` is removed from the child environment without
-being resolved or used.
+The proposed Stage 03 boundary freezes:
 
-### Source stability
+- lazy application-key resolution only at network lookup;
+- exact POST to `https://api.acoustid.org/v2/lookup`;
+- exact form fields: client, rounded duration, fingerprint,
+  `meta=recordingids`, `format=json`;
+- no retry and fail-closed redirect behavior;
+- sequential monotonic pacing at no more than 3 requests/second;
+- 2 MiB request and 1 MiB response caps;
+- strict UTF-8 JSON plus service/schema validation;
+- retention only of result AcoustID UUID, score, and recording MBIDs;
+- bounded parsing by existing `max_results` and
+  `max_recordings_per_result` settings;
+- framed SHA-256 process-local cache key without raw fingerprint or key;
+- cache of successful parsed lookups only;
+- safe use of existing reasons (`lookup_disabled`, `client_key_missing`,
+  `lookup_failed`) and existing Stage 01 classifier;
+- deterministic fake-clock/fake-transport tests with normal CI fully offline.
 
-Generated material requires equal no-follow regular-file snapshots immediately
-before and after backend execution. Device, inode, size, and nanosecond mtime are
-compared exactly. Symlinks and unsupported snapshot semantics fail closed.
+## Preserved Stage 03 Exclusions
 
-A separate helper re-acquires and compares the generated source snapshot for a
-future application stage.
-
-## Preserved Stage 02 Exclusions
-
-Stage 02 performs no:
-
-- AcoustID HTTPS lookup or service payload parsing;
-- service API-key resolution;
-- database mapping or application;
-- command parser/dispatch or public configuration integration;
-- MusicBrainz compatibility filtering;
-- ordinary provider/importer integration;
-- dependency, optional-extra, package metadata, workflow, version, tag, release,
-  README, changelog, or public-site changes;
-- audio-file writes.
-
-## Next Documentation Stage
-
-No Stage 03 implementation is authorized yet.
-
-The next documentation task is to define Stage 03 for the bounded AcoustID HTTPS
-transport and lookup-normalization boundary. The brief should cover:
-
-- API-key resolution only at the service transport boundary;
-- bounded form-POST lookup requesting only `meta=recordingids`;
-- sequential request pacing using monotonic time;
-- request/response limits and strict UTF-8 JSON/schema validation;
-- process-local caching keyed without exposing raw fingerprint material;
-- deterministic fake-clock/fake-transport pacing, cache, and failure tests;
-- safe mapping from transport/service failures to the frozen reason vocabulary.
-
-Stage 03 must still exclude database mapping/application, command/public
-configuration integration, MusicBrainz candidate filtering, ordinary
-provider/importer integration, package/release work, and audio-file writes
-unless its own reviewed brief explicitly authorizes them.
+No Stage 03 product branch may add database planning/application, command or
+public-config integration, preview rendering, MusicBrainz filtering, provider or
+importer registration, fingerprint submission, User API-key handling,
+dependencies, package/workflow/release/public-doc changes, or audio-file writes.
 
 ## Stop Condition
 
-Merge the Stage 02 completion record before preparing the Stage 03 product
-brief. No Stage 03 product implementation is performed from this chat.
+Review, pass CI, and squash-merge the Stage 03 brief before creating its product
+branch. Stage 03 implementation remains outside this chat.
