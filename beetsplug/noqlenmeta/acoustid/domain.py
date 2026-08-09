@@ -48,6 +48,14 @@ class AcoustIDDatabaseState(str, Enum):
     BLOCKED = "BLOCKED"
 
 
+class AcoustIDApplicationFailure(str, Enum):
+    BLOCKED_PREFLIGHT = "blocked_preflight"
+    TARGET_ROLLED_BACK = "target_rolled_back"
+    ROLLBACK_FAILED = "rollback_failed"
+    COMMIT_UNCERTAIN = "commit_uncertain"
+    POST_COMMIT_FAILURE = "post_commit_failure"
+
+
 class AcoustIDEvidenceReason(str, Enum):
     FINGERPRINT_REUSED = "fingerprint_reused"
     FINGERPRINT_GENERATED = "fingerprint_generated"
@@ -809,6 +817,80 @@ class AcoustIDTargetResult:
         )
         object.__setattr__(self, "outcomes", outcomes)
         object.__setattr__(self, "generated_source_snapshots", generated)
+
+
+@dataclass(frozen=True, slots=True)
+class AcoustIDApplicationResult:
+    target_count: int
+    changed_target_count: int
+    changed_item_count: int
+    applied_field_count: int
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "target_count",
+            "changed_target_count",
+            "changed_item_count",
+            "applied_field_count",
+        ):
+            value = getattr(self, field_name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError("AcoustID application result count is invalid")
+        if self.changed_target_count > self.target_count:
+            raise ValueError("AcoustID application target counts are inconsistent")
+        if (self.changed_target_count == 0) != (self.changed_item_count == 0):
+            raise ValueError("AcoustID application change counts are inconsistent")
+        if (self.changed_item_count == 0) != (self.applied_field_count == 0):
+            raise ValueError("AcoustID application field counts are inconsistent")
+
+    @property
+    def is_confirmed_noop(self) -> bool:
+        return self.changed_target_count == 0
+
+    @property
+    def has_applied_changes(self) -> bool:
+        return self.changed_target_count > 0
+
+
+class AcoustIDApplicationError(RuntimeError):
+    def __init__(
+        self,
+        failure: AcoustIDApplicationFailure,
+        *,
+        reason: AcoustIDEvidenceReason | None = None,
+        integrity_critical: bool = False,
+        committed: bool = False,
+        state_uncertain: bool = False,
+        committed_target_count: int = 0,
+        changed_item_count: int = 0,
+    ) -> None:
+        if not isinstance(failure, AcoustIDApplicationFailure):
+            raise ValueError("AcoustID application failure kind is invalid")
+        if reason not in {
+            None,
+            AcoustIDEvidenceReason.STALE_TARGET,
+            AcoustIDEvidenceReason.STALE_SOURCE_FILE,
+        }:
+            raise ValueError("AcoustID application failure reason is invalid")
+        for value in (integrity_critical, committed, state_uncertain):
+            if not isinstance(value, bool):
+                raise ValueError("AcoustID application failure flag is invalid")
+        for value in (committed_target_count, changed_item_count):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError("AcoustID application failure count is invalid")
+        if committed_target_count and not committed:
+            raise ValueError("AcoustID application committed count requires committed state")
+        message = f"AcoustID database application {failure.value}"
+        if reason is not None:
+            message = f"{message}: {reason.value}"
+        super().__init__(message)
+        self.failure = failure
+        self.reason = reason
+        self.integrity_critical = integrity_critical
+        self.committed = committed
+        self.state_uncertain = state_uncertain
+        self.committed_target_count = committed_target_count
+        self.changed_item_count = changed_item_count
 
 
 def normalize_result_groups(
