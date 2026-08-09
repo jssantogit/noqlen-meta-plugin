@@ -9,6 +9,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from http.client import HTTPException
 from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -177,14 +178,14 @@ def _read_bounded(response: _ReadableResponse) -> bytes:
         operational_failure = True
     except _UnexpectedBoundaryError:
         unexpected_failure = True
-    except OSError:
+    except (HTTPException, OSError):
         operational_failure = True
     except Exception:
         unexpected_failure = True
     finally:
         try:
             response.close()
-        except OSError:
+        except (HTTPException, OSError):
             operational_failure = True
         except Exception:
             unexpected_failure = True

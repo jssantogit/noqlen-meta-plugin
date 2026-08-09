@@ -4,6 +4,7 @@ import json
 import ssl
 from dataclasses import replace
 from email.message import Message
+from http.client import HTTPException, IncompleteRead
 from io import BytesIO
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl
@@ -704,6 +705,45 @@ def test_response_read_failure_is_closed_sanitized_and_not_cached() -> None:
     assert len(transport.requests) == 2
     assert all(response.closed for response in transport.responses)
     assert "private" not in repr((first, second))
+
+
+@pytest.mark.parametrize(
+    "read_error",
+    [
+        IncompleteRead(b"private partial response", expected=123),
+        HTTPException("private HTTP reader failure"),
+    ],
+)
+def test_http_response_read_failure_is_operational_closed_and_not_cached(
+    read_error: HTTPException,
+) -> None:
+    class HTTPReadFailureResponse(Response):
+        def read(self, size: int = -1) -> bytes:
+            raise read_error
+
+    class HTTPReadFailureTransport(Transport):
+        def send(self, request):
+            self.requests.append(request)
+            response = (
+                HTTPReadFailureResponse(b"")
+                if len(self.requests) == 1
+                else Response(successful_body())
+            )
+            self.responses.append(response)
+            return response
+
+    transport = HTTPReadFailureTransport()
+    lookup = service(transport, clock=Clock())
+
+    first = lookup.lookup(material())
+    second = lookup.lookup(material())
+
+    assert first.reason is AcoustIDEvidenceReason.LOOKUP_FAILED
+    assert second.verdict is AcoustIDEvidenceVerdict.NO_MATCH
+    assert len(transport.requests) == 2
+    assert all(response.closed for response in transport.responses)
+    assert "private partial response" not in repr(first)
+    assert "private HTTP reader failure" not in repr(first)
 
 
 def test_unexpected_credential_resolver_error_is_sanitized_and_propagated() -> None:
