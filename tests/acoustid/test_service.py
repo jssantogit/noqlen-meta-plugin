@@ -177,6 +177,112 @@ def test_credential_is_lazy_and_missing_key_stops_before_pacing(key: str | None)
     assert transport.requests == []
 
 
+def test_default_transport_is_not_constructed_when_lookup_is_disabled(monkeypatch) -> None:
+    constructions: list[str] = []
+    monkeypatch.setattr(
+        service_module,
+        "UrllibAcoustIDTransport",
+        lambda: constructions.append("transport"),
+    )
+
+    value = AcoustIDLookupService(
+        replace(default_acoustid_settings(), lookup=False),
+        credential_resolver=lambda: PRIVATE_KEY,
+    ).lookup(material())
+
+    assert value.reason is AcoustIDEvidenceReason.LOOKUP_DISABLED
+    assert constructions == []
+
+
+def test_default_transport_is_not_constructed_when_client_key_is_missing(monkeypatch) -> None:
+    constructions: list[str] = []
+    monkeypatch.setattr(
+        service_module,
+        "UrllibAcoustIDTransport",
+        lambda: constructions.append("transport"),
+    )
+
+    value = AcoustIDLookupService(
+        default_acoustid_settings(), credential_resolver=lambda: None
+    ).lookup(material())
+
+    assert value.reason is AcoustIDEvidenceReason.CLIENT_KEY_MISSING
+    assert constructions == []
+
+
+def test_default_transport_is_not_constructed_for_oversized_request(monkeypatch) -> None:
+    constructions: list[str] = []
+    fixed_size = len(_request_body("", 120, PRIVATE_FINGERPRINT))
+    oversized_key = "k" * (MAX_LOOKUP_REQUEST_BYTES - fixed_size + 1)
+    monkeypatch.setattr(
+        service_module,
+        "UrllibAcoustIDTransport",
+        lambda: constructions.append("transport"),
+    )
+
+    value = AcoustIDLookupService(
+        default_acoustid_settings(), credential_resolver=lambda: oversized_key
+    ).lookup(material())
+
+    assert value.reason is AcoustIDEvidenceReason.LOOKUP_FAILED
+    assert constructions == []
+
+
+def test_default_transport_is_not_constructed_for_prepopulated_cache_hit(monkeypatch) -> None:
+    constructions: list[str] = []
+    monkeypatch.setattr(
+        service_module,
+        "UrllibAcoustIDTransport",
+        lambda: constructions.append("transport"),
+    )
+    lookup = AcoustIDLookupService(
+        default_acoustid_settings(),
+        credential_resolver=lambda: (_ for _ in ()).throw(AssertionError("credential used")),
+        monotonic=lambda: (_ for _ in ()).throw(AssertionError("pacing used")),
+    )
+    lookup._cache[_cache_key(PRIVATE_FINGERPRINT, 120)] = ()
+
+    value = lookup.lookup(material())
+
+    assert value.verdict is AcoustIDEvidenceVerdict.NO_MATCH
+    assert constructions == []
+
+
+def test_default_transport_is_created_after_pacing_and_memoized(monkeypatch) -> None:
+    events: list[str] = []
+    clock = Clock()
+
+    class DefaultTransport(Transport):
+        def send(self, request):
+            events.append("send")
+            return super().send(request)
+
+    transport = DefaultTransport()
+
+    def construct_transport():
+        events.append("construct")
+        return transport
+
+    def monotonic() -> float:
+        events.append("pace")
+        return clock.monotonic()
+
+    monkeypatch.setattr(service_module, "UrllibAcoustIDTransport", construct_transport)
+    lookup = AcoustIDLookupService(
+        replace(default_acoustid_settings(), cache_entries=0),
+        credential_resolver=lambda: PRIVATE_KEY,
+        monotonic=monotonic,
+        sleeper=clock.sleep,
+    )
+
+    lookup.lookup(material("fingerprint-a"))
+    clock.value = 1.0
+    lookup.lookup(material("fingerprint-b"))
+
+    assert events == ["pace", "construct", "send", "pace", "send"]
+    assert len(transport.requests) == 2
+
+
 def test_request_contract_is_exact_and_uses_injected_timeout() -> None:
     transport = Transport(successful_body(results=[result()]))
     settings = replace(default_acoustid_settings(), timeout_seconds=7.25, cache_entries=0)
@@ -312,6 +418,7 @@ def test_default_transport_closes_and_sanitizes_http_error_without_retry() -> No
     assert str(captured.value) == "AcoustID lookup transport failed"
     assert response.closed
     assert len(calls) == 1
+    assert captured.value.__context__ is None
 
 
 def test_redirect_handler_fails_closed_and_service_does_not_retry() -> None:
@@ -597,6 +704,115 @@ def test_response_read_failure_is_closed_sanitized_and_not_cached() -> None:
     assert len(transport.requests) == 2
     assert all(response.closed for response in transport.responses)
     assert "private" not in repr((first, second))
+
+
+def test_unexpected_credential_resolver_error_is_sanitized_and_propagated() -> None:
+    private_error = f"programmer {PRIVATE_KEY} {PRIVATE_FINGERPRINT} {PRIVATE_PATH}"
+    lookup = AcoustIDLookupService(
+        default_acoustid_settings(),
+        credential_resolver=lambda: (_ for _ in ()).throw(RuntimeError(private_error)),
+    )
+
+    with pytest.raises(RuntimeError) as captured:
+        lookup.lookup(material())
+
+    assert str(captured.value) == "AcoustID credential boundary failed"
+    assert private_error not in str(captured.value)
+    assert captured.value.__cause__ is None
+    assert captured.value.__context__ is None
+
+
+def test_unexpected_transport_error_is_sanitized_and_propagated() -> None:
+    class ProgrammerTransport(Transport):
+        def send(self, request):
+            raise RuntimeError(request.body.decode())
+
+    with pytest.raises(RuntimeError) as captured:
+        service(ProgrammerTransport()).lookup(material())
+
+    assert str(captured.value) == "AcoustID transport boundary failed"
+    assert PRIVATE_KEY not in str(captured.value)
+    assert PRIVATE_FINGERPRINT not in str(captured.value)
+    assert captured.value.__cause__ is None
+    assert captured.value.__context__ is None
+
+
+def test_unexpected_response_error_is_sanitized_and_propagated() -> None:
+    class ProgrammerResponse(Response):
+        def read(self, size: int = -1) -> bytes:
+            raise RuntimeError(f"private response {PRIVATE_FINGERPRINT}")
+
+    class ProgrammerTransport(Transport):
+        def send(self, request):
+            response = ProgrammerResponse(b"")
+            self.responses.append(response)
+            return response
+
+    transport = ProgrammerTransport()
+
+    with pytest.raises(RuntimeError) as captured:
+        service(transport).lookup(material())
+
+    assert str(captured.value) == "AcoustID response boundary failed"
+    assert PRIVATE_FINGERPRINT not in str(captured.value)
+    assert transport.responses[0].closed
+    assert captured.value.__cause__ is None
+    assert captured.value.__context__ is None
+
+
+def test_unexpected_evidence_error_is_sanitized_and_propagated(monkeypatch) -> None:
+    private_error = f"programmer {PRIVATE_KEY} {PRIVATE_FINGERPRINT}"
+    monkeypatch.setattr(
+        service_module,
+        "classify_acoustid_evidence",
+        lambda *args: (_ for _ in ()).throw(RuntimeError(private_error)),
+    )
+
+    with pytest.raises(RuntimeError) as captured:
+        service(Transport()).lookup(material())
+
+    assert str(captured.value) == "AcoustID evidence boundary failed"
+    assert private_error not in str(captured.value)
+    assert captured.value.__cause__ is None
+    assert captured.value.__context__ is None
+
+
+def test_non_encodable_fingerprint_fails_before_credential_pacing_or_network() -> None:
+    private_fingerprint = "private-surrogate-\ud800-fingerprint"
+    calls: list[str] = []
+    transport = Transport()
+    lookup = AcoustIDLookupService(
+        default_acoustid_settings(),
+        transport=transport,
+        credential_resolver=lambda: calls.append("credential"),  # type: ignore[arg-type,func-returns-value]
+        monotonic=lambda: calls.append("pace"),  # type: ignore[arg-type,func-returns-value]
+    )
+
+    value = lookup.lookup(material(private_fingerprint))
+
+    assert value.reason is AcoustIDEvidenceReason.LOOKUP_FAILED
+    assert calls == []
+    assert transport.requests == []
+    assert private_fingerprint not in repr(value)
+
+
+def test_non_encodable_client_key_fails_before_pacing_or_network() -> None:
+    private_key = "private-surrogate-\ud800-key"
+    calls: list[str] = []
+    transport = Transport()
+    lookup = AcoustIDLookupService(
+        default_acoustid_settings(),
+        transport=transport,
+        credential_resolver=lambda: private_key,
+        monotonic=lambda: calls.append("pace"),  # type: ignore[arg-type,func-returns-value]
+    )
+
+    value = lookup.lookup(material())
+
+    assert value.reason is AcoustIDEvidenceReason.LOOKUP_FAILED
+    assert calls == []
+    assert transport.requests == []
+    assert private_key not in repr(value)
 
 
 @pytest.mark.parametrize("status", [400, 404, 429, 500, 503])

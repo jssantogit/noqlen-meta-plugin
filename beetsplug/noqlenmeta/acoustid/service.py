@@ -62,13 +62,22 @@ class AcoustIDTransportFailure(Exception):
     """Sanitized failure raised by the default HTTPS transport."""
 
 
+class _UnexpectedBoundaryError(RuntimeError):
+    """Sanitized programming or injected-component contract failure."""
+
+
 class _RejectRedirects(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        unexpected_failure = False
         try:
             fp.close()
-        except Exception:
+        except OSError:
             pass
-        raise AcoustIDTransportFailure("AcoustID lookup transport failed") from None
+        except Exception:
+            unexpected_failure = True
+        if unexpected_failure:
+            raise _UnexpectedBoundaryError("AcoustID transport boundary failed")
+        raise AcoustIDTransportFailure("AcoustID lookup transport failed")
 
 
 class UrllibAcoustIDTransport:
@@ -94,16 +103,28 @@ class UrllibAcoustIDTransport:
             headers={"Content-Type": request.content_type},
             method=request.method,
         )
+        response: _ReadableResponse | None = None
+        operational_failure = False
+        unexpected_failure = False
         try:
-            return self._open(urllib_request, timeout=request.timeout_seconds)
+            response = self._open(urllib_request, timeout=request.timeout_seconds)
         except HTTPError as error:
             try:
                 error.close()
-            except Exception:
+            except OSError:
                 pass
-            raise AcoustIDTransportFailure("AcoustID lookup transport failed") from None
+            except Exception:
+                unexpected_failure = True
+            operational_failure = True
         except (URLError, TimeoutError, ssl.SSLError, OSError, ValueError):
-            raise AcoustIDTransportFailure("AcoustID lookup transport failed") from None
+            operational_failure = True
+        if unexpected_failure:
+            raise _UnexpectedBoundaryError("AcoustID transport boundary failed")
+        if operational_failure:
+            raise AcoustIDTransportFailure("AcoustID lookup transport failed")
+        if response is None:
+            raise _UnexpectedBoundaryError("AcoustID transport boundary failed")
+        return response
 
 
 def _environment_client_key() -> str | None:
@@ -139,26 +160,39 @@ def _request_body(client_key: str, whole_seconds: int, fingerprint: str) -> byte
 
 def _read_bounded(response: _ReadableResponse) -> bytes:
     retained = bytearray()
+    operational_failure = False
+    unexpected_failure = False
     try:
         while True:
             remaining = MAX_LOOKUP_RESPONSE_BYTES - len(retained)
             chunk = response.read(min(_RESPONSE_READ_BYTES, remaining + 1))
             if not isinstance(chunk, bytes):
-                raise AcoustIDTransportFailure("AcoustID lookup transport failed")
+                raise _UnexpectedBoundaryError("AcoustID response boundary failed")
             if not chunk:
-                return bytes(retained)
+                break
             retained.extend(chunk)
             if len(retained) > MAX_LOOKUP_RESPONSE_BYTES:
                 raise AcoustIDTransportFailure("AcoustID lookup transport failed")
     except AcoustIDTransportFailure:
-        raise
+        operational_failure = True
+    except _UnexpectedBoundaryError:
+        unexpected_failure = True
+    except OSError:
+        operational_failure = True
     except Exception:
-        raise AcoustIDTransportFailure("AcoustID lookup transport failed") from None
+        unexpected_failure = True
     finally:
         try:
             response.close()
+        except OSError:
+            operational_failure = True
         except Exception:
-            pass
+            unexpected_failure = True
+    if unexpected_failure:
+        raise _UnexpectedBoundaryError("AcoustID response boundary failed")
+    if operational_failure:
+        raise AcoustIDTransportFailure("AcoustID lookup transport failed")
+    return bytes(retained)
 
 
 def _reject_json_constant(value: str) -> None:
@@ -207,6 +241,12 @@ def _parse_lookup_response(
                 raise ValueError("invalid AcoustID result schema")
             recording_mbids.append(recording_mbid)
         groups.append(AcoustIDResultGroup(acoustid_id, score, tuple(recording_mbids)))
+    unique_groups: dict[str, AcoustIDResultGroup] = {}
+    for group in groups:
+        existing = unique_groups.get(group.acoustid_id)
+        if existing is not None and existing != group:
+            raise ValueError("conflicting duplicate AcoustID result groups")
+        unique_groups[group.acoustid_id] = group
     return tuple(groups)
 
 
@@ -229,6 +269,24 @@ def _unavailable_evidence(
     )
 
 
+def _classify_lookup(
+    material: AcoustIDFingerprintMaterial,
+    groups: tuple[AcoustIDResultGroup, ...],
+    policy: AcoustIDEvidencePolicy,
+) -> AcoustIDTrackEvidence:
+    unexpected_failure = False
+    evidence: AcoustIDTrackEvidence | None = None
+    try:
+        evidence = classify_acoustid_evidence(
+            material.local_key, material.origin, groups, policy
+        )
+    except Exception:
+        unexpected_failure = True
+    if unexpected_failure or evidence is None:
+        raise _UnexpectedBoundaryError("AcoustID evidence boundary failed")
+    return evidence
+
+
 class AcoustIDLookupService:
     def __init__(
         self,
@@ -248,7 +306,7 @@ class AcoustIDLookupService:
             settings.max_results,
             settings.max_recordings_per_result,
         )
-        self._transport = transport if transport is not None else UrllibAcoustIDTransport()
+        self._transport = transport
         self._credential_resolver = credential_resolver
         self._monotonic = monotonic
         self._sleeper = sleeper
@@ -263,34 +321,37 @@ class AcoustIDLookupService:
 
         fingerprint = material._fingerprint_text()
         whole_seconds = _whole_seconds(material.duration_seconds)
-        digest = _cache_key(fingerprint, whole_seconds)
+        try:
+            digest = _cache_key(fingerprint, whole_seconds)
+        except UnicodeEncodeError:
+            return _unavailable_evidence(material, AcoustIDEvidenceReason.LOOKUP_FAILED)
         cached = self._cache.get(digest)
         if cached is not None:
-            return classify_acoustid_evidence(
-                material.local_key, material.origin, cached, self._policy
-            )
+            return _classify_lookup(material, cached, self._policy)
 
-        try:
-            client_key = self._credential_resolver()
-        except Exception:
-            client_key = None
+        client_key = self._resolve_client_key()
         if not isinstance(client_key, str) or not client_key:
             return _unavailable_evidence(material, AcoustIDEvidenceReason.CLIENT_KEY_MISSING)
 
-        body = _request_body(client_key, whole_seconds, fingerprint)
+        try:
+            body = _request_body(client_key, whole_seconds, fingerprint)
+        except UnicodeEncodeError:
+            return _unavailable_evidence(material, AcoustIDEvidenceReason.LOOKUP_FAILED)
         if len(body) > MAX_LOOKUP_REQUEST_BYTES:
             return _unavailable_evidence(material, AcoustIDEvidenceReason.LOOKUP_FAILED)
         request = AcoustIDHTTPRequest(body, self._settings.timeout_seconds)
 
         try:
             self._pace()
-            response = self._transport.send(request)
-            groups = _parse_lookup_response(_read_bounded(response), self._settings)
-            evidence = classify_acoustid_evidence(
-                material.local_key, material.origin, groups, self._policy
-            )
-        except Exception:
+            response = self._send(request)
+            response_body = _read_bounded(response)
+        except AcoustIDTransportFailure:
             return _unavailable_evidence(material, AcoustIDEvidenceReason.LOOKUP_FAILED)
+        try:
+            groups = _parse_lookup_response(response_body, self._settings)
+        except (ValueError, OverflowError, RecursionError):
+            return _unavailable_evidence(material, AcoustIDEvidenceReason.LOOKUP_FAILED)
+        evidence = _classify_lookup(material, groups, self._policy)
 
         if self._settings.cache_entries:
             self._cache[digest] = groups
@@ -298,8 +359,54 @@ class AcoustIDLookupService:
                 self._cache.popitem(last=False)
         return evidence
 
+    def _resolve_client_key(self) -> str | None:
+        unexpected_failure = False
+        client_key: str | None = None
+        try:
+            client_key = self._credential_resolver()
+        except Exception:
+            unexpected_failure = True
+        if unexpected_failure:
+            raise _UnexpectedBoundaryError("AcoustID credential boundary failed")
+        return client_key
+
+    def _send(self, request: AcoustIDHTTPRequest) -> _ReadableResponse:
+        transport = self._transport
+        if transport is None:
+            operational_failure = False
+            unexpected_failure = False
+            try:
+                transport = UrllibAcoustIDTransport()
+            except OSError:
+                operational_failure = True
+            except Exception:
+                unexpected_failure = True
+            if unexpected_failure:
+                raise _UnexpectedBoundaryError("AcoustID transport boundary failed")
+            if operational_failure:
+                raise AcoustIDTransportFailure("AcoustID lookup transport failed")
+            if transport is None:
+                raise _UnexpectedBoundaryError("AcoustID transport boundary failed")
+            self._transport = transport
+        operational_failure = False
+        unexpected_failure = False
+        response: _ReadableResponse | None = None
+        try:
+            response = transport.send(request)
+        except (AcoustIDTransportFailure, OSError):
+            operational_failure = True
+        except Exception:
+            unexpected_failure = True
+        if unexpected_failure:
+            raise _UnexpectedBoundaryError("AcoustID transport boundary failed")
+        if operational_failure:
+            raise AcoustIDTransportFailure("AcoustID lookup transport failed")
+        if response is None:
+            raise _UnexpectedBoundaryError("AcoustID transport boundary failed")
+        return response
+
     def _pace(self) -> None:
-        now = self._monotonic()
+        now = self._monotonic_time()
         if not isinstance(now, (int, float)) or isinstance(now, bool) or not math.isfinite(now):
             raise AcoustIDTransportFailure("AcoustID lookup transport failed")
         now = float(now)
@@ -309,8 +416,8 @@ class AcoustIDLookupService:
                 raise AcoustIDTransportFailure("AcoustID lookup transport failed")
             remaining = 1.0 / self._settings.requests_per_second - (now - previous)
             if remaining > 0:
-                self._sleeper(remaining)
-                started = self._monotonic()
+                self._sleep(remaining)
+                started = self._monotonic_time()
                 if (
                     not isinstance(started, (int, float))
                     or isinstance(started, bool)
@@ -322,3 +429,33 @@ class AcoustIDLookupService:
                     raise AcoustIDTransportFailure("AcoustID lookup transport failed")
                 now = float(started)
         self._last_request_start = now
+
+    def _monotonic_time(self) -> float:
+        operational_failure = False
+        unexpected_failure = False
+        value = 0.0
+        try:
+            value = self._monotonic()
+        except OSError:
+            operational_failure = True
+        except Exception:
+            unexpected_failure = True
+        if unexpected_failure:
+            raise _UnexpectedBoundaryError("AcoustID pacing boundary failed")
+        if operational_failure:
+            raise AcoustIDTransportFailure("AcoustID lookup transport failed")
+        return value
+
+    def _sleep(self, seconds: float) -> None:
+        operational_failure = False
+        unexpected_failure = False
+        try:
+            self._sleeper(seconds)
+        except OSError:
+            operational_failure = True
+        except Exception:
+            unexpected_failure = True
+        if unexpected_failure:
+            raise _UnexpectedBoundaryError("AcoustID pacing boundary failed")
+        if operational_failure:
+            raise AcoustIDTransportFailure("AcoustID lookup transport failed")
