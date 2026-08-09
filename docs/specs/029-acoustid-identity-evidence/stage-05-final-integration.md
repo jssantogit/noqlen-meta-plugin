@@ -2,7 +2,7 @@
 
 ## Status
 
-Approved design for the final implementation stage of Block 029.
+Approved design for the **last product implementation stage** of Block 029.
 
 Baseline:
 
@@ -10,106 +10,79 @@ Baseline:
 f508d30c740891e04c92068d5eafbf9123896431
 ```
 
-Stage 05 is the **last product implementation stage** for Block 029. There is no Stage 06. After Stage 05 merges, remaining work is Block 029 completion/release readiness only: public documentation, changelog/package validation, final review, and any later version/tag/publication decision.
+There is no Stage 06. After Stage 05 merges, remaining work is Block 029 completion/release readiness only.
 
 Normative precedence:
 
 1. `contracts.md`
 2. ADR 0025
-3. this Stage 05 brief
+3. this brief
 4. older requirements/design wording
 
 This brief authorizes one product branch and one product PR.
 
 ## Goal
 
-Finish the user-facing AcoustID feature by integrating the already-delivered standalone AcoustID core with:
+Finish the AcoustID feature by integrating the Stage 01-04 core with:
 
-- the existing-library MusicBrainz identity audit as recording compatibility evidence;
-- the frozen standalone `--acoustid` / `--fingerprint-missing` command surface;
+- existing-library MusicBrainz identity as recording compatibility evidence;
+- standalone `--acoustid` / `--fingerprint-missing` command handling;
 - the frozen public `acoustid` configuration subtree.
 
-The implementation must preserve the existing MusicBrainz structural safety model, remain database-only for AcoustID application, and keep importer acoustic matching owned by native beets `chroma`.
+Do not add a second scoring system, a second AcoustID workflow, or another implementation stage.
 
-## Explicit Non-Goals
+## 1. MusicBrainz Recording Compatibility
 
-Stage 05 must not:
+### Expectations
 
-- add AcoustID or Chromaprint to the ordinary metadata provider resolver;
-- add any structural score component or bonus;
-- change existing MusicBrainz scoring weights or thresholds;
-- derive release, release-group, medium, or release-track identity from AcoustID;
-- write MusicBrainz fields directly from AcoustID payloads;
-- generate fingerprints silently during `--identity`;
-- add importer fingerprint generation or AcoustID autotagger candidates;
-- write audio files or call `Item.write()` from AcoustID mode;
-- submit fingerprints;
-- add force or partial AcoustID behavior;
-- add new AcoustID Python dependencies;
-- bump version, tag, publish, or perform release administration.
-
-## 1. Pure Recording Expectations
-
-Add a pure immutable representation of decisive AcoustID recording expectations keyed by existing identity `local_key`.
-
-Rules:
-
-- only `AcoustIDEvidenceVerdict.DECISIVE` contributes an expectation;
-- the expectation value is the canonical decisive MusicBrainz recording MBID;
-- unavailable, no-match, and ambiguous evidence contribute nothing and are neutral;
-- duplicate/conflicting expectations for one local key fail closed;
-- stored `acoustid_id` is not evidence;
-- no title, artist, duration, release, release-group, medium, or release-track data enters the expectation model.
-
-The mapping must be deterministic and independent of MusicBrainz candidate scoring.
-
-## 2. Candidate Compatibility Filter
-
-The filter operates on already-produced `IdentityCandidateEvaluation` values.
-
-It must not call `evaluate_identity_candidate()`, `assign_identity_tracks()`, or any scorer itself.
-
-For every decisive local-key expectation:
-
-1. find the existing assignment for that local key in the candidate evaluation;
-2. resolve the assigned `candidate_index` to the candidate track;
-3. compare that track's canonical `recording_mbid` to the expected decisive recording MBID;
-4. any mismatch makes the candidate acoustically incompatible.
-
-A candidate is compatible only when every decisive expectation that can be checked against its complete assignment matches.
-
-The compatibility result must be represented separately from structural score data. Existing `IdentityScoreBreakdown`, pair scores, assignments, candidate ordering inputs, and structural components remain unchanged.
-
-Malformed/inconsistent assignment structure must fail closed rather than being treated as compatible.
-
-## 3. Audit Ordering And Safety Gates
-
-The integrated identity flow is:
+Create a pure immutable mapping from decisive AcoustID evidence to:
 
 ```text
-MusicBrainz candidates
--> existing structural evaluation/assignment unchanged
--> AcoustID recording compatibility filter
--> existing safety gates unchanged on compatible evaluations
--> existing four-field findings from the selected complete candidate
+local_key -> canonical recording MBID
 ```
 
-The filter may remove structurally evaluated candidates. It never changes any evaluation score.
+Only `DECISIVE` evidence contributes. `UNAVAILABLE`, `NO_MATCH`, and `AMBIGUOUS` are neutral. Stored `acoustid_id` is current state, never fresh evidence.
 
-After filtering, the surviving top candidate must still pass the existing gates with the same policy values:
+Duplicate/conflicting expectations for one local key fail closed.
+
+### Filter
+
+Operate only on already-produced `IdentityCandidateEvaluation` values. Do not recalculate scoring or assignment.
+
+For every decisive expectation:
+
+1. find that `local_key` in the existing assignment;
+2. resolve its existing `candidate_index`;
+3. compare the assigned candidate track `recording_mbid` with the decisive recording MBID.
+
+Mismatch, missing assignment, invalid candidate index, or inconsistent assignment structure makes that candidate incompatible.
+
+Compatibility must be represented separately from structural score data. Existing score components, pair scores, assignments, and candidate identities remain unchanged.
+
+### Audit order
+
+```text
+existing MusicBrainz candidates
+-> existing evaluation/assignment unchanged
+-> AcoustID compatibility filter
+-> existing safety gates unchanged on surviving evaluations
+-> existing four-field findings from selected complete candidate
+```
+
+The filter may remove candidates but never changes score or threshold values.
+
+The surviving top candidate must still pass the existing:
 
 - minimum total score;
-- valid candidate identity;
-- complete local-track assignment when required;
-- no ambiguous assignment;
+- candidate-identity safety;
+- complete assignment gate;
+- assignment-ambiguity gate;
 - minimum pair score;
-- unique minimum margin against the remaining compatible runner-up.
+- minimum margin against the remaining compatible runner-up.
 
-This allows decisive AcoustID evidence to remove an incompatible runner-up, as intended by ADR 0025, while never adding score or relaxing any gate.
+This may remove an incompatible runner-up and resolve a structural near-tie, but AcoustID never makes a weak/incomplete/ambiguous surviving candidate pass a gate.
 
-AcoustID must not make a candidate eligible when that candidate itself has weak score, weak pair assignment, incomplete assignment, or ambiguous assignment.
-
-When decisive evidence removes every structurally evaluated candidate, return:
+If decisive evidence removes every candidate, return exactly:
 
 ```text
 verdict = AMBIGUOUS
@@ -120,74 +93,60 @@ field_findings = ()
 repair_ready = False
 ```
 
-When no decisive expectations exist, the audit result must remain behaviorally equivalent to the existing non-AcoustID audit.
+With no decisive expectations, existing audit behavior must remain unchanged.
 
-Four-field MusicBrainz findings remain derived only from the selected complete MusicBrainz release candidate.
+## 2. Existing-Library `--identity` Integration
 
-## 4. Identity Integration Boundary
+AcoustID filtering applies only to the existing-library identity command. Importer behavior remains unchanged.
 
-Do not change the semantics of existing `audit_musicbrainz_identity()` callers that do not opt into AcoustID evidence.
-
-Add a narrow pure entry point/helper that composes existing structural evaluation with optional recording expectations, or extend the audit through an optional immutable expectations argument if that preserves current behavior exactly when omitted.
-
-Existing importer identity behavior remains unchanged in Block 029.
-
-AcoustID identity integration applies to the existing-library `--identity` workflow only.
-
-When public settings satisfy:
+Enable acoustic filtering only when:
 
 ```text
 acoustid.enabled == true
 acoustid.use_for_identity == true
 ```
 
-then, for each selected existing-library target:
+Identity mode may:
 
-- reuse only a valid stored fingerprint when `reuse_existing` permits it;
-- never calculate a missing fingerprint;
-- perform lookup only when `lookup` permits it and valid material exists;
-- use the configured evidence policy;
-- treat missing fingerprint, unavailable backend state, missing credential, lookup failure, no-match, and ambiguous evidence as neutral for MusicBrainz filtering;
-- feed only decisive recording expectations into the compatibility filter.
+- reuse a valid stored fingerprint when configured;
+- perform configured lookup using the existing Stage 03 service;
+- feed decisive recording expectations into the pure compatibility filter.
 
-`compute_missing` and `--fingerprint-missing` do not grant fingerprint-generation authority to `--identity`.
+Identity mode may **not** calculate a missing fingerprint, even when `compute_missing=true`. Missing fingerprint, disabled lookup, missing credential, lookup failure, no-match, and ambiguous evidence are neutral.
 
-Identity mode must not apply standalone AcoustID database plans. Its AcoustID use is evidence-only.
+Identity mode does not apply standalone AcoustID database plans and does not write AcoustID fields.
 
-## 5. Standalone CLI
+Existing `audit_musicbrainz_identity()` callers that do not opt into AcoustID evidence must keep current semantics.
 
-Add exactly the frozen options:
+## 3. Standalone Command Integration
+
+Add exactly:
 
 ```text
 --acoustid
 --fingerprint-missing
 ```
 
-`--acoustid` selects the standalone AcoustID mode.
-
-`--fingerprint-missing` grants missing-fingerprint calculation authority for that standalone invocation only.
-
 Standalone flow:
 
 ```text
 validate CLI/config
--> select all complete existing-library targets
--> plan every target with plan_acoustid_target()
--> render preview for every planned target
--> when --apply: apply_acoustid_results() to the complete prepared application unit
+-> select complete existing-library targets
+-> plan every target with existing Stage 04 workflow
+-> preview planned targets
+-> when --apply: apply the complete prepared unit with Stage 04 application
 ```
 
-Preview remains the default.
+Rules:
 
-`--apply` grants database-only application of the Stage 04 plans. It never grants file-write authority.
+- preview remains default;
+- `--apply` is database-only;
+- `--fingerprint-missing` grants calculation authority only for standalone AcoustID mode;
+- query and `--all` remain mutually exclusive;
+- reuse Stage 02-04 selection, fingerprint, service, mapping, preview, stale-check, and application boundaries;
+- do not duplicate them in the command layer.
 
-`--all` preserves the existing command-wide all-target meaning. Query and `--all` are mutually exclusive.
-
-The implementation must reuse Stage 02-04 boundaries rather than duplicate selection, backend, service, mapping, preview, stale verification, or application logic.
-
-## 6. CLI Validation Before Work
-
-Reject invalid combinations before target selection, filesystem/backend work, credential lookup, or network work:
+Reject before target selection, filesystem/backend work, environment access, or network:
 
 ```text
 --acoustid with --identity
@@ -197,13 +156,11 @@ Reject invalid combinations before target selection, filesystem/backend work, cr
 --fingerprint-missing without --acoustid
 ```
 
-Preserve existing validation for `--write`, `--partial`, query vs `--all`, and identity modes.
+Preserve all existing command validation. Add no `--force` behavior.
 
-No `--force` option is introduced.
+## 4. Public Configuration
 
-## 7. Public Configuration
-
-Add exactly this subtree to `configuration.default_config()`:
+Add the exact frozen subtree to `configuration.default_config()`:
 
 ```yaml
 acoustid:
@@ -222,173 +179,110 @@ acoustid:
   fpcalc: fpcalc
 ```
 
-Build runtime settings through `AcoustIDSettings.from_mapping()` rather than duplicating validation rules in the plugin command layer.
+Build runtime settings through `AcoustIDSettings.from_mapping()`; do not duplicate range/type validation in the plugin layer.
 
-Unknown/missing/invalid AcoustID settings fail before AcoustID target work.
+Public defaults and `default_acoustid_settings()` must remain semantically identical.
 
-The public defaults and internal `default_acoustid_settings()` must remain in exact semantic parity.
-
-The client key remains exclusively:
+The client key remains environment-only:
 
 ```text
 NOQLENMETA_ACOUSTID_API_KEY
 ```
 
-It is not added to configuration.
+Invalid/missing/unknown AcoustID configuration fails before AcoustID target work.
 
-## 8. Lazy Operational Boundaries
+## 5. Lazy And Privacy Boundaries
 
-Standalone and identity integration must preserve lazy behavior:
+Preserve existing laziness:
 
-- no backend construction when a valid stored fingerprint is reused or calculation is unauthorized;
-- no `fpcalc` invocation when missing calculation is not authorized;
+- no backend construction when calculation is unnecessary/unauthorized;
+- no `fpcalc` when missing calculation is unauthorized;
 - no environment key resolution unless a real uncached lookup is needed;
-- no network when lookup is disabled, no valid material exists, or a lookup cache hit satisfies the request;
-- identity mode never invokes missing-fingerprint calculation.
+- no network when lookup is disabled, material is unavailable, or cache satisfies lookup;
+- `--identity` never invokes fingerprint generation.
 
-Normal CI remains fully offline and requires no API key, real `fpcalc`, or audio fixture.
+Never expose fingerprints, private paths, API keys, backend output, raw HTTP material, or raw provider/OS exception text.
 
-## 9. Existing-Library Scope Only
+Normal CI remains offline with no API key, real `fpcalc`, or live AcoustID dependency.
 
-Block 029 remains existing-library only for Noqlen-owned AcoustID behavior.
+## 6. Scope Boundaries
 
-Do not add AcoustID handling to importer `import_task_choice`.
+Block 029 remains existing-library only for Noqlen-owned AcoustID behavior. Native beets `chroma` continues to own importer acoustic matching, import-time fingerprinting, submission, and autotagger candidates.
 
-Native beets `chroma` continues to own importer acoustic matching, import-time fingerprinting, `beet fingerprint`, submission, and autotagger candidates.
+Stage 05 must not:
 
-## 10. Privacy And Output
+- add AcoustID to the ordinary provider resolver;
+- add/modify structural scoring or thresholds;
+- derive release/release-group/release-track identity from AcoustID;
+- write MusicBrainz fields directly from AcoustID;
+- write audio files;
+- submit fingerprints;
+- add force/partial AcoustID behavior;
+- add new AcoustID Python dependencies;
+- bump version, tag, publish, or perform release administration.
 
-Standalone preview continues using Stage 04's frozen renderer and vocabulary.
+Expected product files are limited to the command/configuration surface, identity audit/compatibility surface, optional AcoustID exports, and focused tests. Stage 02-04 internals should change only for a concrete integration defect and only minimally.
 
-New command, integration, result, warning, and error paths must not expose:
+## 7. Required Tests
 
-- full fingerprints;
-- private media paths;
-- API keys;
-- backend commands/output;
-- raw HTTP request/response material;
-- provider/raw OS exception text.
-
-MusicBrainz identity preview may surface the stable `acoustid_recording_conflict` reason but does not need to print private AcoustID material.
-
-## 11. Product Allowlist
-
-The expected product diff is narrow and should normally stay within files serving these responsibilities:
-
-```text
-beetsplug/noqlenmeta/__init__.py
-beetsplug/noqlenmeta/configuration.py
-beetsplug/noqlenmeta/identity/audit.py
-beetsplug/noqlenmeta/identity/__init__.py
-beetsplug/noqlenmeta/identity/<new acoustid compatibility module>.py
-beetsplug/noqlenmeta/acoustid/__init__.py   # exports only if required
-
-corresponding focused tests under tests/identity/, tests/acoustid/, and command/config tests
-```
-
-Stage 05 must not refactor Stage 02-04 internals unless a concrete integration defect requires a minimal correction. Any product file outside this boundary requires explicit justification in the implementation report.
-
-No dependency, package metadata, workflow, version, or release file belongs in the Stage 05 product PR unless a test-only compatibility adjustment is strictly necessary and explicitly justified.
-
-## 12. Required Compatibility Tests
-
-### Pure compatibility
+### Compatibility and audit
 
 Cover:
 
-- one decisive expectation matches;
-- one decisive expectation conflicts;
-- multiple decisive expectations all match;
-- one mismatch rejects candidate;
-- unavailable/no-match/ambiguous evidence is neutral;
+- decisive match and mismatch;
+- multiple decisive expectations;
+- neutral non-decisive evidence;
 - repeated recording MBIDs on different release-track occurrences;
-- multidisc releases;
-- bonus tracks;
-- malformed/inconsistent assignment fails closed;
-- deterministic result ordering.
+- multidisc and bonus-track candidates;
+- malformed/inconsistent assignment fail-closed;
+- all candidates rejected -> `acoustid_recording_conflict`;
+- no decisive evidence -> existing audit result unchanged;
+- score components, pair scores, and assignments unchanged;
+- surviving weak-score, weak-pair, incomplete, or ambiguous candidates still fail existing gates;
+- margin remains the existing gate over surviving compatible evaluations.
 
-### Audit invariance
-
-Prove:
-
-- with no decisive expectations, existing audit output is unchanged;
-- structural score components are byte-for-byte/value-for-value unchanged by AcoustID filtering;
-- pair scores and assignments are unchanged;
-- AcoustID cannot rescue a candidate below minimum score;
-- AcoustID cannot rescue weak pair assignment;
-- AcoustID cannot rescue incomplete assignment;
-- AcoustID cannot rescue ambiguous assignment;
-- compatible surviving candidates still pass the unchanged margin gate;
-- all candidates rejected -> `acoustid_recording_conflict`.
-
-### Existing-library identity integration
+### Existing-library identity
 
 Cover:
 
-- disabled AcoustID -> existing identity behavior unchanged;
-- `enabled=true`, `use_for_identity=false` -> unchanged;
-- valid stored fingerprint + decisive lookup filters candidates;
-- missing fingerprint is neutral and does not invoke backend;
-- `compute_missing=true` still does not generate under `--identity`;
+- AcoustID disabled or `use_for_identity=false` -> unchanged identity behavior;
+- stored fingerprint + decisive lookup filters candidates;
+- missing fingerprint is neutral and never invokes backend;
+- `compute_missing=true` still cannot generate in `--identity`;
 - lookup disabled/missing key/failure/no-match/ambiguous are neutral;
-- decisive conflict prevents repair-ready identity result;
-- no AcoustID database writes occur from identity mode.
+- conflict prevents repair-ready identity result;
+- identity mode performs no AcoustID database write.
 
-### Standalone command
+### Standalone command/config
 
 Cover:
 
-- query preview;
-- `--all` preview;
+- query and `--all` preview;
 - `--fingerprint-missing` authority;
-- `--apply` database-only application;
-- complete planning before first application call;
-- Stage 04 `REVIEW`/`BLOCKED`/stale behavior remains authoritative;
-- all invalid option combinations are rejected before selection/backend/network;
-- no audio-file writes.
+- database-only `--apply`;
+- every target planned before application;
+- Stage 04 blockers/stale behavior remains authoritative;
+- every invalid option combination fails before local/network work;
+- exact public default subtree and parity with internal defaults;
+- invalid/unknown/missing settings;
+- no client key in config;
+- no audio-file write.
 
-### Configuration
+Final CI must continue passing supported Python 3.10-3.14, beets minimum 2.12.0, latest beets below 3, and existing docs/package jobs.
 
-Cover:
+## 8. Merge Gate And Completion
 
-- exact public default subtree;
-- parity with internal defaults;
-- each invalid type/range and unknown/missing setting through public command integration;
-- no client key in configuration.
+Before product merge require:
 
-### Compatibility matrix
-
-Final Stage 05 CI must pass the repository-supported matrix:
-
-- Python 3.10-3.14;
-- beets minimum 2.12.0;
-- latest beets below 3;
-- documentation/package jobs already present in repository CI.
-
-No live AcoustID test gates CI.
-
-## 13. Verification And Review Gate
-
-Before Stage 05 product merge, require:
-
-- focused compatibility/audit tests;
-- focused command/config/standalone tests;
-- complete `tests/acoustid` and identity test suites;
+- focused Stage 05 tests;
+- full AcoustID + identity suites;
 - Ruff;
-- full repository offline test suite;
-- repository contamination/hygiene check;
+- full offline repository tests;
+- hygiene/contamination check;
 - `git diff --check`;
 - CI green on the final reviewed head;
-- external review confirming no score drift, no hidden fingerprint generation in identity mode, no file-write authority, and no scope drift.
+- external review for score drift, hidden identity fingerprint generation, file-write authority, and scope drift.
 
-## 14. Completion Boundary
+After Stage 05 product merge, **Block 029 product implementation is complete**.
 
-After Stage 05 product PR is reviewed, CI-green, and squash-merged:
-
-- Block 029 product implementation is complete;
-- create one documentation-only Block 029 / Stage 05 completion record;
-- update public docs and changelog for release readiness;
-- validate built artifacts and compatibility as required by repository release practice;
-- obtain final reviewer PASS before any version bump/tag/publication decision.
-
-These activities are completion/release readiness, **not another implementation stage**.
+Then perform one documentation-only completion/release-readiness pass: public docs, changelog, built-artifact validation, final reviewer PASS, and any later version/tag/publication decision. That is not Stage 06.
