@@ -344,6 +344,9 @@ class AcoustIDFingerprintMaterial:
         if self.origin is AcoustIDFingerprintOrigin.GENERATED and self.source_snapshot is None:
             raise ValueError("generated fingerprint material requires a source snapshot")
 
+    def _fingerprint_text(self) -> str:
+        return self._fingerprint
+
 
 @dataclass(frozen=True, slots=True)
 class FingerprintPreparationResult:

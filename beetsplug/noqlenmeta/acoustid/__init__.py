@@ -29,6 +29,17 @@ from .domain import (
 )
 from .evidence import classify_acoustid_evidence
 from .library import refresh_acoustid_target, select_acoustid_targets
+from .service import (
+    ACOUSTID_CLIENT_KEY_ENVIRONMENT,
+    ACOUSTID_LOOKUP_ENDPOINT,
+    MAX_LOOKUP_REQUEST_BYTES,
+    MAX_LOOKUP_RESPONSE_BYTES,
+    AcoustIDHTTPRequest,
+    AcoustIDLookupService,
+    AcoustIDTransport,
+    AcoustIDTransportFailure,
+    UrllibAcoustIDTransport,
+)
 from .settings import AcoustIDSettings, default_acoustid_settings
 
 __all__ = [
@@ -39,20 +50,29 @@ __all__ = [
     "AcoustIDFingerprintMaterial",
     "AcoustIDFingerprintOrigin",
     "AcoustIDLibraryTargetKind",
+    "AcoustIDLookupService",
     "AcoustIDResultGroup",
     "AcoustIDSettings",
     "AcoustIDSourceSnapshot",
     "AcoustIDStoredValueState",
     "AcoustIDTrackEvidence",
+    "AcoustIDHTTPRequest",
+    "AcoustIDTransport",
+    "AcoustIDTransportFailure",
+    "ACOUSTID_CLIENT_KEY_ENVIRONMENT",
+    "ACOUSTID_LOOKUP_ENDPOINT",
     "FingerprintBackend",
     "FingerprintBackendFailure",
     "FingerprintBackendResult",
     "FingerprintBackendUnavailable",
     "FingerprintPreparationResult",
     "FpcalcFingerprintBackend",
+    "MAX_LOOKUP_REQUEST_BYTES",
+    "MAX_LOOKUP_RESPONSE_BYTES",
     "SelectedAcoustIDItem",
     "SelectedAcoustIDTarget",
     "SourceSnapshotError",
+    "UrllibAcoustIDTransport",
     "acquire_source_snapshot",
     "canonical_acoustid_uuid",
     "canonical_recording_mbid",
