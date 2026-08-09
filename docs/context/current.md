@@ -11,8 +11,8 @@ for beets.
 
 ## Context Level
 
-`full` for Block 029 after completion of the local existing-value,
-fingerprint-backend, and source-snapshot stage.
+`full` for Block 029 after completion of Stage 02 and during review of the
+bounded AcoustID HTTPS transport stage.
 
 ## Tool Mode
 
@@ -28,8 +28,8 @@ documentation stage is approved.
 
 Block 029 - AcoustID recording-level identity evidence.
 
-Planning, contract freeze, Stage 01, and Stage 02 product implementation are now
-integrated into `main`.
+Planning, contract freeze, Stage 01, Stage 02 implementation, and the Stage 02
+completion record are integrated into `main`.
 
 Important commits:
 
@@ -41,11 +41,13 @@ Important commits:
 2f01c1d070d93b78bfba269439ca7b44de5c3e87  Stage 01 completion record
 56082b173c46d0ef47fc5808a9ababbc0004aa38  Stage 02 brief
 5c7bd25f7ce1a4880b96f3dea25a2f7dd9d9d5bc  Stage 02 implementation
+8fc5cff7deefa3f24e9a092f96fdcd0035eb7d54  Stage 02 completion record
 ```
 
-PR #9 delivered Stage 02 product code. The reviewed head was
-`32cb2b2e275e9bf3a0b5e495d3e24ae8511344b0`; CI run 53 passed on rerun after a
-GitHub Actions outage, and the PR was squash-merged on 2026-08-09.
+PR #9 delivered Stage 02 product code from reviewed head
+`32cb2b2e275e9bf3a0b5e495d3e24ae8511344b0`; CI run 53 passed and the PR was
+squash-merged. PR #10 recorded Stage 02 completion; CI run 55 passed and it was
+squash-merged on 2026-08-09.
 
 ## Normative Artifacts
 
@@ -59,8 +61,11 @@ GitHub Actions outage, and the PR was squash-merged on 2026-08-09.
 - `docs/specs/029-acoustid-identity-evidence/stage-01-completion.md`
 - `docs/specs/029-acoustid-identity-evidence/stage-02-existing-values-targets-backend.md`
 - `docs/specs/029-acoustid-identity-evidence/stage-02-completion.md`
+- `docs/specs/029-acoustid-identity-evidence/stage-03-https-transport-lookup.md`
 
-`contracts.md` remains normative when earlier planning wording differs.
+`contracts.md` remains normative when earlier planning wording differs. The
+Stage 03 brief narrows only the third external implementation branch and cannot
+weaken the frozen product contract.
 
 ## Released Baseline
 
@@ -84,63 +89,61 @@ singletons with:
 
 AcoustID adds no structural score, writes no MusicBrainz field directly, chooses
 no release occurrence, writes no audio file, submits no fingerprint, and does
-not duplicate the native beets importer autotagger.
+not duplicate native beets importer acoustic matching.
 
-The frozen intended command options remain:
+## Completed Foundations
+
+Stage 01 provides immutable domain values, canonical identifiers, redacted
+fingerprint material, deterministic bounded evidence normalization/classification,
+and exact internal settings/defaults.
+
+Stage 02 provides fresh Album/singleton AcoustID targets, existing-value
+validation, fully lazy fingerprint reuse, explicitly authorized bounded direct
+`fpcalc`, no-follow source snapshots, exact source-stability verification, and
+deterministic offline coverage. The existing identity-library selector remains
+unmodified.
+
+## Active Stage 03 Documentation
+
+The proposed Stage 03 brief is:
 
 ```text
---acoustid
---fingerprint-missing
+docs/specs/029-acoustid-identity-evidence/stage-03-https-transport-lookup.md
 ```
 
-## Completed Stage 01 Foundation
+The official AcoustID web-service contract was revalidated on 2026-08-09 before
+writing the brief. Stage 03 freezes:
 
-The merged implementation provides immutable AcoustID domain values, canonical
-identifier validation, redacted fingerprint material, deterministic evidence
-normalization/classification, and exact internal settings/defaults.
+- service credential resolution only at the lookup boundary;
+- exact HTTPS form POST to `https://api.acoustid.org/v2/lookup`;
+- only `client`, rounded `duration`, private `fingerprint`,
+  `meta=recordingids`, and `format=json`;
+- no retry;
+- sequential monotonic pacing at configured rate up to 3 req/s;
+- 2 MiB request and 1 MiB response defensive caps;
+- strict UTF-8 JSON/service/schema validation;
+- only AcoustID UUID, score, and recording MBID retention;
+- SHA-256 framed cache keys without raw fingerprint or credential;
+- process-local successful-result cache only;
+- generic safe mapping to `lookup_disabled`, `client_key_missing`, and
+  `lookup_failed` before existing evidence classification;
+- fully deterministic offline tests and no mandatory live service test.
 
-## Completed Stage 02 Foundation
+## Stage 03 Exclusions
 
-The merged implementation now also provides:
+Stage 03 still excludes:
 
-- AcoustID-specific conversion of fresh Album/singleton identity targets;
-- stable Item database-ID local keys and deterministic order;
-- fresh validation of existing `acoustid_id` and `acoustid_fingerprint` values;
-- fully lazy reuse of valid stored fingerprint material;
-- explicitly authorized local fingerprint generation;
-- direct bounded `fpcalc` execution with nonblocking pipe readers;
-- bounded terminate, kill, post-kill reap, and reader cleanup;
-- sanitized child environment with the AcoustID service key removed;
-- no-follow regular-file snapshots before and after generation;
-- exact source-stability verification helpers;
-- deterministic offline tests across the supported Python and beets matrix.
-
-The existing identity-library selector remains unmodified.
-
-## Next Documentation Stage
-
-No Stage 03 product implementation is active yet.
-
-The next repository work from this chat is a Stage 03 documentation brief for
-the bounded AcoustID HTTPS transport and lookup-normalization boundary.
-
-The brief should define:
-
-1. service API-key resolution only at the transport boundary;
-2. bounded HTTPS form POST requesting only `meta=recordingids`;
-3. sequential request pacing within the configured ceiling;
-4. request/response limits and strict UTF-8 JSON/schema validation;
-5. process-local cache keys that do not expose raw fingerprint material;
-6. deterministic fake-clock/fake-transport offline tests;
-7. sanitized mapping of transport/service failures to existing evidence reasons.
-
-Stage 03 must still exclude database mapping/application, command integration,
-public configuration integration, MusicBrainz candidate filtering, ordinary
-provider/importer integration, package/release work, and audio-file writes unless
-its own reviewed brief explicitly authorizes them.
+- database mapping, snapshots, application, and stores;
+- standalone preview rendering;
+- command parser/dispatch and public configuration integration;
+- MusicBrainz candidate filtering;
+- provider/importer integration;
+- submission or User API-key handling;
+- dependencies, package/workflow/release/public-doc changes;
+- audio-file writes.
 
 ## Stop Condition
 
-Prepare, review, pass CI, and squash-merge the Stage 02 completion record before
-starting the Stage 03 product brief. No Stage 03 product implementation is
-performed from this chat.
+Do not begin Stage 03 product implementation until the Stage 03 brief has passed
+review, repository CI, and squash merge. Product implementation remains outside
+this chat.
