@@ -11,8 +11,8 @@ for beets.
 
 ## Context Level
 
-`full` for Block 029 after completion of Stage 01 and during documentation of
-the local existing-value and fingerprint-backend stage.
+`full` for Block 029 after completion of the local existing-value,
+fingerprint-backend, and source-snapshot stage.
 
 ## Tool Mode
 
@@ -28,8 +28,8 @@ documentation stage is approved.
 
 Block 029 - AcoustID recording-level identity evidence.
 
-Planning, contract freeze, Stage 01 brief, Stage 01 implementation, and the
-Stage 01 completion record are integrated into `main`.
+Planning, contract freeze, Stage 01, and Stage 02 product implementation are now
+integrated into `main`.
 
 Important commits:
 
@@ -39,10 +39,13 @@ Important commits:
 262aa688ac552b7ebb19156ed3c9a58a0f24ed06  Stage 01 brief
 26506a79f23a899a810640b1a2bfa8d80a5c4c20  Stage 01 implementation
 2f01c1d070d93b78bfba269439ca7b44de5c3e87  Stage 01 completion record
+56082b173c46d0ef47fc5808a9ababbc0004aa38  Stage 02 brief
+5c7bd25f7ce1a4880b96f3dea25a2f7dd9d9d5bc  Stage 02 implementation
 ```
 
-PR #5 delivered Stage 01 product code and passed CI run 45. PR #6 recorded its
-completion and passed CI run 47.
+PR #9 delivered Stage 02 product code. The reviewed head was
+`32cb2b2e275e9bf3a0b5e495d3e24ae8511344b0`; CI run 53 passed on rerun after a
+GitHub Actions outage, and the PR was squash-merged on 2026-08-09.
 
 ## Normative Artifacts
 
@@ -55,19 +58,14 @@ completion and passed CI run 47.
 - `docs/specs/029-acoustid-identity-evidence/stage-01-domain-policy-configuration.md`
 - `docs/specs/029-acoustid-identity-evidence/stage-01-completion.md`
 - `docs/specs/029-acoustid-identity-evidence/stage-02-existing-values-targets-backend.md`
+- `docs/specs/029-acoustid-identity-evidence/stage-02-completion.md`
 
-`contracts.md` remains normative when earlier planning wording differs. The
-Stage 02 brief narrows only the second external implementation branch and cannot
-weaken the frozen product contract.
+`contracts.md` remains normative when earlier planning wording differs.
 
 ## Released Baseline
 
-Version 1.0.0 was released on 2026-08-02. The public tag, PyPI publication,
-GitHub Release, matching artifact hashes, and Read the Docs builds remain
-complete.
-
-Block 029 remains intended for the 1.1.0 release family. No version bump has
-been made.
+Version 1.0.0 was released on 2026-08-02. Block 029 remains intended for the
+1.1.0 release family. No version bump has been made.
 
 ## Frozen Product Decision
 
@@ -97,67 +95,52 @@ The frozen intended command options remain:
 
 ## Completed Stage 01 Foundation
 
-The merged implementation provides:
+The merged implementation provides immutable AcoustID domain values, canonical
+identifier validation, redacted fingerprint material, deterministic evidence
+normalization/classification, and exact internal settings/defaults.
 
-- immutable AcoustID domain values and stable reason vocabulary;
-- canonical AcoustID UUID and recording-MBID validation;
-- redacted fingerprint material;
-- deterministic bounded result normalization;
-- pure highest-support, tie, score, and margin classification;
-- internal immutable settings and exact frozen defaults;
-- strict offline validation and synthetic tests.
+## Completed Stage 02 Foundation
 
-The implementation performs no network, subprocess, filesystem, beets database,
-command, provider, or MusicBrainz integration.
+The merged implementation now also provides:
 
-## Active Stage 02 Documentation
+- AcoustID-specific conversion of fresh Album/singleton identity targets;
+- stable Item database-ID local keys and deterministic order;
+- fresh validation of existing `acoustid_id` and `acoustid_fingerprint` values;
+- fully lazy reuse of valid stored fingerprint material;
+- explicitly authorized local fingerprint generation;
+- direct bounded `fpcalc` execution with nonblocking pipe readers;
+- bounded terminate, kill, post-kill reap, and reader cleanup;
+- sanitized child environment with the AcoustID service key removed;
+- no-follow regular-file snapshots before and after generation;
+- exact source-stability verification helpers;
+- deterministic offline tests across the supported Python and beets matrix.
 
-The active documentation brief is:
+The existing identity-library selector remains unmodified.
 
-```text
-docs/specs/029-acoustid-identity-evidence/stage-02-existing-values-targets-backend.md
-```
+## Next Documentation Stage
 
-Its external implementation scope is limited to:
+No Stage 03 product implementation is active yet.
 
-1. AcoustID-specific conversion of the established fresh Album/singleton
-   selector;
-2. stable Item database-ID local keys and deterministic order;
-3. validation of existing `acoustid_id` and `acoustid_fingerprint` values;
-4. lazy reuse of valid stored fingerprint material;
-5. explicitly authorized missing or unusable fingerprint generation;
-6. a direct, injectable, timeout- and output-bounded `fpcalc` backend;
-7. no-follow regular-file snapshots before and after generation;
-8. later source-snapshot verification helpers;
-9. deterministic offline tests.
+The next repository work from this chat is a Stage 03 documentation brief for
+the bounded AcoustID HTTPS transport and lookup-normalization boundary.
 
-The backend decision is direct `fpcalc`, not `pyacoustid`. The exact production
-argument vector is:
+The brief should define:
 
-```text
-<configured fpcalc> -json -length 120 -- <private media path>
-```
+1. service API-key resolution only at the transport boundary;
+2. bounded HTTPS form POST requesting only `meta=recordingids`;
+3. sequential request pacing within the configured ceiling;
+4. request/response limits and strict UTF-8 JSON/schema validation;
+5. process-local cache keys that do not expose raw fingerprint material;
+6. deterministic fake-clock/fake-transport offline tests;
+7. sanitized mapping of transport/service failures to existing evidence reasons.
 
-The existing identity-library selector is reused without modification. Stage 02
-must not duplicate or refactor that selection algorithm.
-
-## Stage 02 Exclusions
-
-Stage 02 still excludes:
-
-- HTTPS lookup and response parsing;
-- service API-key resolution;
-- evidence lookup orchestration;
-- database mapping and application;
-- command parser and dispatch integration;
-- public configuration integration;
-- MusicBrainz compatibility filtering;
-- provider or importer integration;
-- dependencies, optional extras, package metadata, workflows, versions, tags,
-  releases, README, site documentation, and changelog changes;
-- all audio-file writes.
+Stage 03 must still exclude database mapping/application, command integration,
+public configuration integration, MusicBrainz candidate filtering, ordinary
+provider/importer integration, package/release work, and audio-file writes unless
+its own reviewed brief explicitly authorizes them.
 
 ## Stop Condition
 
-Do not begin Stage 02 product implementation until this documentation brief has
-passed review, CI, and squash merge.
+Prepare, review, pass CI, and squash-merge the Stage 02 completion record before
+starting the Stage 03 product brief. No Stage 03 product implementation is
+performed from this chat.
