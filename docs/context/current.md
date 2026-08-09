@@ -11,8 +11,8 @@ for beets.
 
 ## Context Level
 
-`full` for Block 029 after completion of AcoustID Stage 03 and before definition
-of the next standalone workflow stage.
+`full` for Block 029 while the Stage 04 standalone workflow brief is under
+review.
 
 ## Tool Mode
 
@@ -43,14 +43,13 @@ Important commits:
 8fc5cff7deefa3f24e9a092f96fdcd0035eb7d54  Stage 02 completion
 ad06a3e3a61cbdb8b506b14afbfc72b1d18e75ee  Stage 03 brief
 45c6dc20666b79bb057e34596e131a109ac22b38  Stage 03 implementation
+f7f29052ad9fc2c3f919e14991908d08a4bf0c4f  Stage 03 completion
 ```
 
 PR #12 delivered Stage 03 product code from reviewed head
 `89bbef8cd4588ec904f71cafa5a1e772f449b6ff`. CI run 59 passed all nine repository
-jobs before squash merge on 2026-08-09.
-
-The Stage 03 completion record is being added in the current documentation-only
-branch.
+jobs before squash merge on 2026-08-09. PR #13 recorded Stage 03 completion and
+was also squash-merged.
 
 ## Normative Artifacts
 
@@ -60,15 +59,12 @@ branch.
 - `docs/specs/029-acoustid-identity-evidence/design.md`
 - `docs/specs/029-acoustid-identity-evidence/parity-matrix.md`
 - `docs/specs/029-acoustid-identity-evidence/tasks.md`
-- `docs/specs/029-acoustid-identity-evidence/stage-01-domain-policy-configuration.md`
-- `docs/specs/029-acoustid-identity-evidence/stage-01-completion.md`
-- `docs/specs/029-acoustid-identity-evidence/stage-02-existing-values-targets-backend.md`
-- `docs/specs/029-acoustid-identity-evidence/stage-02-completion.md`
-- `docs/specs/029-acoustid-identity-evidence/stage-03-https-transport-lookup.md`
-- `docs/specs/029-acoustid-identity-evidence/stage-03-completion.md`
+- Stage 01-03 implementation/completion briefs
+- `docs/specs/029-acoustid-identity-evidence/stage-04-preview-mapping-database-application.md`
+  on the current documentation branch
 
-`contracts.md` remains normative when earlier planning wording differs. Future
-stage briefs may narrow implementation scope but cannot weaken the frozen product
+`contracts.md` remains normative when earlier planning wording differs. The Stage
+04 brief may narrow implementation scope but cannot weaken the frozen product
 contract.
 
 ## Released Baseline
@@ -95,54 +91,71 @@ AcoustID adds no structural score, writes no MusicBrainz field directly, chooses
 no release occurrence, writes no audio file, submits no fingerprint, and does
 not duplicate native beets importer acoustic matching.
 
-## Completed Stage 01
+## Completed Stages 01-03
 
 Stage 01 provides immutable domain values, canonical identifiers, redacted
 fingerprint material, deterministic bounded evidence normalization/classification,
 and exact internal settings/defaults.
-
-## Completed Stage 02
 
 Stage 02 provides fresh Album/singleton targets, existing-value validation, lazy
 fingerprint reuse, explicitly authorized bounded direct `fpcalc`, no-follow
 source snapshots, exact source-stability verification, and deterministic offline
 coverage. The existing identity-library selector remains unmodified.
 
-## Completed Stage 03
+Stage 03 provides lazy client-key resolution, exact bounded HTTPS form POST,
+strict UTF-8/JSON/schema parsing, result bounding, no retry, monotonic pacing,
+process-local digest caching, reuse of Stage 01 evidence classification,
+sanitized failures, and deterministic offline tests.
 
-Stage 03 provides the standalone AcoustID HTTPS lookup boundary:
+## Proposed Stage 04
 
-- lazy client-key resolution only for a real uncached lookup;
-- exact HTTPS form POST to `https://api.acoustid.org/v2/lookup`;
-- only the five frozen form fields;
-- no retry and fail-closed redirects;
-- verified TLS;
-- 2 MiB request and 1 MiB incremental response caps;
-- strict UTF-8 JSON/service/schema validation;
-- bounded retention of only AcoustID UUID, score, and recording MBIDs;
-- reuse of the Stage 01 evidence classifier;
-- sequential monotonic pacing up to 3 req/s;
-- framed SHA-256 process-local cache keys with successful-result caching only;
-- sanitized operational failures and separately sanitized unexpected boundary
-  failures;
-- deterministic offline tests, including incomplete/truncated HTTP reads.
+Stage 04 is one reviewed design with two sequential product PRs separated by the
+mutation boundary:
 
-## Next Stage
+### Stage 04A - Planning + Preview
 
-No Stage 04 product implementation is active or authorized yet.
+- compose existing Stage 02 fingerprint preparation and Stage 03 lookup;
+- capture an exact AcoustID target/database snapshot including membership,
+  private path, length, and exact raw current AcoustID values;
+- retain malformed current values exactly enough to detect concurrent changes;
+- map only `acoustid_id` and `acoustid_fingerprint` to
+  `KEEP | PROPOSE | REVIEW | BLOCKED`;
+- add `AcoustIDTargetResult`;
+- render path-free/fingerprint-free preview;
+- perform zero database mutation.
 
-The next documentation stage should define the standalone workflow boundary for
-path-free preview, exact database mapping/planning, stale-state validation, and
-database-only application. It must preserve all-plan-before-first-write behavior,
-re-fetch exact target state before mutation, and re-verify generated source
-snapshots immediately before mutation.
+### Stage 04B - Verified Database Apply
 
-MusicBrainz candidate filtering, public command/configuration integration,
-provider/importer integration, release work, and audio-file writes remain outside
-that next stage unless a reviewed brief explicitly separates and authorizes them.
+- consume only fully prepared Stage 04A results;
+- perform global preflight of every selected target before the first mutation;
+- re-fetch exact target state and re-verify generated source snapshots;
+- treat any `REVIEW`, `BLOCKED`, stale target, stale current value, changed path,
+  or stale source as a complete pre-write blocker;
+- persist only planned `acoustid_id` / `acoustid_fingerprint` Item fields;
+- use target-level transactional/rollback semantics matching the established
+  library-identity philosophy;
+- never perform fingerprint/backend/network work or file writes.
+
+There is no partial or force behavior. A safe proposal elsewhere does not bypass
+a conflict.
+
+## Stage 04 Delivery Rule
+
+The Stage 04 documentation brief must be reviewed, CI-green, and squash-merged
+before either product branch begins.
+
+Then:
+
+1. implement/review/merge `feature/029-acoustid-stage-04a`;
+2. implement/review/merge `feature/029-acoustid-stage-04b` from the new `main`;
+3. record Stage 04 completion in one documentation-only follow-up.
+
+Public command/configuration integration and MusicBrainz filtering are not part
+of Stage 04.
 
 ## Stop Condition
 
-Do not begin Stage 04 product implementation until its design/brief has been
-reviewed, repository CI has passed, and the documentation PR has been
-squash-merged. Product implementation remains outside this chat.
+Do not begin Stage 04A product implementation until the current documentation
+brief passes review, repository CI, and squash merge. Do not begin Stage 04B
+until Stage 04A itself has passed review, CI, and squash merge. Product
+implementation remains outside this chat.
