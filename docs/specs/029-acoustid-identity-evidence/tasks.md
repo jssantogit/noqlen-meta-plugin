@@ -26,6 +26,9 @@
 - [x] Select direct bounded `fpcalc` without a new Python dependency.
 - [x] Define the Stage 02 existing-value, target-selection, fingerprint-backend,
   snapshot, privacy, test, allowlist, and reviewer brief.
+- [x] Implement Stage 02 externally, resolve bounded-runner review findings, pass
+  the supported CI matrix, and squash-merge the implementation.
+- [x] Record Stage 02 completion and synchronize context and handoff.
 
 ## Completed Stage 01: Domain And Policy
 
@@ -59,76 +62,77 @@
   command stage.
 - [ ] Update command/configuration drift contracts in the future command stage.
 
-## Active Stage 02: Existing Values And Target Selection
+## Completed Stage 02: Existing Values And Target Selection
 
-- [ ] Add AcoustID-specific immutable Album/singleton target kinds and selected
+- [x] Add AcoustID-specific immutable Album/singleton target kinds and selected
   Item/target values.
-- [ ] Reuse the existing fresh identity-library selector without modifying or
+- [x] Reuse the existing fresh identity-library selector without modifying or
   duplicating it.
-- [ ] Convert complete fresh Albums and singletons to AcoustID-specific targets.
-- [ ] Preserve stable `library-item:<id>` local keys.
-- [ ] Preserve Album-ID, singleton-ID, and disc/track/Item deterministic order.
-- [ ] Validate exact supported `Library`, `Album`, and `Item` types.
-- [ ] Refresh selected targets and reject missing targets or changed membership.
-- [ ] Retain media paths privately and exclude them from representations and
+- [x] Convert complete fresh Albums and singletons to AcoustID-specific targets.
+- [x] Preserve stable `library-item:<id>` local keys.
+- [x] Preserve Album-ID, singleton-ID, and disc/track/Item deterministic order.
+- [x] Validate exact supported `Library`, `Album`, and `Item` types.
+- [x] Refresh selected targets and reject missing targets or changed membership.
+- [x] Retain media paths privately and exclude them from representations and
   exceptions.
-- [ ] Add `missing`, `valid`, and `malformed` stored-value states.
-- [ ] Read and validate existing beets `acoustid_id` and
+- [x] Add `missing`, `valid`, and `malformed` stored-value states.
+- [x] Read and validate existing beets `acoustid_id` and
   `acoustid_fingerprint` fields.
-- [ ] Canonicalize only valid AcoustID UUIDs and never treat a stored ID as fresh
+- [x] Canonicalize only valid AcoustID UUIDs and never treat a stored ID as fresh
   recording evidence.
-- [ ] Reuse a valid existing fingerprint only with a finite positive Item
+- [x] Reuse a valid existing fingerprint only with a finite positive Item
   duration.
-- [ ] Prove that a valid reusable fingerprint avoids stat, backend factory,
+- [x] Prove that a valid reusable fingerprint avoids stat, backend factory,
   executable resolution, and subprocess work.
-- [ ] Prove that unauthorized missing or unusable material avoids all filesystem
+- [x] Prove that unauthorized missing or unusable material avoids all filesystem
   and backend work.
-- [ ] Add Album, singleton, duplicate-query, ordering, membership-change,
+- [x] Add Album, singleton, duplicate-query, ordering, membership-change,
   missing-field, malformed-value, and privacy tests at supported beets
   boundaries.
 
-## Active Stage 02: Fingerprint Backend
+## Completed Stage 02: Fingerprint Backend
 
 - [x] Complete the supported-Python/backend decision between direct `fpcalc` and
   an optional Python wrapper.
 - [x] Select direct `fpcalc` with no `pyacoustid` dependency.
-- [ ] Add an injectable `FingerprintBackend` protocol and redacted backend
+- [x] Add an injectable `FingerprintBackend` protocol and redacted backend
   result.
-- [ ] Add a lazy backend factory used only for explicitly authorized generation.
-- [ ] Invoke the configured executable with exactly:
+- [x] Add a lazy backend factory used only for explicitly authorized generation.
+- [x] Invoke the configured executable with exactly:
   `<fpcalc> -json -length 120 -- <private path>`.
-- [ ] Use one argument vector, `shell=False`, and disconnected stdin.
-- [ ] Add a timeout-bounded subprocess runner.
-- [ ] Drain stdout and stderr concurrently.
-- [ ] Cap retained stdout at 1 MiB and retained stderr at 64 KiB.
-- [ ] Terminate and then kill after bounded grace on timeout or output overflow.
-- [ ] Remove `NOQLENMETA_ACOUSTID_API_KEY` from the child environment without
+- [x] Use one argument vector, `shell=False`, and disconnected stdin.
+- [x] Add a timeout-bounded subprocess runner.
+- [x] Drain stdout and stderr concurrently with nonblocking descriptors only.
+- [x] Cap retained stdout at 1 MiB and retained stderr at 64 KiB.
+- [x] Terminate and then kill after bounded grace on timeout or output overflow.
+- [x] Bound the post-kill reap and all reader-thread joins.
+- [x] Remove `NOQLENMETA_ACOUSTID_API_KEY` from the child environment without
   logging or persisting its value.
-- [ ] Require zero exit status and strict bounded UTF-8 JSON parsing.
-- [ ] Validate finite positive duration and non-empty bounded fingerprint.
-- [ ] Map missing executable to `fingerprint_backend_unavailable`.
-- [ ] Map timeout, overflow, non-zero exit, malformed output, and invalid values
+- [x] Require zero exit status and strict bounded UTF-8 JSON parsing.
+- [x] Validate finite positive duration and non-empty bounded fingerprint.
+- [x] Map missing executable to `fingerprint_backend_unavailable`.
+- [x] Map timeout, overflow, non-zero exit, malformed output, and invalid values
   to `fingerprint_failed`.
-- [ ] Sanitize every backend error so it contains no path, command, executable,
+- [x] Sanitize every backend error so it contains no path, command, executable,
   key, fingerprint, stdout, stderr, or raw operating-system exception.
-- [ ] Add fake-runner production-backend tests and generic bounded-runner tests
+- [x] Add fake-runner production-backend tests and generic bounded-runner tests
   without requiring an actual `fpcalc` binary in CI.
 
-## Active Stage 02: Source Snapshots And Preparation
+## Completed Stage 02: Source Snapshots And Preparation
 
-- [ ] Acquire no-follow source snapshots containing device, inode, size, and
+- [x] Acquire no-follow source snapshots containing device, inode, size, and
   nanosecond mtime only.
-- [ ] Reject symlinks, directories, non-regular files, malformed stat values,
+- [x] Reject symlinks, directories, non-regular files, malformed stat values,
   and unsupported no-follow semantics.
-- [ ] Acquire snapshots immediately before and after backend execution.
-- [ ] Require exact pre/post equality before generated material exists.
-- [ ] Return `stale_source_file` and discard generated output on mismatch.
-- [ ] Add a separate exact snapshot verification helper for a later application
+- [x] Acquire snapshots immediately before and after backend execution.
+- [x] Require exact pre/post equality before generated material exists.
+- [x] Return `stale_source_file` and discard generated output on mismatch.
+- [x] Add a separate exact snapshot verification helper for a later application
   stage.
-- [ ] Build generated `AcoustIDFingerprintMaterial` only after stable snapshots.
-- [ ] Build reused material without any source snapshot.
-- [ ] Add lazy preparation results with exact stable reasons.
-- [ ] Prove that no preparation outcome exposes private material.
+- [x] Build generated `AcoustIDFingerprintMaterial` only after stable snapshots.
+- [x] Build reused material without any source snapshot.
+- [x] Add lazy preparation results with exact stable reasons.
+- [x] Prove that no preparation outcome exposes private material.
 
 ## Completed Stage 01: Evidence Classification
 
@@ -145,8 +149,10 @@
 - [ ] Parse and normalize bounded service payloads only in the future HTTPS
   transport stage.
 
-## Future Stage: AcoustID HTTPS Transport
+## Next Stage: AcoustID HTTPS Transport
 
+- [ ] Define and review the Stage 03 bounded HTTPS transport and lookup brief
+  before any product implementation begins.
 - [ ] Add an injectable HTTPS form-POST lookup transport.
 - [ ] Resolve `NOQLENMETA_ACOUSTID_API_KEY` only at the service boundary.
 - [ ] Request only `meta=recordingids`.
@@ -211,7 +217,8 @@
 
 - [x] Keep Stage 01 and Stage 02 planning free of new AcoustID dependencies.
 - [ ] Keep base installation free of unnecessary AcoustID dependencies.
-- [ ] Test Python 3.10-3.14 and beets `>=2.12,<3` boundaries.
+- [ ] Test Python 3.10-3.14 and beets `>=2.12,<3` boundaries for the complete
+  integrated feature before release.
 - [ ] Build wheel and sdist and inspect optional dependency metadata and archive
   contents after the full feature is integrated.
 - [ ] Clean-install base, Discogs, and AcoustID-capable variants as applicable.
