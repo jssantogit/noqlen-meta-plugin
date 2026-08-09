@@ -12,67 +12,65 @@ Block 029 — AcoustID recording-level identity evidence.
 
 Planning, contract freeze, and Stages 01-04 are integrated into `main`.
 
+Current `main` baseline:
+
 ```text
-Planning:            6ad71d68347e23cecd45225900a10a8287acca54
-Contracts:           9945ed9cd693abc04b250d10239151b3281a7762
-Stage 01 code:       26506a79f23a899a810640b1a2bfa8d80a5c4c20
-Stage 01 completion: 2f01c1d070d93b78bfba269439ca7b44de5c3e87
-Stage 02 code:       5c7bd25f7ce1a4880b96f3dea25a2f7dd9d9d5bc
-Stage 02 completion: 8fc5cff7deefa3f24e9a092f96fdcd0035eb7d54
-Stage 03 code:       45c6dc20666b79bb057e34596e131a109ac22b38
-Stage 03 completion: f7f29052ad9fc2c3f919e14991908d08a4bf0c4f
-Stage 04 brief:      05738b320dca4eaa12cd84f7e02dc7fa919b58e8
-Stage 04A code:      06951e1d3286d418ef52d8979a6cf3965658e28e
-Stage 04B code:      24cc1a9c4def5445c63687c781df6af66807ddfa
+f508d30c740891e04c92068d5eafbf9123896431
 ```
 
 Version 1.0.0 remains the released baseline. Block 029 is intended for the 1.1.0 release family; no version bump has been made.
 
-## Normative Artifacts
+## Normative Precedence
 
 1. `docs/specs/029-acoustid-identity-evidence/contracts.md`
 2. `docs/adr/0025-acoustid-recording-evidence.md`
 3. the current reviewed stage brief
-4. older requirements/design documents
-
-`contracts.md` wins on conflict.
+4. older requirements/design wording
 
 ## Delivered Through Stage 04
 
-- immutable AcoustID/fingerprint/evidence domain and internal policy;
-- fresh Album/singleton target selection and exact refresh;
-- valid stored fingerprint reuse and explicitly authorized bounded `fpcalc` generation;
-- exact generated-source snapshots and verification;
-- bounded HTTPS AcoustID lookup with strict parsing, pacing, caching, privacy, and no retry;
-- recording-level evidence classification;
+The implemented AcoustID core provides:
+
+- existing-library Album/singleton selection and exact refresh;
+- stored fingerprint reuse and explicitly authorized bounded `fpcalc` generation;
+- generated-source stability snapshots;
+- bounded HTTPS `recordingids` lookup with strict parsing, privacy, pacing, caching, and no retry;
+- decisive/ambiguous/no-match/unavailable recording evidence;
 - exact standalone planning snapshots and canonical database plans;
 - path-free/fingerprint-free preview;
-- database-only verified application of `acoustid_id` and `acoustid_fingerprint`;
-- global preflight before first write, target savepoints, rollback, post-commit verification, and conservative uncertain-commit reporting.
+- verified database-only application of `acoustid_id` and `acoustid_fingerprint` with global preflight, narrow persistence, target savepoints, rollback, post-commit verification, and conservative uncertain-commit reporting.
 
 AcoustID still adds no structural score, writes no MusicBrainz field directly, chooses no release occurrence, writes no audio file, submits no fingerprint, and does not replace native beets `chroma` importer behavior.
 
-## Next Stage
+## Active Stage 05 — Final Integration
 
-The next implementation boundary is the **pure MusicBrainz recording-compatibility filter**.
+Stage 05 is the **last product implementation stage** for Block 029. There is no Stage 06.
 
-It should:
+Approved brief:
 
-- map decisive AcoustID evidence to local-key recording expectations;
-- run only after existing MusicBrainz candidate structure/assignments are evaluated;
-- preserve every existing structural score component and threshold;
-- treat unavailable, no-match, and ambiguous AcoustID evidence as neutral;
-- reject complete candidates that contradict decisive recording evidence;
-- return the frozen conflict reason when decisive evidence rejects every candidate;
-- never allow AcoustID to rescue weak structure, weak assignments, incomplete assignments, or insufficient margin;
-- write no MusicBrainz or audio-file fields.
+```text
+docs/specs/029-acoustid-identity-evidence/stage-05-final-integration.md
+```
 
-Public command/configuration integration remains later.
+It combines the remaining product work in one implementation PR:
+
+- pure decisive-recording expectations and MusicBrainz candidate compatibility filtering after existing structural evaluation;
+- unchanged structural scores, assignments, thresholds, and safety gates;
+- frozen `acoustid_recording_conflict` when decisive evidence rejects all candidates;
+- optional AcoustID evidence in existing-library `--identity`, with no missing-fingerprint generation;
+- standalone `--acoustid` / `--fingerprint-missing` command integration using Stage 02-04 boundaries;
+- exact public `acoustid` configuration subtree validated through `AcoustIDSettings.from_mapping()`;
+- early invalid-option rejection and lazy backend/environment/network behavior;
+- no importer AcoustID behavior, no file writes, no direct MusicBrainz writes, no new dependency, and no release/version work.
+
+## After Stage 05
+
+After the Stage 05 product PR merges, Block 029 product implementation is complete. Remaining work is completion/release readiness only: public docs, changelog, built-artifact validation, final review, and any later version/tag/publication decision.
 
 ## Tool Boundary
 
-Repository changes made from the project chat remain documentation-only. Product implementation continues externally after its stage brief is approved.
+Repository changes made from the project chat remain documentation-only. Product implementation continues externally after the Stage 05 brief is reviewed, CI-green, and merged.
 
 ## Stop Condition
 
-Do not begin the MusicBrainz compatibility-filter product implementation until its narrow stage brief is reviewed, CI-green, and merged.
+Do not begin Stage 05 product implementation until the current Stage 05 documentation PR passes review, repository CI, and squash merge.
