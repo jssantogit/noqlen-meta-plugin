@@ -2,63 +2,47 @@
 
 ## State
 
-Noqlen Meta 1.0.0 is released. Block 029 planning, contract freeze, and AcoustID
-Stages 01-03 are merged into `main`.
+Noqlen Meta 1.0.0 is released. Block 029 planning/contracts and AcoustID Stages 01-04 are integrated into `main`.
 
 ```text
 Planning:            6ad71d68347e23cecd45225900a10a8287acca54
 Contracts:           9945ed9cd693abc04b250d10239151b3281a7762
-Stage 01 brief:      262aa688ac552b7ebb19156ed3c9a58a0f24ed06
 Stage 01 code:       26506a79f23a899a810640b1a2bfa8d80a5c4c20
 Stage 01 completion: 2f01c1d070d93b78bfba269439ca7b44de5c3e87
-Stage 02 brief:      56082b173c46d0ef47fc5808a9ababbc0004aa38
 Stage 02 code:       5c7bd25f7ce1a4880b96f3dea25a2f7dd9d9d5bc
 Stage 02 completion: 8fc5cff7deefa3f24e9a092f96fdcd0035eb7d54
-Stage 03 brief:      ad06a3e3a61cbdb8b506b14afbfc72b1d18e75ee
 Stage 03 code:       45c6dc20666b79bb057e34596e131a109ac22b38
 Stage 03 completion: f7f29052ad9fc2c3f919e14991908d08a4bf0c4f
+Stage 04 brief:      05738b320dca4eaa12cd84f7e02dc7fa919b58e8
+Stage 04A code:      06951e1d3286d418ef52d8979a6cf3965658e28e
+Stage 04B code:      24cc1a9c4def5445c63687c781df6af66807ddfa
 ```
 
-PR #12 delivered Stage 03 from reviewed head
-`89bbef8cd4588ec904f71cafa5a1e772f449b6ff`; CI run 59 passed all nine jobs.
-PR #13 then recorded Stage 03 completion.
+Stage 04A was delivered by PR #15 from reviewed head `7957afb3b122a6e0a79a2174eb624efbcd608ba1`; CI run 65 passed before squash merge.
 
-The current documentation branch is:
+Stage 04B was delivered by PR #16 from final reviewed head `2d887ec4ad9cd9945e097133a66b2fc86dae1268`; CI run 67 passed before squash merge.
 
-```text
-docs/029-acoustid-stage-04-workflow
-```
+ADR 0025 remains Accepted. `contracts.md` remains normative.
 
-It proposes the single Stage 04 design split into 04A Planning + Preview and 04B
-Verified Database Application.
-
-ADR 0025 remains Accepted. `contracts.md` remains the normative product contract.
-
-## Documentation-Only Chat Rule
-
-Repository changes performed from this project chat are limited to specs, stage
-briefs, ADRs, context/handoff, completion records, and documentation-only PR
-administration. Product implementation happens outside this chat after its brief
-is approved.
-
-## Accepted Product Architecture
+## Delivered Architecture
 
 AcoustID is recording-level identity evidence, not an ordinary metadata provider.
-The complete intended flow remains:
 
-- existing-library Albums and singletons;
-- reuse or explicitly authorized local generation of fingerprint material;
-- bounded HTTPS lookup with `meta=recordingids`;
+The implemented standalone core now provides:
+
+- fresh existing-library Album/singleton targets;
+- stored fingerprint reuse and explicitly authorized bounded local generation;
+- exact generated-source stability checks;
+- bounded HTTPS `recordingids` lookup;
+- decisive/ambiguous/no-match/unavailable recording evidence;
+- exact standalone planning snapshots;
+- `KEEP | PROPOSE | REVIEW | BLOCKED` database plans limited to `acoustid_id` and `acoustid_fingerprint`;
 - path-free/fingerprint-free preview;
-- database-only `acoustid_id` and `acoustid_fingerprint` application;
-- optional recording compatibility filtering for complete MusicBrainz release
-  candidates.
+- verified database-only application with global preflight, exact stale checks, narrow SQL, per-target savepoints, rollback, fresh post-commit verification, and accurate uncertain-commit reporting.
 
-It never adds structural score, writes MusicBrainz fields directly, chooses a
-release occurrence, writes audio files, submits fingerprints, or replaces native
-beets `chroma` importer behavior.
+No AcoustID stage so far writes audio files or MusicBrainz fields, submits fingerprints, modifies importer/autotagger behavior, or adds structural score.
 
-Frozen standalone options remain:
+Frozen future standalone options remain:
 
 ```text
 --acoustid
@@ -71,127 +55,24 @@ Frozen service credential remains:
 NOQLENMETA_ACOUSTID_API_KEY
 ```
 
-## Completed Stage 01
+## Review Note From Stage 04B
 
-Stage 01 owns canonical AcoustID/recording identifiers, immutable redacted
-fingerprint/evidence values, bounded deterministic evidence classification, and
-strict internal settings/defaults.
-
-## Completed Stage 02
-
-Stage 02 owns fresh Album/singleton target selection/conversion, exact refresh,
-stored-value validation, lazy fingerprint reuse, explicitly authorized bounded
-direct `fpcalc`, and no-follow generated-source snapshots/verification.
-
-## Completed Stage 03
-
-Stage 03 owns lazy client-key resolution, exact bounded HTTPS POST lookup,
-strict retained schema, no retry, verified TLS, fail-closed redirects,
-request/response caps, sequential monotonic pacing, process-local digest cache,
-Stage 01 evidence classification reuse, sanitized failures, and fully offline
-normal tests.
-
-## Proposed Stage 04 Design
-
-Document:
-
-```text
-docs/specs/029-acoustid-identity-evidence/
-  stage-04-preview-mapping-database-application.md
-```
-
-Stage 04 is deliberately one design with two sequential implementation PRs.
-
-### 04A - Planning + Preview
-
-Purpose: create the complete immutable standalone AcoustID result without any
-beets database mutation.
-
-Key decisions:
-
-- compose Stage 02 fingerprint preparation and Stage 03 lookup; do not duplicate
-  them;
-- add an exact AcoustID planning snapshot with target kind, membership/order,
-  Item IDs, private path, length, and exact raw current `acoustid_id` /
-  `acoustid_fingerprint`;
-- preserve raw malformed current state so different malformed values are not
-  treated as equal during stale checks;
-- map only the two frozen AcoustID Item fields;
-- states remain `KEEP | PROPOSE | REVIEW | BLOCKED`;
-- decisive evidence alone may propose `acoustid_id`;
-- generated/valid fingerprint material may propose `acoustid_fingerprint` even
-  when lookup is unavailable;
-- any different non-empty current value is `REVIEW`, never overwritten;
-- add `AcoustIDTargetResult` containing target, exact snapshot, per-track
-  outcomes/evidence, database plan, and generated-source snapshots;
-- preview is pure, path-free, fingerprint-free, and performs no further I/O;
-- 04A performs zero database mutation.
-
-### 04B - Verified Database Application
-
-Purpose: apply only already-prepared 04A plans.
-
-Key decisions:
-
-- accept the complete target-result application unit;
-- perform canonical-plan validation and stale/source preflight for every target
-  before the first mutation;
-- detect duplicate target/Item identities;
-- refresh via the existing AcoustID refresh boundary;
-- require exact equality for membership/order/path/length/raw current AcoustID
-  values;
-- re-verify every generated Stage 02 source snapshot;
-- any `REVIEW`, `BLOCKED`, stale target, changed current value, changed path, or
-  stale source blocks the complete unit before the first store;
-- persist only fields marked `PROPOSE` and only
-  `acoustid_id`/`acoustid_fingerprint`;
-- avoid broad stores that could leak unrelated dirty Item state;
-- use target-level transaction/savepoint, in-transaction verification, rollback,
-  fresh post-commit verification, and normal database-change notification
-  semantics;
-- no backend/network work and no audio-file writes;
-- no promise to roll back targets already committed if a later unexpected target
-  failure occurs; report committed state accurately, matching the existing
-  library-identity philosophy.
-
-There is no force or partial behavior.
-
-## Proposed Product Sequence After Brief Merge
-
-```text
-feature/029-acoustid-stage-04a
-  -> Planning + Preview only
-  -> review + full CI + squash merge
-
-feature/029-acoustid-stage-04b
-  -> Database Application only
-  -> branch from new main
-  -> review + full CI + squash merge
-
-then documentation-only Stage 04 completion record
-```
-
-Do not start 04B before 04A is merged.
-
-## Explicit Stage 04 Exclusions
-
-- command/parser/dispatch integration;
-- public AcoustID configuration subtree;
-- MusicBrainz compatibility filtering;
-- ordinary provider/importer integration;
-- dependency/package/workflow/version/release changes;
-- public docs/changelog;
-- audio-file writes or fingerprint submission.
+External review found and fixed one commit-state blocker before merge. Releasing the target savepoint is not proof that the root transaction committed. Root transaction exit failures now report `COMMIT_UNCERTAIN`; only earlier targets with confirmed commits are counted as committed.
 
 ## Next Repository Action
 
-1. review the Stage 04 documentation diff;
-2. run repository CI on the documentation PR;
-3. squash-merge the brief only after PASS;
-4. then prepare the external OpenCode implementation prompt for 04A only.
+Define the narrow next stage for **MusicBrainz recording-compatibility filtering**.
 
-## Stop Condition
+The next stage must remain pure with respect to persistence and should only:
 
-No Stage 04 product code is authorized until the current documentation PR has
-passed review, CI, and squash merge. After that, only 04A is authorized first;
-04B remains blocked until 04A is separately accepted and merged.
+1. derive recording expectations from decisive AcoustID evidence;
+2. compare those expectations against already structurally evaluated complete MusicBrainz candidates/assignments;
+3. reject incompatible complete candidates without changing structural scores;
+4. treat non-decisive AcoustID evidence as neutral;
+5. surface the frozen `acoustid_recording_conflict` outcome when decisive evidence rejects every candidate.
+
+It must not yet add public command/configuration integration.
+
+## Documentation-Only Chat Rule
+
+Repository changes performed from this project chat remain limited to specifications, stage briefs, ADR/context/handoff/completion records, and documentation-only PR administration. Product code continues to be implemented externally after the relevant brief is accepted.

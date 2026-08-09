@@ -25,6 +25,11 @@
 - [x] Pass Stage 03 CI across supported Python/beets, docs, hygiene, and package
   jobs and squash-merge PR #12.
 - [x] Record Stage 03 completion and synchronize context and handoff.
+- [x] Define and merge the Stage 04 standalone workflow brief.
+- [x] Implement/review/merge Stage 04A Planning + Preview through PR #15.
+- [x] Implement/review/merge Stage 04B Verified Database Application through PR #16.
+- [x] Resolve Stage 04B uncertain-commit reporting before merge.
+- [x] Record Stage 04 completion and synchronize context/handoff.
 
 ## Completed Stage 01: Domain And Internal Configuration
 
@@ -37,11 +42,7 @@
 - [x] Reject conflicting duplicate AcoustID result groups.
 - [x] Require evidence counts/support/margins to agree with retained groups.
 - [x] Add internal immutable AcoustID settings/defaults with subsystem disabled.
-- [x] Validate every boolean, integer, finite-number, threshold, timeout, rate,
-  count, cache, and non-empty `fpcalc` setting.
-- [x] Keep the client key outside settings and avoid environment access.
-- [ ] Add `AcoustIDTargetResult` only in the workflow stage that owns exact
-  database snapshots and plans.
+- [x] Add `AcoustIDTargetResult` in Stage 04A with exact database snapshots and plans.
 - [ ] Integrate the AcoustID subtree into public plugin defaults only with the
   later command/public-configuration stage.
 - [ ] Add dedicated `--acoustid` / `--fingerprint-missing` authority only in the
@@ -135,30 +136,34 @@
 - [x] Add deterministic fake-clock/fake-transport/request/response/privacy tests.
 - [x] Keep normal CI fully offline with no mandatory live service test.
 
-## Next Stage: Preview, Mapping, And Database Application
+## Completed Stage 04: Planning, Preview, And Verified Database Application
 
-- [ ] Define and review the Stage 04 workflow brief before product
-  implementation begins.
-- [ ] Decide the smallest safe Stage 04 boundary between standalone preview,
-  database planning, and application without pulling command or MusicBrainz
-  integration into scope.
-- [ ] Render path-free and fingerprint-free track and target summaries.
-- [ ] Map only `acoustid_id` and `acoustid_fingerprint` to standalone AcoustID
+- [x] Define and review one Stage 04 brief split by the mutation boundary.
+- [x] Render path-free and fingerprint-free track and target summaries.
+- [x] Map only `acoustid_id` and `acoustid_fingerprint` to standalone AcoustID
   database plans.
-- [ ] Add `AcoustIDTargetResult` with selected target, exact database snapshot,
+- [x] Add `AcoustIDTargetResult` with selected target, exact database snapshot,
   per-track evidence, plan, and generated-source snapshots.
-- [ ] Preserve existing non-empty conflicts as review blockers.
-- [ ] Plan every selected target before the first store.
-- [ ] Re-fetch and verify exact database target snapshots before mutation.
-- [ ] Re-verify generated source-file snapshots before mutation.
-- [ ] Block the complete application unit on stale target, membership, path,
-  source-file, or current-value changes.
-- [ ] Store only planned Item database fields.
-- [ ] Prove AcoustID mode never writes audio files or MusicBrainz fields.
-- [ ] Add success, no-op, conflict, stale-state, and rollback-before-first-write
-  workflow tests.
+- [x] Preserve existing non-empty conflicts as review blockers.
+- [x] Capture exact raw malformed current values for stale detection.
+- [x] Plan every selected target before the first store.
+- [x] Re-fetch and verify exact database target snapshots before mutation.
+- [x] Re-verify generated source-file snapshots before mutation.
+- [x] Block the complete application unit on stale target, membership, path,
+  source-file, current-value, `REVIEW`, or `BLOCKED` state before the first write.
+- [x] Reject duplicate target/item identities and noncanonical plans before write.
+- [x] Persist only fields marked `PROPOSE` using narrow SQL.
+- [x] Isolate unrelated dirty Item state from AcoustID persistence.
+- [x] Use per-target savepoints with in-transaction revalidation and rollback.
+- [x] Re-read and verify committed values before notifications.
+- [x] Notify `database_change` only for successfully committed changed Items.
+- [x] Report root transaction uncertainty conservatively without treating savepoint
+  release as proof of commit.
+- [x] Prove AcoustID Stage 04 never writes audio files or MusicBrainz fields.
+- [x] Keep normal tests independent of live network, API keys, real `fpcalc`, and
+  audio-file writes.
 
-## Future Stage: MusicBrainz Identity Integration
+## Next Stage: MusicBrainz Identity Integration
 
 - [ ] Add pure mapping from decisive AcoustID evidence to local-key recording
   expectations.
@@ -188,7 +193,7 @@
 
 ## Packaging And Compatibility
 
-- [x] Keep Stages 01-03 free of new AcoustID Python dependencies.
+- [x] Keep Stages 01-04 free of new AcoustID Python dependencies.
 - [ ] Keep base installation free of unnecessary AcoustID dependencies.
 - [ ] Test Python 3.10-3.14 and beets `>=2.12,<3` boundaries for the complete
   integrated feature before release.
