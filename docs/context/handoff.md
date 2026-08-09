@@ -2,9 +2,8 @@
 
 ## State
 
-Noqlen Meta 1.0.0 is released. Block 029 planning, contract freeze, Stage 01,
-Stage 02 implementation, and the Stage 02 completion record are merged into
-`main`.
+Noqlen Meta 1.0.0 is released. Block 029 planning, contract freeze, and AcoustID
+Stages 01-03 are merged into `main`.
 
 ```text
 Planning:            6ad71d68347e23cecd45225900a10a8287acca54
@@ -15,14 +14,18 @@ Stage 01 completion: 2f01c1d070d93b78bfba269439ca7b44de5c3e87
 Stage 02 brief:      56082b173c46d0ef47fc5808a9ababbc0004aa38
 Stage 02 code:       5c7bd25f7ce1a4880b96f3dea25a2f7dd9d9d5bc
 Stage 02 completion: 8fc5cff7deefa3f24e9a092f96fdcd0035eb7d54
+Stage 03 brief:      ad06a3e3a61cbdb8b506b14afbfc72b1d18e75ee
+Stage 03 code:       45c6dc20666b79bb057e34596e131a109ac22b38
 ```
 
-PR #9 delivered Stage 02 product code from reviewed head
-`32cb2b2e275e9bf3a0b5e495d3e24ae8511344b0`; CI run 53 passed. PR #10 recorded
-Stage 02 completion; CI run 55 passed and the PR was squash-merged on 2026-08-09.
+PR #12 delivered Stage 03 from reviewed head
+`89bbef8cd4588ec904f71cafa5a1e772f449b6ff`. CI run 59 passed all nine jobs and
+the PR was squash-merged on 2026-08-09.
 
-ADR 0025 remains Accepted. `contracts.md` remains the normative product
-contract.
+The current documentation-only branch records Stage 03 completion and
+synchronizes project context before Stage 04 is designed.
+
+ADR 0025 remains Accepted. `contracts.md` remains the normative product contract.
 
 ## Documentation-Only Chat Rule
 
@@ -43,12 +46,13 @@ is approved.
 - `docs/specs/029-acoustid-identity-evidence/stage-01-completion.md`
 - `docs/specs/029-acoustid-identity-evidence/stage-02-existing-values-targets-backend.md`
 - `docs/specs/029-acoustid-identity-evidence/stage-02-completion.md`
-- proposed: `docs/specs/029-acoustid-identity-evidence/stage-03-https-transport-lookup.md`
+- `docs/specs/029-acoustid-identity-evidence/stage-03-https-transport-lookup.md`
+- `docs/specs/029-acoustid-identity-evidence/stage-03-completion.md`
 
 ## Accepted Product Architecture
 
-AcoustID is recording-level identity evidence, not an ordinary metadata
-provider. The complete intended flow remains:
+AcoustID is recording-level identity evidence, not an ordinary metadata provider.
+The complete intended flow remains:
 
 - existing-library Albums and singletons;
 - reuse or explicitly authorized local generation of fingerprint material;
@@ -98,44 +102,46 @@ Stage 02 provides:
 
 The existing identity-library selector was not modified.
 
-## Proposed Stage 03
+## Completed Stage 03
 
-The next product stage is not authorized yet. Its proposed brief is:
+Stage 03 provides:
 
-```text
-docs/specs/029-acoustid-identity-evidence/stage-03-https-transport-lookup.md
-```
+- lazy `NOQLENMETA_ACOUSTID_API_KEY` resolution only when network lookup is
+  actually needed;
+- exact bounded HTTPS form POST to the frozen AcoustID lookup endpoint;
+- no retry, fail-closed redirects, and verified TLS;
+- strict request and incremental response byte caps;
+- strict UTF-8 JSON/service/schema validation;
+- bounded retention only of AcoustID UUID, score, and recording MBIDs;
+- reuse of the existing Stage 01 evidence classifier;
+- monotonic sequential pacing within the 3 req/s ceiling;
+- process-local digest cache without raw fingerprint or credential material;
+- sanitized operational failures, including `IncompleteRead`, without caching;
+- separately sanitized unexpected boundary/programmer failures;
+- deterministic offline coverage with no mandatory live network test.
 
-The AcoustID service contract was revalidated against the official web-service
-documentation on 2026-08-09.
+## Next Stage
 
-The proposed Stage 03 boundary freezes:
+No Stage 04 implementation is authorized yet.
 
-- lazy application-key resolution only at network lookup;
-- exact POST to `https://api.acoustid.org/v2/lookup`;
-- exact form fields: client, rounded duration, fingerprint,
-  `meta=recordingids`, `format=json`;
-- no retry and fail-closed redirect behavior;
-- sequential monotonic pacing at no more than 3 requests/second;
-- 2 MiB request and 1 MiB response caps;
-- strict UTF-8 JSON plus service/schema validation;
-- retention only of result AcoustID UUID, score, and recording MBIDs;
-- bounded parsing by existing `max_results` and
-  `max_recordings_per_result` settings;
-- framed SHA-256 process-local cache key without raw fingerprint or key;
-- cache of successful parsed lookups only;
-- safe use of existing reasons (`lookup_disabled`, `client_key_missing`,
-  `lookup_failed`) and existing Stage 01 classifier;
-- deterministic fake-clock/fake-transport tests with normal CI fully offline.
+The next documentation stage should define the standalone workflow around:
 
-## Preserved Stage 03 Exclusions
+- path-free and fingerprint-free preview;
+- exact database mapping and immutable plans;
+- `AcoustIDTargetResult` ownership;
+- exact selected-target/database snapshots;
+- all-plan-before-first-write behavior;
+- re-fetch and verification of target state immediately before mutation;
+- re-verification of generated source snapshots before mutation;
+- database-only writes of planned `acoustid_id` and `acoustid_fingerprint`
+  fields;
+- conflict, stale-state, no-op, and rollback-before-first-write tests.
 
-No Stage 03 product branch may add database planning/application, command or
-public-config integration, preview rendering, MusicBrainz filtering, provider or
-importer registration, fingerprint submission, User API-key handling,
-dependencies, package/workflow/release/public-doc changes, or audio-file writes.
+MusicBrainz candidate filtering, command/public configuration integration,
+provider/importer integration, dependencies, release work, and audio-file writes
+remain deferred unless a later reviewed stage explicitly authorizes them.
 
 ## Stop Condition
 
-Review, pass CI, and squash-merge the Stage 03 brief before creating its product
-branch. Stage 03 implementation remains outside this chat.
+Design and review the Stage 04 documentation before creating its external product
+branch. The documentation must pass repository CI and be squash-merged first.
