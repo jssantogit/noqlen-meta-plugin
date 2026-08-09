@@ -2,9 +2,8 @@
 
 ## State
 
-Noqlen Meta 1.0.0 is released. Block 029 planning, contract freeze, Stage 01
-brief, Stage 01 implementation, and the Stage 01 completion record are merged
-into `main`.
+Noqlen Meta 1.0.0 is released. Block 029 planning, contract freeze, Stage 01,
+and Stage 02 product implementation are merged into `main`.
 
 ```text
 Planning:            6ad71d68347e23cecd45225900a10a8287acca54
@@ -12,10 +11,13 @@ Contracts:           9945ed9cd693abc04b250d10239151b3281a7762
 Stage 01 brief:      262aa688ac552b7ebb19156ed3c9a58a0f24ed06
 Stage 01 code:       26506a79f23a899a810640b1a2bfa8d80a5c4c20
 Stage 01 completion: 2f01c1d070d93b78bfba269439ca7b44de5c3e87
+Stage 02 brief:      56082b173c46d0ef47fc5808a9ababbc0004aa38
+Stage 02 code:       5c7bd25f7ce1a4880b96f3dea25a2f7dd9d9d5bc
 ```
 
-PR #5 delivered the Stage 01 implementation and passed CI run 45. PR #6
-recorded Stage 01 completion and passed CI run 47.
+PR #9 delivered the Stage 02 implementation from reviewed head
+`32cb2b2e275e9bf3a0b5e495d3e24ae8511344b0`. CI run 53 passed on rerun after a
+GitHub Actions outage and the PR was squash-merged on 2026-08-09.
 
 ADR 0025 remains Accepted. `contracts.md` remains the normative product
 contract.
@@ -52,6 +54,8 @@ approved.
   `docs/specs/029-acoustid-identity-evidence/stage-01-completion.md`
 - Stage 02 brief:
   `docs/specs/029-acoustid-identity-evidence/stage-02-existing-values-targets-backend.md`
+- Stage 02 completion record:
+  `docs/specs/029-acoustid-identity-evidence/stage-02-completion.md`
 
 ## Accepted Product Architecture
 
@@ -107,136 +111,95 @@ NOQLENMETA_ACOUSTID_API_KEY
 
 ## Completed Stage 01
 
-The merged Stage 01 implementation provides:
+Stage 01 provides the side-effect-free domain, evidence-policy, and internal
+configuration foundation: canonical identifiers, redacted fingerprint-bearing
+values, bounded deterministic result normalization, pure recording-support
+classification, and strict immutable settings/defaults.
 
-- immutable fingerprint-origin, verdict, reason, fingerprint-material,
-  result-group, evidence-policy, source-snapshot, and track-evidence values;
-- canonical AcoustID UUID and MusicBrainz recording-MBID validation;
-- redacted fingerprint representations and generic validation errors;
-- conflict-safe and deterministic result normalization;
-- pure highest-support, score, tie, and margin classification;
-- exact internal immutable settings and fresh defaults;
-- strict synthetic offline tests.
+## Completed Stage 02
 
-Review amendments established these important invariants:
-
-- conflicting duplicate AcoustID groups are rejected;
-- padded `.` and `..` local keys are rejected;
-- decisive evidence cannot hide tied or stronger competing recordings;
-- eligible counts, top support, runner-up support, and margin must agree with the
-  result groups;
-- fingerprints do not appear in representations or validation errors.
-
-## Stage 02 Documentation Decision
-
-The Stage 02 brief covers the local existing-value and fingerprint-generation
-boundary only.
+Stage 02 provides the local existing-library and fingerprint-generation
+boundary:
 
 ### Target selection
 
-The implementation must reuse the existing fresh identity-library selector in:
+- reuses `beetsplug/noqlenmeta/identity/library.py` unchanged;
+- converts complete fresh Albums and fresh singletons into AcoustID targets;
+- preserves Album, singleton, and Item deterministic ordering;
+- preserves stable `library-item:<id>` local keys;
+- rejects missing targets and membership changes during refresh;
+- retains media paths privately without display conversion.
 
-```text
-beetsplug/noqlenmeta/identity/library.py
-```
+### Existing values and lazy preparation
 
-It converts those selected values into AcoustID-specific immutable targets. It
-must not duplicate or modify the selector.
-
-The retained behavior is:
-
-- Item query expansion to complete fresh Albums and fresh singletons;
-- Album order by Album database ID;
-- singleton order by Item database ID;
-- Album Item order by disc, track, then Item ID;
-- stable `library-item:<id>` local keys;
-- changed membership rejected during refresh.
-
-### Existing values
-
-The stage validates current beets `acoustid_id` and
-`acoustid_fingerprint` values as `missing`, `valid`, or `malformed`.
-
-A stored AcoustID UUID is current state only. It is not fresh recording
-evidence. A valid stored fingerprint may be reused only with a finite positive
-Item duration.
-
-A reusable fingerprint must avoid backend creation, executable resolution,
-filesystem stat, and subprocess work. Missing or unusable material is generated
-only when settings or a future invocation override explicitly authorize it.
+- validates `acoustid_id` and `acoustid_fingerprint` as `missing`, `valid`, or
+  `malformed`;
+- treats a stored AcoustID UUID as current state only, never fresh evidence;
+- reuses stored fingerprint material only with finite positive duration;
+- reusable material performs no stat, backend construction, executable
+  discovery, or subprocess work;
+- unauthorized missing or unusable material performs no filesystem/backend work;
+- authorized generation acquires exact pre/post source snapshots.
 
 ### Backend strategy
 
-The selected initial backend is a direct, injected `fpcalc` subprocess. No
-`pyacoustid` dependency is added.
-
-Frozen production argument vector for this stage:
+The production backend directly invokes:
 
 ```text
 <configured fpcalc> -json -length 120 -- <private media path>
 ```
 
-The runner is no-shell, timed, output-bounded, and sanitized. It caps retained
-stdout at 1 MiB and stderr at 64 KiB, terminates on timeout or overflow, and
-never exposes command, path, fingerprint, stdout, stderr, or raw operating-
-system errors.
+The runner is no-shell, disconnected-stdin, timeout-bounded, output-bounded,
+nonblocking, and sanitized. It caps retained stdout at 1 MiB and stderr at 64
+KiB. Termination, kill, post-kill reap, and reader cleanup are all bounded.
 
-The child environment must not contain `NOQLENMETA_ACOUSTID_API_KEY`. Stage 02
-does not resolve or use the service credential.
+`NOQLENMETA_ACOUSTID_API_KEY` is removed from the child environment without
+being resolved or used.
 
 ### Source stability
 
-Generated material requires no-follow regular-file snapshots immediately before
-and after backend execution. The exact device, inode, size, and nanosecond mtime
-values must match. Symlinks and unsupported snapshot semantics fail closed.
+Generated material requires equal no-follow regular-file snapshots immediately
+before and after backend execution. Device, inode, size, and nanosecond mtime are
+compared exactly. Symlinks and unsupported snapshot semantics fail closed.
 
-A separate verification helper re-acquires and compares the source snapshot for
-a future application stage, but Stage 02 performs no database application.
+A separate helper re-acquires and compares the generated source snapshot for a
+future application stage.
 
-## Stage 02 Expected Product Files
+## Preserved Stage 02 Exclusions
 
-```text
-beetsplug/noqlenmeta/acoustid/__init__.py
-beetsplug/noqlenmeta/acoustid/domain.py
-beetsplug/noqlenmeta/acoustid/library.py
-beetsplug/noqlenmeta/acoustid/backend.py
-tests/acoustid/test_domain.py
-tests/acoustid/test_library.py
-tests/acoustid/test_backend.py
-```
+Stage 02 performs no:
 
-A small test-only `tests/acoustid/conftest.py` is conditionally allowed. No
-identity-library file may change.
-
-## Stage 02 Explicit Exclusions
-
-- AcoustID HTTPS lookup and payload parsing;
+- AcoustID HTTPS lookup or service payload parsing;
 - service API-key resolution;
-- database mapping and application;
-- command parser and dispatch;
-- public configuration integration;
+- database mapping or application;
+- command parser/dispatch or public configuration integration;
 - MusicBrainz compatibility filtering;
-- ordinary provider and importer integration;
-- dependencies, optional extras, package metadata, workflows, public docs,
-  changelog, version, tag, and release changes;
+- ordinary provider/importer integration;
+- dependency, optional-extra, package metadata, workflow, version, tag, release,
+  README, changelog, or public-site changes;
 - audio-file writes.
 
-## External Review Gate
+## Next Documentation Stage
 
-The external Stage 02 branch must provide:
+No Stage 03 implementation is authorized yet.
 
-- focused domain, library, backend, evidence, and settings test results;
-- Ruff results for the AcoustID package and tests;
-- complete offline test-suite results;
-- contamination and diff checks;
-- a diff confined to the Stage 02 allowlist;
-- proof of lazy backend creation and no-file-work reuse paths;
-- proof of bounded runner timeout and stdout/stderr handling;
-- proof of no-follow snapshot behavior and stale rejection;
-- proof that no path, command, key, fingerprint, stdout, or stderr appears in
-  representations or errors.
+The next documentation task is to define Stage 03 for the bounded AcoustID HTTPS
+transport and lookup-normalization boundary. The brief should cover:
+
+- API-key resolution only at the service transport boundary;
+- bounded form-POST lookup requesting only `meta=recordingids`;
+- sequential request pacing using monotonic time;
+- request/response limits and strict UTF-8 JSON/schema validation;
+- process-local caching keyed without exposing raw fingerprint material;
+- deterministic fake-clock/fake-transport pacing, cache, and failure tests;
+- safe mapping from transport/service failures to the frozen reason vocabulary.
+
+Stage 03 must still exclude database mapping/application, command/public
+configuration integration, MusicBrainz candidate filtering, ordinary
+provider/importer integration, package/release work, and audio-file writes
+unless its own reviewed brief explicitly authorizes them.
 
 ## Stop Condition
 
-Merge the Stage 02 documentation brief before creating the product branch. No
-product implementation is performed from this chat.
+Merge the Stage 02 completion record before preparing the Stage 03 product
+brief. No Stage 03 product implementation is performed from this chat.
