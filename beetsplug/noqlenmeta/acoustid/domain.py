@@ -41,6 +41,13 @@ class AcoustIDEvidenceVerdict(str, Enum):
     DECISIVE = "decisive"
 
 
+class AcoustIDDatabaseState(str, Enum):
+    KEEP = "KEEP"
+    PROPOSE = "PROPOSE"
+    REVIEW = "REVIEW"
+    BLOCKED = "BLOCKED"
+
+
 class AcoustIDEvidenceReason(str, Enum):
     FINGERPRINT_REUSED = "fingerprint_reused"
     FINGERPRINT_GENERATED = "fingerprint_generated"
@@ -618,6 +625,190 @@ class AcoustIDTrackEvidence:
             or self.eligible_recording_count != 0
         ):
             raise ValueError("unavailable evidence prohibits eligible score information")
+
+
+@dataclass(frozen=True, slots=True)
+class AcoustIDPlanningItemSnapshot:
+    local_key: str
+    item_id: int
+    album_id: object
+    media_path: bytes | str = field(repr=False)
+    length: object
+    acoustid_id: object = field(repr=False)
+    acoustid_fingerprint: object = field(repr=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "local_key", _local_key(self.local_key))
+        _positive_database_id(self.item_id, "Item")
+        if type(self.media_path) not in (bytes, str) or not self.media_path:
+            raise ValueError("planning snapshot media path is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class AcoustIDPlanningSnapshot:
+    kind: AcoustIDLibraryTargetKind
+    album_id: int | None
+    items: tuple[AcoustIDPlanningItemSnapshot, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.kind, AcoustIDLibraryTargetKind):
+            raise ValueError("planning snapshot target kind is invalid")
+        items = tuple(self.items)
+        if not items or any(type(item) is not AcoustIDPlanningItemSnapshot for item in items):
+            raise ValueError("planning snapshot requires supported Items")
+        if len({item.item_id for item in items}) != len(items) or len(
+            {item.local_key for item in items}
+        ) != len(items):
+            raise ValueError("planning snapshot Items are duplicated")
+        if self.kind is AcoustIDLibraryTargetKind.ALBUM:
+            album_id = _positive_database_id(self.album_id, "Album")
+            if any(item.album_id != album_id for item in items):
+                raise ValueError("planning snapshot Album membership is invalid")
+        elif self.album_id is not None or len(items) != 1 or items[0].album_id not in (None, 0):
+            raise ValueError("planning snapshot singleton membership is invalid")
+        object.__setattr__(self, "items", items)
+
+
+@dataclass(frozen=True, slots=True)
+class AcoustIDTrackOutcome:
+    preparation: FingerprintPreparationResult
+    evidence: AcoustIDTrackEvidence | None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.preparation, FingerprintPreparationResult):
+            raise ValueError("track outcome preparation is invalid")
+        material = self.preparation.material
+        if material is None:
+            if self.evidence is not None:
+                raise ValueError("track outcome without material prohibits evidence")
+            return
+        if not isinstance(self.evidence, AcoustIDTrackEvidence):
+            raise ValueError("track outcome with material requires lookup evidence")
+        if (
+            self.evidence.local_key != self.preparation.local_key
+            or self.evidence.fingerprint_origin is not material.origin
+        ):
+            raise ValueError("track outcome evidence is inconsistent")
+
+    @property
+    def local_key(self) -> str:
+        return self.preparation.local_key
+
+
+@dataclass(frozen=True, slots=True)
+class AcoustIDFieldPlan:
+    state: AcoustIDDatabaseState
+    proposed_value: InitVar[str | None] = None
+    _proposed_value: str | None = field(init=False, repr=False)
+
+    def __post_init__(self, proposed_value: str | None) -> None:
+        if not isinstance(self.state, AcoustIDDatabaseState):
+            raise ValueError("database field plan state is invalid")
+        requires_value = self.state in {
+            AcoustIDDatabaseState.PROPOSE,
+            AcoustIDDatabaseState.REVIEW,
+        }
+        if requires_value:
+            if not isinstance(proposed_value, str) or not proposed_value:
+                raise ValueError("database field proposal requires a value")
+        elif proposed_value is not None:
+            raise ValueError("database field state prohibits a proposed value")
+        object.__setattr__(self, "_proposed_value", proposed_value)
+
+    def _value(self) -> str | None:
+        return self._proposed_value
+
+
+@dataclass(frozen=True, slots=True)
+class AcoustIDTrackDatabasePlan:
+    local_key: str
+    acoustid_id: AcoustIDFieldPlan
+    acoustid_fingerprint: AcoustIDFieldPlan
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "local_key", _local_key(self.local_key))
+        if not isinstance(self.acoustid_id, AcoustIDFieldPlan) or not isinstance(
+            self.acoustid_fingerprint, AcoustIDFieldPlan
+        ):
+            raise ValueError("track database field plan is invalid")
+
+    @property
+    def state(self) -> AcoustIDDatabaseState:
+        severity = {
+            AcoustIDDatabaseState.KEEP: 0,
+            AcoustIDDatabaseState.PROPOSE: 1,
+            AcoustIDDatabaseState.REVIEW: 2,
+            AcoustIDDatabaseState.BLOCKED: 3,
+        }
+        return max(
+            (self.acoustid_id.state, self.acoustid_fingerprint.state),
+            key=severity.__getitem__,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class AcoustIDDatabaseTargetPlan:
+    tracks: tuple[AcoustIDTrackDatabasePlan, ...]
+
+    def __post_init__(self) -> None:
+        tracks = tuple(self.tracks)
+        if not tracks or any(type(track) is not AcoustIDTrackDatabasePlan for track in tracks):
+            raise ValueError("database target plan requires supported tracks")
+        if len({track.local_key for track in tracks}) != len(tracks):
+            raise ValueError("database target plan tracks are duplicated")
+        object.__setattr__(self, "tracks", tracks)
+
+
+@dataclass(frozen=True, slots=True)
+class AcoustIDGeneratedSourceSnapshot:
+    local_key: str
+    snapshot: AcoustIDSourceSnapshot
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "local_key", _local_key(self.local_key))
+        if not isinstance(self.snapshot, AcoustIDSourceSnapshot):
+            raise ValueError("generated source snapshot is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class AcoustIDTargetResult:
+    selected: SelectedAcoustIDTarget
+    planning_snapshot: AcoustIDPlanningSnapshot
+    outcomes: tuple[AcoustIDTrackOutcome, ...]
+    database_plan: AcoustIDDatabaseTargetPlan
+    generated_source_snapshots: tuple[AcoustIDGeneratedSourceSnapshot, ...] = field(
+        init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.selected) is not SelectedAcoustIDTarget:
+            raise ValueError("target result selection is invalid")
+        if not isinstance(self.planning_snapshot, AcoustIDPlanningSnapshot):
+            raise ValueError("target result planning snapshot is invalid")
+        outcomes = tuple(self.outcomes)
+        if any(type(outcome) is not AcoustIDTrackOutcome for outcome in outcomes):
+            raise ValueError("target result outcomes are invalid")
+        keys = tuple(item.local_key for item in self.planning_snapshot.items)
+        if (
+            self.planning_snapshot.kind is not self.selected.kind
+            or self.planning_snapshot.album_id != self.selected.album_id
+            or keys != tuple(item.local_key for item in self.selected.items)
+            or keys != tuple(outcome.local_key for outcome in outcomes)
+        ):
+            raise ValueError("target result ordering is inconsistent")
+        if not isinstance(self.database_plan, AcoustIDDatabaseTargetPlan) or keys != tuple(
+            track.local_key for track in self.database_plan.tracks
+        ):
+            raise ValueError("target result database plan is inconsistent")
+        generated = tuple(
+            AcoustIDGeneratedSourceSnapshot(outcome.local_key, material.source_snapshot)
+            for outcome in outcomes
+            if (material := outcome.preparation.material) is not None
+            and material.origin is AcoustIDFingerprintOrigin.GENERATED
+            and material.source_snapshot is not None
+        )
+        object.__setattr__(self, "outcomes", outcomes)
+        object.__setattr__(self, "generated_source_snapshots", generated)
 
 
 def normalize_result_groups(

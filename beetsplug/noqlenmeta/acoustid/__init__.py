@@ -9,17 +9,26 @@ from .backend import (
     verify_source_snapshot,
 )
 from .domain import (
+    AcoustIDDatabaseState,
+    AcoustIDDatabaseTargetPlan,
     AcoustIDEvidencePolicy,
     AcoustIDEvidenceReason,
     AcoustIDEvidenceVerdict,
     AcoustIDExistingValues,
+    AcoustIDFieldPlan,
     AcoustIDFingerprintMaterial,
     AcoustIDFingerprintOrigin,
+    AcoustIDGeneratedSourceSnapshot,
     AcoustIDLibraryTargetKind,
+    AcoustIDPlanningItemSnapshot,
+    AcoustIDPlanningSnapshot,
     AcoustIDResultGroup,
     AcoustIDSourceSnapshot,
     AcoustIDStoredValueState,
+    AcoustIDTargetResult,
+    AcoustIDTrackDatabasePlan,
     AcoustIDTrackEvidence,
+    AcoustIDTrackOutcome,
     FingerprintBackendResult,
     FingerprintPreparationResult,
     SelectedAcoustIDItem,
@@ -29,6 +38,8 @@ from .domain import (
 )
 from .evidence import classify_acoustid_evidence
 from .library import refresh_acoustid_target, select_acoustid_targets
+from .mapping import canonical_acoustid_database_plan, snapshot_acoustid_target
+from .preview import render_acoustid_preview
 from .service import (
     ACOUSTID_CLIENT_KEY_ENVIRONMENT,
     ACOUSTID_LOOKUP_ENDPOINT,
@@ -41,21 +52,31 @@ from .service import (
     UrllibAcoustIDTransport,
 )
 from .settings import AcoustIDSettings, default_acoustid_settings
+from .workflow import plan_acoustid_target
 
 __all__ = [
+    "AcoustIDDatabaseState",
+    "AcoustIDDatabaseTargetPlan",
     "AcoustIDEvidencePolicy",
     "AcoustIDEvidenceReason",
     "AcoustIDEvidenceVerdict",
     "AcoustIDExistingValues",
+    "AcoustIDFieldPlan",
     "AcoustIDFingerprintMaterial",
     "AcoustIDFingerprintOrigin",
+    "AcoustIDGeneratedSourceSnapshot",
     "AcoustIDLibraryTargetKind",
     "AcoustIDLookupService",
+    "AcoustIDPlanningItemSnapshot",
+    "AcoustIDPlanningSnapshot",
     "AcoustIDResultGroup",
     "AcoustIDSettings",
     "AcoustIDSourceSnapshot",
     "AcoustIDStoredValueState",
+    "AcoustIDTargetResult",
+    "AcoustIDTrackDatabasePlan",
     "AcoustIDTrackEvidence",
+    "AcoustIDTrackOutcome",
     "AcoustIDHTTPRequest",
     "AcoustIDTransport",
     "AcoustIDTransportFailure",
@@ -75,11 +96,15 @@ __all__ = [
     "UrllibAcoustIDTransport",
     "acquire_source_snapshot",
     "canonical_acoustid_uuid",
+    "canonical_acoustid_database_plan",
     "canonical_recording_mbid",
     "classify_acoustid_evidence",
     "default_acoustid_settings",
+    "plan_acoustid_target",
     "prepare_fingerprint",
     "refresh_acoustid_target",
+    "render_acoustid_preview",
     "select_acoustid_targets",
+    "snapshot_acoustid_target",
     "verify_source_snapshot",
 ]
