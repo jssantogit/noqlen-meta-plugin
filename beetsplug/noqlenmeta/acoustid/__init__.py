@@ -1,3 +1,4 @@
+from .application import apply_acoustid_results
 from .backend import (
     FingerprintBackend,
     FingerprintBackendFailure,
@@ -9,6 +10,9 @@ from .backend import (
     verify_source_snapshot,
 )
 from .domain import (
+    AcoustIDApplicationError,
+    AcoustIDApplicationFailure,
+    AcoustIDApplicationResult,
     AcoustIDDatabaseState,
     AcoustIDDatabaseTargetPlan,
     AcoustIDEvidencePolicy,
@@ -55,6 +59,9 @@ from .settings import AcoustIDSettings, default_acoustid_settings
 from .workflow import plan_acoustid_target
 
 __all__ = [
+    "AcoustIDApplicationError",
+    "AcoustIDApplicationFailure",
+    "AcoustIDApplicationResult",
     "AcoustIDDatabaseState",
     "AcoustIDDatabaseTargetPlan",
     "AcoustIDEvidencePolicy",
@@ -95,6 +102,7 @@ __all__ = [
     "SourceSnapshotError",
     "UrllibAcoustIDTransport",
     "acquire_source_snapshot",
+    "apply_acoustid_results",
     "canonical_acoustid_uuid",
     "canonical_acoustid_database_plan",
     "canonical_recording_mbid",
