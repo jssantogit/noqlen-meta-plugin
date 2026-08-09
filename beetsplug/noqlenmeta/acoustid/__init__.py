@@ -41,7 +41,11 @@ from .domain import (
     canonical_recording_mbid,
 )
 from .evidence import classify_acoustid_evidence
-from .library import refresh_acoustid_target, select_acoustid_targets
+from .library import (
+    acoustid_target_from_library_identity,
+    refresh_acoustid_target,
+    select_acoustid_targets,
+)
 from .mapping import canonical_acoustid_database_plan, snapshot_acoustid_target
 from .preview import render_acoustid_preview
 from .service import (
@@ -102,6 +106,7 @@ __all__ = [
     "SourceSnapshotError",
     "UrllibAcoustIDTransport",
     "acquire_source_snapshot",
+    "acoustid_target_from_library_identity",
     "apply_acoustid_results",
     "canonical_acoustid_uuid",
     "canonical_acoustid_database_plan",

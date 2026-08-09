@@ -6,6 +6,7 @@ from dataclasses import FrozenInstanceError, asdict
 import pytest
 
 from beetsplug.noqlenmeta.acoustid import AcoustIDSettings, default_acoustid_settings
+from beetsplug.noqlenmeta.configuration import default_config
 
 EXPECTED_DEFAULTS = {
     "enabled": False,
@@ -38,6 +39,14 @@ def test_defaults_are_exact_fresh_and_immutable() -> None:
     assert first is not second
     with pytest.raises(FrozenInstanceError):
         first.enabled = True  # type: ignore[misc]
+
+
+def test_public_default_subtree_has_exact_internal_parity_and_no_credential() -> None:
+    public = default_config()["acoustid"]
+
+    assert public == EXPECTED_DEFAULTS
+    assert AcoustIDSettings.from_mapping(public) == default_acoustid_settings()
+    assert "client_key" not in public
 
 
 @pytest.mark.parametrize(

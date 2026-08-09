@@ -11,6 +11,21 @@ noqlenmeta:
     preview: true
     apply: false
 
+  acoustid:
+    enabled: false
+    reuse_existing: true
+    compute_missing: false
+    lookup: true
+    use_for_identity: true
+    min_score: 0.90
+    min_margin: 0.05
+    max_results: 5
+    max_recordings_per_result: 10
+    timeout_seconds: 15.0
+    requests_per_second: 3.0
+    cache_entries: 256
+    fpcalc: fpcalc
+
   fields:
     genres: true
     styles: true

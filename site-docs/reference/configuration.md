@@ -60,6 +60,31 @@ identity:
   apply: false
 ```
 
+## AcoustID Controls
+
+AcoustID is recording-identity evidence for existing-library workflows. It is
+not an importer metadata provider. All settings are validated before target,
+backend, credential, or network work.
+
+| Path | Type | Default | Effect |
+| --- | --- | --- | --- |
+| `noqlenmeta.acoustid.enabled` | boolean | `false` | Enables optional AcoustID evidence in `--identity`; standalone `--acoustid` is explicit authority. |
+| `noqlenmeta.acoustid.reuse_existing` | boolean | `true` | Reuses a valid stored fingerprint; a stored AcoustID ID is not fresh evidence. |
+| `noqlenmeta.acoustid.compute_missing` | boolean | `false` | Permits standalone missing-fingerprint calculation; never permits it in `--identity`. |
+| `noqlenmeta.acoustid.lookup` | boolean | `true` | Permits lookup when valid fingerprint material exists. |
+| `noqlenmeta.acoustid.use_for_identity` | boolean | `true` | Allows decisive evidence to filter MusicBrainz candidates when AcoustID is enabled. |
+| `noqlenmeta.acoustid.min_score` | finite number | `0.90` | Inclusive AcoustID result threshold from `0.0` through `1.0`. |
+| `noqlenmeta.acoustid.min_margin` | finite number | `0.05` | Inclusive unique-recording margin from `0.0` through `1.0`. |
+| `noqlenmeta.acoustid.max_results` | integer | `5` | Retains from `1` through `20` result groups. |
+| `noqlenmeta.acoustid.max_recordings_per_result` | integer | `10` | Retains from `1` through `50` recording MBIDs per result. |
+| `noqlenmeta.acoustid.timeout_seconds` | finite number | `15.0` | Backend/request timeout from `1.0` through `60.0` seconds. |
+| `noqlenmeta.acoustid.requests_per_second` | finite number | `3.0` | Positive process-local ceiling, at most `3.0`. |
+| `noqlenmeta.acoustid.cache_entries` | integer | `256` | Process-local lookup cache size from `0` through `4096`. |
+| `noqlenmeta.acoustid.fpcalc` | non-empty string | `fpcalc` | Executable used only for authorized calculation. |
+
+The AcoustID client key is available exclusively through
+`NOQLENMETA_ACOUSTID_API_KEY`; there is no credential setting in YAML.
+
 ## Field Controls
 
 Every field key is boolean, accepts `true` or `false`, grants no write
@@ -175,5 +200,6 @@ preserve_existing:
 - [`full-config.yaml`](../examples/full-config.yaml) contains every public key exactly once with valid values.
 
 The full example is illustrative, not a recommendation to enable every
-provider or field. Identity-tag file replacement has no YAML permission; only
-CLI `--identity-tags --write` authorizes it.
+provider or field. AcoustID has no audio-file write authority. Identity-tag file
+replacement has no YAML permission; only CLI `--identity-tags --write`
+authorizes it.
