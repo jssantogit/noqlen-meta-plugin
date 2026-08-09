@@ -30,6 +30,10 @@
 - [x] Implement/review/merge Stage 04B Verified Database Application through PR #16.
 - [x] Resolve Stage 04B uncertain-commit reporting before merge.
 - [x] Record Stage 04 completion and synchronize context/handoff.
+- [ ] Review and merge the single final Stage 05 integration brief.
+- [ ] Implement Stage 05 externally as the last Block 029 product stage.
+- [ ] Resolve all Stage 05 external-review findings and pass final product CI.
+- [ ] Record Stage 05 / Block 029 implementation completion.
 
 ## Completed Stage 01: Domain And Internal Configuration
 
@@ -43,12 +47,9 @@
 - [x] Require evidence counts/support/margins to agree with retained groups.
 - [x] Add internal immutable AcoustID settings/defaults with subsystem disabled.
 - [x] Add `AcoustIDTargetResult` in Stage 04A with exact database snapshots and plans.
-- [ ] Integrate the AcoustID subtree into public plugin defaults only with the
-  later command/public-configuration stage.
-- [ ] Add dedicated `--acoustid` / `--fingerprint-missing` authority only in the
-  later command stage.
-- [ ] Reject unsafe public-mode combinations before target selection in that
-  command stage.
+- [ ] Integrate the exact AcoustID subtree into public plugin defaults in Stage 05.
+- [ ] Add dedicated `--acoustid` / `--fingerprint-missing` authority in Stage 05.
+- [ ] Reject unsafe public-mode combinations before target selection in Stage 05.
 
 ## Completed Stage 02: Existing Values And Target Selection
 
@@ -163,42 +164,32 @@
 - [x] Keep normal tests independent of live network, API keys, real `fpcalc`, and
   audio-file writes.
 
-## Next Stage: MusicBrainz Identity Integration
+## Final Stage 05: Identity, Command, And Public Configuration
 
-- [ ] Add pure mapping from decisive AcoustID evidence to local-key recording
-  expectations.
-- [ ] Add immutable candidate-compatibility result separate from structural
-  score values.
-- [ ] Filter structurally evaluated MusicBrainz release candidates only after
-  existing assignments are calculated.
-- [ ] Preserve every existing score component and threshold unchanged.
+- [ ] Map decisive AcoustID evidence to immutable local-key recording expectations.
+- [ ] Filter already-evaluated MusicBrainz candidates only after structural assignment.
+- [ ] Preserve every existing structural score component, assignment, threshold, and gate.
 - [ ] Treat unavailable, no-match, and ambiguous evidence as neutral.
-- [ ] Return `acoustid_recording_conflict` when decisive evidence rejects every
-  candidate.
-- [ ] Generate four-field findings only from the selected complete MusicBrainz
-  release candidate.
-- [ ] Prove AcoustID cannot rescue weak structure, weak pair assignments,
-  incomplete assignment, or insufficient margin.
-- [ ] Cover Albums, singletons, repeated recordings, multidisc releases, bonus
-  tracks, near ties, and contradictory evidence.
-
-## Future Stage: Command And Public Configuration
-
+- [ ] Allow the compatibility filter to remove incompatible runner-ups without adding score.
+- [ ] Return `acoustid_recording_conflict` when decisive evidence rejects all candidates.
+- [ ] Generate four-field findings only from the selected complete MusicBrainz release candidate.
+- [ ] Prove AcoustID cannot rescue weak score, weak pair assignments, incomplete assignment, or ambiguous assignment.
+- [ ] Integrate optional AcoustID evidence into existing-library `--identity` only.
+- [ ] Never calculate missing fingerprints during `--identity`, including when `compute_missing=true`.
 - [ ] Add `--acoustid` and `--fingerprint-missing` with frozen authority.
-- [ ] Compose safely with `--apply` and `--all`.
-- [ ] Reject frozen invalid option combinations before selection/local work.
-- [ ] Integrate the exact AcoustID subtree into `configuration.default_config()`.
-- [ ] Update command, configuration, and documentation drift checks.
-- [ ] Keep preview as the default and application database-only.
+- [ ] Compose standalone mode safely with `--apply`, `--all`, and query selection.
+- [ ] Reject every frozen invalid option combination before selection/backend/network work.
+- [ ] Integrate the exact public `acoustid` configuration subtree via `AcoustIDSettings.from_mapping()`.
+- [ ] Preserve lazy backend, environment, and network boundaries.
+- [ ] Keep importer/acoustid autotagger behavior unchanged and owned by native beets `chroma`.
+- [ ] Cover Albums, singletons, repeated recordings, multidisc releases, bonus tracks, near ties, contradictory evidence, standalone preview/apply, CLI validation, and configuration validation.
+- [ ] Pass final supported Python 3.10-3.14 and beets `>=2.12,<3` CI with no live service dependency.
 
 ## Packaging And Compatibility
 
 - [x] Keep Stages 01-04 free of new AcoustID Python dependencies.
-- [ ] Keep base installation free of unnecessary AcoustID dependencies.
-- [ ] Test Python 3.10-3.14 and beets `>=2.12,<3` boundaries for the complete
-  integrated feature before release.
-- [ ] Build wheel/sdist and inspect dependency metadata/archive contents after
-  the full feature is integrated.
+- [ ] Keep Stage 05/base installation free of unnecessary AcoustID dependencies.
+- [ ] Build wheel/sdist and inspect dependency metadata/archive contents after the full feature is integrated.
 - [ ] Clean-install base, Discogs, and AcoustID-capable variants as applicable.
 - [ ] Test plugin discovery and command help from built artifacts.
 
@@ -206,13 +197,11 @@
 
 - [ ] Document AcoustID versus Chromaprint versus beets `chroma`.
 - [ ] Document existing-value reuse, explicit calculation, credentials, privacy,
-  preview, database apply, and no-file-write boundaries.
-- [ ] Add command, configuration, evidence, field, compatibility, and
-  troubleshooting coverage.
+  preview, database apply, identity filtering, and no-file-write boundaries.
+- [ ] Add command, configuration, evidence, field, compatibility, and troubleshooting coverage.
 - [ ] Update README capability/install summaries without exceeding its limit.
-- [ ] Replace `No user-facing changes yet` under `Unreleased` during public
-  feature integration.
-- [ ] Update context and handoff after each reviewed implementation stage.
+- [ ] Replace `No user-facing changes yet` under `Unreleased` during release-readiness work.
+- [ ] Update context and handoff after Stage 05 merge.
 - [ ] Run Ruff, full offline tests, docs checks, strict MkDocs, hygiene,
   distribution validation, and clean-install smoke tests.
 - [ ] Obtain final reviewer PASS before version bump, tag, or publication.
