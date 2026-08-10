@@ -43,6 +43,8 @@ genres:
   promote_styles: true
 ```
 
+`fields.genres` remains the ordinary field enable/disable switch. The separate `genres` section only configures classification behavior and never enables collection on its own.
+
 `num_genres` controls the maximum number of selected genre labels. The accepted range is `1..10`.
 
 Examples:
@@ -229,7 +231,9 @@ resolve_genres(
 
 The resolver has no network access, database access, file writes, or provider object dependencies.
 
-The generic metadata resolver remains responsible for ordinary provider-owned values such as year, country, labels, barcodes, styles, and lyrics. Genre evidence is aggregated first; the resulting canonical `genres` value then enters the ordinary change-planning/application path without teaching the generic resolver about K-pop, Last.fm noise, or Discogs style semantics.
+The generic metadata resolver remains responsible for ordinary provider-owned values such as year, country, labels, barcodes, styles, and lyrics. Once the specialized genre path is active, raw provider `genres` tuples must not also be independently resolved by `resolve_metadata()`. Genre evidence is aggregated first and produces the one canonical resolved `genres` value/decision that proceeds into ordinary change planning, database application, and file synchronization.
+
+This keeps the generic resolver free of K-pop aliases, Last.fm noise rules, Discogs style semantics, and provider-specific genre logic while avoiding two competing genre decisions for the same target.
 
 The genre resolver itself is not a provider and must not appear in `ProviderRegistry` or `providers:` configuration.
 
@@ -288,7 +292,7 @@ The Foundation must preserve the scope in `GenreEvidence`; Semantic Enrichment l
 
 ## 10. Last.fm independence
 
-The current Last.fm provider must no longer depend on `beetsplug.lastgenre` or its packaged `genres.txt` once the new genre pipeline is implemented.
+The Foundation must remove the current Last.fm provider's runtime lookup of `beetsplug.lastgenre` and its packaged `genres.txt`. Even before the richer Semantic Enrichment collection strategy exists, any current Last.fm genre normalization retained in the Foundation must classify against the packaged Noqlen taxonomy instead.
 
 The Noqlen taxonomy becomes the sole runtime genre-vocabulary dependency.
 
@@ -298,7 +302,7 @@ The better filtering ideas already proven in Noqlen Forge should be retained con
 - remove years, decades, personal tags, platforms, meta tags, generic labels, obvious artists, and noisy phrases;
 - keep semantic categories separate rather than treating every popular Last.fm tag as a genre.
 
-Semantic Enrichment will replace the current album-only Last.fm genre emission with evidence generation that can use the appropriate track/release/artist fallback strategy. That online collection behavior is explicitly outside this Foundation implementation.
+Semantic Enrichment will replace or extend the current album-only Last.fm evidence collection with the appropriate track/release/artist fallback strategy. Only that online collection expansion is deferred; LastGenre vocabulary dependence is not deferred.
 
 ## 11. MusicBrainz zero-config direction
 
@@ -351,8 +355,8 @@ The v2 Foundation PR should add only the reusable pieces required to prevent a f
 - `genres.promote_styles` configuration with `true` default;
 - taxonomy snapshot metadata;
 - development-only taxonomy update script;
-- structural integration so resolved genres can flow through existing planning, database, and file-sync paths;
-- removal of the architectural requirement on LastGenre vocabulary;
+- structural integration so resolved genres can flow through existing planning, database, and file-sync paths without competing generic genre resolution;
+- replacement of the current Last.fm dependency on LastGenre vocabulary with the Noqlen taxonomy;
 - focused deterministic tests.
 
 The Foundation must **not** add in this supplement:
@@ -371,6 +375,7 @@ Those belong to Semantic Enrichment after the Foundation merges.
 Offline tests must cover at least:
 
 - taxonomy loading without LastGenre installed/enabled;
+- current Last.fm genre normalization using only the Noqlen taxonomy;
 - canonical alias normalization including K-pop and R&B forms;
 - representative metal subgenres including Technical Death Metal, Progressive Metal, Melodic Death Metal, and related broad-vs-specific cases;
 - representative electronic genres and aliases such as Drum and Bass/DnB forms;
@@ -387,6 +392,7 @@ Offline tests must cover at least:
 - distinct-provider consensus counting providers rather than evidence rows;
 - duplicate evidence collapse and stable ordering;
 - deterministic identical output for identical inputs;
+- no duplicate genre decision from the generic resolver once the specialized path is active;
 - compatibility with ordinary database/file-sync genre handling already established in the Foundation.
 
 ## 15. Migration and compatibility
@@ -408,6 +414,6 @@ The Genre Foundation is complete when:
 - genre resolution can combine independent providers and select one result by default;
 - `num_genres` changes only the number of independently supported winners, never implicit parents;
 - Track > Release/Album > Artist works only after evidence reliability is established;
-- the generic metadata resolver remains free of provider-specific genre classification logic;
+- the generic metadata resolver remains free of provider-specific genre classification logic and does not make a competing raw-genre decision;
 - all Foundation behavior is deterministic and offline-testable;
 - Semantic Enrichment can later add MusicBrainz, Last.fm, Discogs, and iTunes evidence producers without changing these contracts.
