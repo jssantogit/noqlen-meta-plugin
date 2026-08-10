@@ -24,6 +24,12 @@ from beetsplug.noqlenmeta.providers.base import ProviderContractError
 
 TOKEN = "test-personal-token"
 RELEASE_MBID = "6ea45c08-3cfa-461a-aa4d-4cc404fcfa86"
+ALBUM_GENRES = {
+    "Album A": "Rock",
+    "Album B": "Metal",
+    "Album C": "Jazz",
+    "Album D": "Blues",
+}
 
 
 @pytest.fixture(autouse=True)
@@ -57,6 +63,7 @@ def configure_enabled(
         "preview": preview,
         "apply": apply,
         "apply_mode": apply_mode,
+        "genres": {"num_genres": 2, "promote_styles": True},
         "providers": {
             "discogs": {"enabled": discogs, "user_token": TOKEN},
             "musicbrainz": {"enabled": musicbrainz},
@@ -423,8 +430,9 @@ def test_cli_preserves_authority_and_provider_failure_fallback(
 
     invoke(plugin, library, ["artist:Gojira"])
 
-    assert "source: Discogs" in output[0]
-    assert "proposed: Progressive Metal, Groove Metal" in output[0]
+    assert "source: Noqlen" in output[0]
+    assert "discogs genre" in output[0]
+    assert "proposed: Groove Metal, Progressive Metal" in output[0]
 
     output.clear()
     monkeypatch.setattr(
@@ -435,7 +443,8 @@ def test_cli_preserves_authority_and_provider_failure_fallback(
     with caplog.at_level(logging.WARNING, logger="beets.noqlenmeta"):
         invoke(plugin, library, ["artist:Gojira"])
 
-    assert "source: iTunes" in output[0]
+    assert "source: Noqlen" in output[0]
+    assert "itunes genre" in output[0]
     assert TOKEN not in caplog.text
     assert TOKEN not in output[0]
 
@@ -623,8 +632,8 @@ def test_cli_apply_persists_even_when_importer_apply_is_false(
     invoke(plugin, library, ["artist:Gojira", "--apply"])
 
     reloaded = library.get_album(album.id)
-    assert reloaded.genres == ["Rock", "Metal"]
-    assert [item.genres for item in reloaded.items()] == [["Rock", "Metal"]]
+    assert reloaded.genres == ["Metal", "Rock"]
+    assert [item.genres for item in reloaded.items()] == [["Metal", "Rock"]]
     assert "application: stored in library database (1 fields)" in output[0]
     assert "file tags: unchanged" in output[0]
 
@@ -676,18 +685,20 @@ def test_lastfm_candidate_previews_then_flows_through_existing_cli_apply(
 
     assert library.get_album(album.id).genres == []
     assert "genres\n    PROPOSE" in output[0]
-    assert "source: Last.fm" in output[0]
+    assert "source: Noqlen" in output[0]
+    assert "lastfm community tag" in output[0]
     assert "application: disabled (preview only)" in output[0]
 
     output.clear()
     invoke(plugin, library, ["artist:Gojira", "--apply"])
 
     reloaded = library.get_album(album.id)
-    assert reloaded.genres == ["Progressive Metal", "Death Metal"]
+    assert reloaded.genres == ["Death Metal", "Progressive Metal"]
     assert [item.genres for item in reloaded.items()] == [
-        ["Progressive Metal", "Death Metal"]
+        ["Death Metal", "Progressive Metal"]
     ]
-    assert "source: Last.fm" in output[0]
+    assert "source: Noqlen" in output[0]
+    assert "lastfm community tag" in output[0]
     assert "application: stored in library database (1 fields)" in output[0]
     assert "file tags: unchanged" in output[0]
 
@@ -891,7 +902,7 @@ def test_all_apply_is_strict_per_album(
         context: ReleaseEnrichmentContext,
         token: str | None,
     ) -> tuple[MetadataCandidate, ...]:
-        values = [candidate(value=(context.album_title,))]
+        values = [candidate(value=(ALBUM_GENRES[context.album_title],))]
         if context.album_title == "Album B":
             values.append(candidate("media", ("CD",)))
         return tuple(values)
@@ -901,9 +912,9 @@ def test_all_apply_is_strict_per_album(
 
     invoke(plugin, library, ["--all", "--apply"])
 
-    assert library.get_album(albums[0].id).genres == ["Album A"]
+    assert library.get_album(albums[0].id).genres == ["Rock"]
     assert library.get_album(albums[1].id).genres == []
-    assert library.get_album(albums[2].id).genres == ["Album C"]
+    assert library.get_album(albums[2].id).genres == ["Jazz"]
     assert ["application: blocked" in entry for entry in output] == [False, True, False]
 
 
@@ -930,7 +941,7 @@ def test_all_partial_applies_each_album_independently_after_planning(
         planned.append(context.album_title)
         if context.album_title == "Album C":
             return (candidate("media", ("CD",)),)
-        values = [candidate(value=(context.album_title,))]
+        values = [candidate(value=(ALBUM_GENRES[context.album_title],))]
         if context.album_title == "Album B":
             values.append(candidate("media", ("CD",)))
         return tuple(values)
@@ -950,10 +961,10 @@ def test_all_partial_applies_each_album_independently_after_planning(
 
     assert stores == ["Album A", "Album B", "Album D"]
     assert [library.get_album(album.id).genres for album in albums] == [
-        ["Album A"],
-        ["Album B"],
+        ["Rock"],
+        ["Metal"],
         [],
-        ["Album D"],
+        ["Blues"],
     ]
     assert "partially stored" in output[1]
     assert "no eligible changes stored" in output[2]
@@ -1008,7 +1019,7 @@ def test_store_failure_aborts_later_albums_without_global_rollback(
         context: ReleaseEnrichmentContext,
         token: str | None,
     ) -> tuple[MetadataCandidate, ...]:
-        return (candidate(value=(context.album_title,)),)
+        return (candidate(value=(ALBUM_GENRES[context.album_title],)),)
 
     monkeypatch.setattr(NoqlenMetaPlugin, "_discogs_candidates", candidates)
     monkeypatch.setattr(
@@ -1029,6 +1040,6 @@ def test_store_failure_aborts_later_albums_without_global_rollback(
         invoke(plugin, library, ["--all", "--apply", "--partial"])
 
     assert store_attempts == ["Album A", "Album B"]
-    assert library.get_album(albums[0].id).genres == ["Album A"]
+    assert library.get_album(albums[0].id).genres == ["Rock"]
     assert library.get_album(albums[1].id).genres == []
     assert library.get_album(albums[2].id).genres == []

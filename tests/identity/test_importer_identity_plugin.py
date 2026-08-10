@@ -553,7 +553,7 @@ def test_ordinary_release_application_coexists_with_identity_repair(
         NoqlenMetaPlugin,
         "_discogs_candidates",
         lambda self, context, token: (
-            MetadataCandidate("genres", ("Synthetic Genre",), "discogs", 0.95, "7"),
+            MetadataCandidate("genres", ("Ambient",), "discogs", 0.95, "7"),
         ),
     )
     task, pairs, album_info = _album_task()
@@ -570,7 +570,7 @@ def test_ordinary_release_application_coexists_with_identity_repair(
     plugin._import_task_choice(None, task)
 
     assert len(source.contexts) == 1
-    assert album_info.genres == ["Synthetic Genre"]
+    assert album_info.genres == ["Ambient"]
     assert album_info.album_id == mbid(100)
     assert album_info.releasegroup_id == mbid(200)
     assert [track.track_id for _, track in pairs] == [mbid(1001), mbid(1002)]
@@ -624,7 +624,7 @@ def test_identity_ambiguity_does_not_block_ordinary_release_application(
         NoqlenMetaPlugin,
         "_discogs_candidates",
         lambda self, context, token: (
-            MetadataCandidate("genres", ("Synthetic Genre",), "discogs", 0.95, "7"),
+            MetadataCandidate("genres", ("Ambient",), "discogs", 0.95, "7"),
         ),
     )
     task, pairs, album_info = _album_task()
@@ -643,7 +643,7 @@ def test_identity_ambiguity_does_not_block_ordinary_release_application(
 
     plugin._import_task_choice(None, task)
 
-    assert album_info.genres == ["Synthetic Genre"]
+    assert album_info.genres == ["Ambient"]
     assert album_info.album_id is None
     assert album_info.releasegroup_id is None
     assert all(track.track_id is None for _, track in pairs)
@@ -753,7 +753,7 @@ def test_disabled_identity_preserves_ordinary_release_and_track_application(
         NoqlenMetaPlugin,
         "_discogs_candidates",
         lambda self, context, token: (
-            MetadataCandidate("genres", ("Synthetic Genre",), "discogs", 0.95, "7"),
+            MetadataCandidate("genres", ("Ambient",), "discogs", 0.95, "7"),
         ),
     )
     monkeypatch.setattr(
@@ -779,7 +779,7 @@ def test_disabled_identity_preserves_ordinary_release_and_track_application(
 
     track = pairs[0][1]
     assert plugin._musicbrainz_identity_source is None
-    assert album_info.genres == ["Synthetic Genre"]
+    assert album_info.genres == ["Ambient"]
     assert track.lyrics == PRIVATE_LYRIC
     assert album_info.album_id is None
     assert track.track_id is None
