@@ -151,6 +151,22 @@ def test_recording_genres_and_tags_keep_track_scope_and_filter_noise() -> None:
     ]
 
 
+def test_genre_only_collection_does_not_fetch_works() -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "genres": [{"name": "k-pop", "count": 9}],
+            "relations": [{"target-type": "work", "work": {"id": WORK_ONE}}],
+        },
+        works={WORK_ONE: {"id": WORK_ONE, "languages": ["kor"]}},
+    )
+    bundle = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"genres"}
+    ).get_semantic_evidence(track_context())
+    assert bundle.genres
+    assert calls["work"] == []
+
+
 def test_release_semantics_reuse_the_existing_exact_release_payload() -> None:
     calls = 0
     payload = {

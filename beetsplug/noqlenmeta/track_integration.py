@@ -12,6 +12,7 @@ from beets.importer.actions import Action
 from beets.library import Item
 
 from beetsplug.noqlenmeta.domain import (
+    ArtistEnrichmentContext,
     ExternalIdentifier,
     MetadataValue,
     TrackEnrichmentContext,
@@ -78,6 +79,14 @@ def context_from_track_info(
             isrc_values=(track_info.get("isrc"), item_ids[2]),
             acoustid_values=(track_info.get("acoustid_id"), item_ids[3]),
         ),
+        artists=_artist_contexts(
+            artist,
+            (
+                track_info.get("mb_artistid"),
+                getattr(track_info, "artist_id", None) if is_musicbrainz else None,
+                _item_get(item, "mb_artistid") if item is not None else None,
+            ),
+        ),
     )
 
 
@@ -102,6 +111,7 @@ def context_from_library_item(item: Item) -> TrackEnrichmentContext | None:
             isrc_values=(item_ids[2],),
             acoustid_values=(item_ids[3],),
         ),
+        artists=_artist_contexts(artist, (_item_get(item, "mb_artistid"),)),
     )
 
 
@@ -171,6 +181,22 @@ def _external_ids(
     return tuple(identifiers)
 
 
+def _artist_contexts(
+    artist_name: str, artist_id_values: tuple[object, ...]
+) -> tuple[ArtistEnrichmentContext, ...]:
+    artist_ids: list[ExternalIdentifier] = []
+    for value in artist_id_values:
+        artist_id = canonical_uuid(value)
+        identifier = (
+            ExternalIdentifier("musicbrainz.artist", artist_id) if artist_id else None
+        )
+        if identifier is not None and identifier not in artist_ids:
+            artist_ids.append(identifier)
+    if not artist_ids:
+        return ()
+    return (ArtistEnrichmentContext(artist_name, credit_index=1, external_ids=tuple(artist_ids)),)
+
+
 def _item_identifier_values(item: Item | None) -> tuple[object, object, object, object]:
     if item is None:
         return None, None, None, None
@@ -191,6 +217,7 @@ def _current_track_values(getter: Callable[[str], object]) -> dict[str, Metadata
             values[field] = text
 
     for field in (
+        "genres",
         "moods",
         "lyrics_languages",
         "artist_countries",

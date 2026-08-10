@@ -16,7 +16,12 @@ from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.beets_application import BeetsApplicationError
 from beetsplug.noqlenmeta.beets_mapping import BeetsMappingError
 from beetsplug.noqlenmeta.changeplan import ChangePlanError
-from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
+from beetsplug.noqlenmeta.domain import (
+    MetadataCandidate,
+    ReleaseEnrichmentContext,
+    SemanticEvidenceBundle,
+)
+from beetsplug.noqlenmeta.genre_evidence import GenreEvidence, GenreEvidenceKind
 from beetsplug.noqlenmeta.integration import (
     context_from_album_info,
     current_values_from_album_info,
@@ -25,7 +30,10 @@ from beetsplug.noqlenmeta.integration import (
 )
 from beetsplug.noqlenmeta.providers import ProviderError
 from beetsplug.noqlenmeta.providers.base import ProviderContractError
-from beetsplug.noqlenmeta.providers.specs import BUILTIN_RELEASE_PROVIDER_SPECS
+from beetsplug.noqlenmeta.providers.specs import (
+    BUILTIN_RELEASE_PROVIDER_SPECS,
+    ProviderScope,
+)
 from beetsplug.noqlenmeta.resolver import default_resolution_policy
 
 TOKEN = "test-personal-token"
@@ -87,6 +95,22 @@ def candidate(
             "lastfm": "Selected Artist / Selected Album",
             "itunes": "1097861387",
         }[provider],
+    )
+
+
+def lastfm_genre_bundle(*genres: str) -> SemanticEvidenceBundle:
+    return SemanticEvidenceBundle(
+        genres=tuple(
+            GenreEvidence(
+                genre,
+                "lastfm",
+                ProviderScope.RELEASE,
+                GenreEvidenceKind.COMMUNITY_TAG,
+                0.85,
+                "Selected Artist / Selected Album",
+            )
+            for genre in genres
+        )
     )
 
 
@@ -572,21 +596,13 @@ def test_lastfm_genres_join_shared_importer_plan_without_preview_mutation(
     output: list[str] = []
     contexts: list[ReleaseEnrichmentContext] = []
 
-    def lastfm_candidates(
-        self: NoqlenMetaPlugin, context: ReleaseEnrichmentContext
-    ) -> tuple[MetadataCandidate, ...]:
+    def lastfm_semantics(context: ReleaseEnrichmentContext) -> SemanticEvidenceBundle:
         contexts.append(context)
-        return (
-            candidate(
-                value=("Progressive Metal", "Death Metal"),
-                confidence=0.85,
-                provider="lastfm",
-            ),
-        )
+        return lastfm_genre_bundle("Progressive Metal", "Death Metal")
 
-    monkeypatch.setattr(NoqlenMetaPlugin, "_lastfm_candidates", lastfm_candidates)
     monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
     plugin = NoqlenMetaPlugin()
+    monkeypatch.setattr(plugin, "_lastfm_release_semantics", lastfm_semantics)
     configure_enabled(plugin, discogs=False, lastfm=True)
     info = album_info()
     snapshot = copy.deepcopy(dict(info))
@@ -932,10 +948,11 @@ def test_lastfm_failure_hides_key_detail_and_itunes_continues(
 ) -> None:
     output: list[str] = []
     fake_key = "fake-shared-key-in-underlying-error"
-    monkeypatch.setattr(
-        NoqlenMetaPlugin,
-        "_lastfm_candidates",
-        lambda *args: (_ for _ in ()).throw(ProviderError(f"unsafe {fake_key}")),
+    plugin = NoqlenMetaPlugin()
+    plugin._lastfm_provider = SimpleNamespace(
+        get_semantic_evidence=lambda *args: (_ for _ in ()).throw(
+            ProviderError(f"unsafe {fake_key}")
+        )
     )
     monkeypatch.setattr(
         NoqlenMetaPlugin,
@@ -943,7 +960,6 @@ def test_lastfm_failure_hides_key_detail_and_itunes_continues(
         lambda *args: (candidate(provider="itunes"),),
     )
     monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
-    plugin = NoqlenMetaPlugin()
     configure_enabled(plugin, discogs=False, lastfm=True, itunes=True)
 
     with caplog.at_level(logging.WARNING, logger="beets.noqlenmeta"):
@@ -961,14 +977,18 @@ def test_lastfm_missing_album_is_quiet_and_itunes_continues(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     output: list[str] = []
-    monkeypatch.setattr(NoqlenMetaPlugin, "_lastfm_candidates", lambda *args: ())
+    plugin = NoqlenMetaPlugin()
+    monkeypatch.setattr(
+        plugin,
+        "_lastfm_release_semantics",
+        lambda *args: SemanticEvidenceBundle(),
+    )
     monkeypatch.setattr(
         NoqlenMetaPlugin,
         "_itunes_candidates",
         lambda *args: (candidate(provider="itunes"),),
     )
     monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
-    plugin = NoqlenMetaPlugin()
     configure_enabled(plugin, discogs=False, lastfm=True, itunes=True)
 
     with caplog.at_level(logging.WARNING, logger="beets.noqlenmeta"):

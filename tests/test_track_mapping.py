@@ -176,6 +176,7 @@ def test_target_registry_and_mapping_results_are_immutable() -> None:
     assert TRACK_FIELD_TARGETS == {
         "lyrics": TrackFieldTarget("lyrics", "lyrics", TrackTargetShape.SCALAR_STRING),
         "bpm": TrackFieldTarget("bpm", "bpm", TrackTargetShape.SCALAR_FLOAT),
+        "genres": TrackFieldTarget("genres", "genres", TrackTargetShape.STRING_LIST),
         "moods": TrackFieldTarget("moods", "moods", TrackTargetShape.STRING_LIST),
         "lyrics_languages": TrackFieldTarget(
             "lyrics_languages", "lyrics_languages", TrackTargetShape.STRING_LIST

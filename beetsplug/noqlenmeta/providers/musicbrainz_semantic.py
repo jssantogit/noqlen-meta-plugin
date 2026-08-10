@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 
 from requests import RequestException
 
@@ -103,8 +103,14 @@ class MusicBrainzTrackProvider:
     name = MUSICBRAINZ_TRACK_SPEC.name
     supported_fields = MUSICBRAINZ_TRACK_SPEC.supported_fields
 
-    def __init__(self, client: MusicBrainzSemanticClient | None = None) -> None:
+    def __init__(
+        self,
+        client: MusicBrainzSemanticClient | None = None,
+        *,
+        enabled_fields: Collection[str] | None = None,
+    ) -> None:
         self.client = client or MusicBrainzSemanticClient()
+        self.enabled_fields = set(enabled_fields or self.supported_fields | {"artist_languages"})
 
     def get_semantic_evidence(
         self, context: TrackEnrichmentContext
@@ -115,16 +121,22 @@ class MusicBrainzTrackProvider:
         payload = self.client.lookup_recording(recording_id)
         if payload is None:
             return SemanticEvidenceBundle()
-        genres, tags = semantic_tags_from_payload(
-            payload, entity_id=recording_id, entity_type="recording", scope=ProviderScope.TRACK
-        )
+        genres, tags = ((), ())
+        if self.enabled_fields & {"genres", "moods"}:
+            genres, tags = semantic_tags_from_payload(
+                payload,
+                entity_id=recording_id,
+                entity_type="recording",
+                scope=ProviderScope.TRACK,
+            )
         languages: list[str] = []
-        for work_id in _related_ids(payload, "work"):
-            work = self.client.lookup_work(work_id)
-            if work is None:
-                continue
-            for language in _work_languages(work):
-                _append_unique(languages, language)
+        if self.enabled_fields & {"lyrics_languages", "artist_languages"}:
+            for work_id in _related_ids(payload, "work"):
+                work = self.client.lookup_work(work_id)
+                if work is None:
+                    continue
+                for language in _work_languages(work):
+                    _append_unique(languages, language)
         metadata = ()
         if languages:
             metadata = (
@@ -144,8 +156,14 @@ class MusicBrainzArtistProvider:
     name = MUSICBRAINZ_ARTIST_SPEC.name
     supported_fields = MUSICBRAINZ_ARTIST_SPEC.supported_fields
 
-    def __init__(self, client: MusicBrainzSemanticClient | None = None) -> None:
+    def __init__(
+        self,
+        client: MusicBrainzSemanticClient | None = None,
+        *,
+        enabled_fields: Collection[str] | None = None,
+    ) -> None:
         self.client = client or MusicBrainzSemanticClient()
+        self.enabled_fields = set(enabled_fields or self.supported_fields)
 
     def get_semantic_evidence(
         self, context: ArtistEnrichmentContext
@@ -156,16 +174,29 @@ class MusicBrainzArtistProvider:
         payload = self.client.lookup_artist(artist_id)
         if payload is None:
             return SemanticEvidenceBundle()
-        genres, tags = semantic_tags_from_payload(
-            payload, entity_id=artist_id, entity_type="artist", scope=ProviderScope.ARTIST
-        )
-        area = _area_mapping(payload.get("area")) or _area_mapping(payload.get("begin-area"))
+        genres, tags = ((), ())
+        if self.enabled_fields & {"genres", "moods"}:
+            genres, tags = semantic_tags_from_payload(
+                payload,
+                entity_id=artist_id,
+                entity_type="artist",
+                scope=ProviderScope.ARTIST,
+            )
+        area = None
+        if self.enabled_fields & {"artist_areas", "artist_countries"}:
+            area = _area_mapping(payload.get("area")) or _area_mapping(
+                payload.get("begin-area")
+            )
         fields: list[tuple[str, tuple[str, ...]]] = []
         if area is not None:
             area_name = _text(area.get("name"))
             if area_name:
                 fields.append(("artist_areas", (area_name,)))
-            country = self._country_for_area(area)
+            country = (
+                self._country_for_area(area)
+                if "artist_countries" in self.enabled_fields
+                else None
+            )
             if country:
                 fields.append(("artist_countries", (country,)))
         metadata = tuple(

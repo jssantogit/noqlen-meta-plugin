@@ -49,6 +49,7 @@ class TrackFieldTarget:
 _TARGETS = (
     TrackFieldTarget("lyrics", "lyrics", TrackTargetShape.SCALAR_STRING),
     TrackFieldTarget("bpm", "bpm", TrackTargetShape.SCALAR_FLOAT),
+    TrackFieldTarget("genres", "genres", TrackTargetShape.STRING_LIST),
     TrackFieldTarget("moods", "moods", TrackTargetShape.STRING_LIST),
     TrackFieldTarget(
         "lyrics_languages", "lyrics_languages", TrackTargetShape.STRING_LIST

@@ -32,6 +32,7 @@ _TRACK_CURRENT_FIELDS = (
     "lyrics",
     "synced_lyrics",
     "bpm",
+    "genres",
     "moods",
     "lyrics_languages",
     "artist_countries",

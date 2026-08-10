@@ -58,7 +58,6 @@ def test_musicbrainz_spec_describes_exact_current_adapter_capabilities() -> None
             "year",
             "media",
             "genres",
-            "moods",
         }
     )
 

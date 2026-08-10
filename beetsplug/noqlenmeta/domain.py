@@ -196,6 +196,7 @@ class TrackEnrichmentContext:
     track_number: int | None = None
     disc_number: int | None = None
     external_ids: tuple[ExternalIdentifier, ...] = ()
+    artists: tuple[ArtistEnrichmentContext, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "artist", _text(self.artist, "track artist"))
@@ -231,6 +232,10 @@ class TrackEnrichmentContext:
         if not all(isinstance(identifier, ExternalIdentifier) for identifier in external_ids):
             raise TypeError("external_ids must contain ExternalIdentifier values")
         object.__setattr__(self, "external_ids", external_ids)
+        artists = tuple(self.artists)
+        if not all(isinstance(artist, ArtistEnrichmentContext) for artist in artists):
+            raise TypeError("artists must contain ArtistEnrichmentContext values")
+        object.__setattr__(self, "artists", artists)
 
 
 @dataclass(frozen=True, slots=True)

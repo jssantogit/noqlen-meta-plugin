@@ -271,6 +271,7 @@ class LastFmTrackProvider:
         self._fetch_top_tags = fetch_top_tags or (
             transport or _LastFmTransport()
         ).fetch_track_top_tags
+        self._cache: dict[tuple[str, str, str | None], SemanticEvidenceBundle] = {}
 
     def get_semantic_evidence(
         self, context: TrackEnrichmentContext
@@ -278,16 +279,21 @@ class LastFmTrackProvider:
         artist = _clean_identity(context.artist)
         title = _clean_identity(context.title)
         mbid = _external_mbid(context.external_ids, "musicbrainz.recording")
+        key = (_comparison_identity(artist), _comparison_identity(title), mbid)
+        if key in self._cache:
+            return self._cache[key]
         payload = self._fetch_top_tags(artist, title, mbid)
         source_id = f"{artist} / {title}"
         source_url = f"{_PUBLIC_ALBUM_URL}/{quote(artist, safe='')}/_/{quote(title, safe='')}"
-        return _semantic_bundle(
+        bundle = _semantic_bundle(
             payload,
             expected={"artist": artist, "track": title},
             scope=ProviderScope.TRACK,
             source_id=source_id,
             source_url=source_url,
         )
+        self._cache[key] = bundle
+        return bundle
 
 
 class LastFmArtistProvider:
@@ -305,20 +311,26 @@ class LastFmArtistProvider:
         self._fetch_top_tags = fetch_top_tags or (
             transport or _LastFmTransport()
         ).fetch_artist_top_tags
+        self._cache: dict[tuple[str, str | None], SemanticEvidenceBundle] = {}
 
     def get_semantic_evidence(
         self, context: ArtistEnrichmentContext
     ) -> SemanticEvidenceBundle:
         artist = _clean_identity(context.name)
         mbid = _external_mbid(context.external_ids, "musicbrainz.artist")
+        key = (_comparison_identity(artist), mbid)
+        if key in self._cache:
+            return self._cache[key]
         payload = self._fetch_top_tags(artist, mbid)
-        return _semantic_bundle(
+        bundle = _semantic_bundle(
             payload,
             expected={"artist": artist},
             scope=ProviderScope.ARTIST,
             source_id=artist,
             source_url=f"{_PUBLIC_ALBUM_URL}/{quote(artist, safe='')}",
         )
+        self._cache[key] = bundle
+        return bundle
 
 
 def _semantic_bundle(

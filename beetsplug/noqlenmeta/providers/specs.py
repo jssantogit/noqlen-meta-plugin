@@ -84,7 +84,6 @@ MUSICBRAINZ_SPEC = ProviderSpec(
             "year",
             "media",
             "genres",
-            "moods",
         }
     ),
     scope=ProviderScope.RELEASE,

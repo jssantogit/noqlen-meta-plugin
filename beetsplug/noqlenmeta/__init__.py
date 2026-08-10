@@ -34,6 +34,7 @@ from beetsplug.noqlenmeta.configuration import (
     validate_local_analysis_config,
 )
 from beetsplug.noqlenmeta.domain import (
+    ArtistEnrichmentContext,
     MetadataCandidate,
     MetadataValue,
     ReleaseEnrichmentContext,
@@ -50,7 +51,6 @@ from beetsplug.noqlenmeta.file_sync import (
 )
 from beetsplug.noqlenmeta.genre_pipeline import resolve_release_genre_decision
 from beetsplug.noqlenmeta.genre_resolution import GenreSettings
-from beetsplug.noqlenmeta.semantic_resolution import MoodSettings
 from beetsplug.noqlenmeta.identity import (
     AcoustIDRecordingExpectations,
     BeetsMusicBrainzIdentitySource,
@@ -135,6 +135,7 @@ from beetsplug.noqlenmeta.orchestration import (
     provider_can_contribute,
     validate_provider_candidates,
 )
+from beetsplug.noqlenmeta.provider_cache import CommandEntityCache
 from beetsplug.noqlenmeta.providers import ProviderError
 from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_NAMES,
@@ -142,12 +143,13 @@ from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_TRACK_PROVIDER_SPECS,
     DISCOGS_SPEC,
     ITUNES_SPEC,
-    LASTFM_SPEC,
     LRCLIB_SPEC,
     MUSICBRAINZ_SPEC,
     ProviderSpec,
 )
 from beetsplug.noqlenmeta.resolver import ResolutionPolicy, resolve_metadata
+from beetsplug.noqlenmeta.semantic_enrichment import collect_semantic_enrichment
+from beetsplug.noqlenmeta.semantic_resolution import MoodSettings
 from beetsplug.noqlenmeta.track_application import (
     TrackApplicationMode,
     TrackApplicationResult,
@@ -265,7 +267,12 @@ class NoqlenMetaPlugin(BeetsPlugin):
         self.config.add(default_config())
         self.config["providers"]["discogs"]["user_token"].redact = True
         self._lastfm_provider = None
+        self._lastfm_track_provider = None
+        self._lastfm_artist_provider = None
         self._lrclib_provider = None
+        self._musicbrainz_provider = None
+        self._musicbrainz_semantic_client = None
+        self._semantic_cache = CommandEntityCache()
         self._musicbrainz_identity_source: MusicBrainzIdentitySource | None = None
         self.register_listener("import_task_choice", self._import_task_choice)
         self._command = Subcommand(
@@ -1286,6 +1293,75 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     lambda: self._lrclib_candidates(context),
                 )
             )
+        semantic_fields = {
+            field
+            for field in (
+                "genres",
+                "moods",
+                "lyrics_languages",
+                "artist_languages",
+                "artist_countries",
+                "artist_areas",
+            )
+            if policy.is_field_enabled(field)
+        }
+        if semantic_fields:
+            musicbrainz_tracks = ()
+            musicbrainz_artists = ()
+            if policy.is_provider_enabled("musicbrainz"):
+                from beetsplug.noqlenmeta.providers.musicbrainz_semantic import (
+                    MusicBrainzArtistProvider,
+                    MusicBrainzTrackProvider,
+                )
+
+                musicbrainz_tracks = (
+                    lambda: MusicBrainzTrackProvider(
+                        self._musicbrainz_client(), enabled_fields=semantic_fields
+                    ).get_semantic_evidence(context),
+                )
+                musicbrainz_artists = tuple(
+                    lambda artist=artist: MusicBrainzArtistProvider(
+                        self._musicbrainz_client(), enabled_fields=semantic_fields
+                    ).get_semantic_evidence(artist)
+                    for artist in context.artists
+                )
+
+            lastfm_track = lastfm_release = lastfm_artist = None
+            if policy.is_provider_enabled("lastfm"):
+                def collect_lastfm_track():
+                    return self._lastfm_track_semantics(context)
+
+                lastfm_track = collect_lastfm_track
+                if context.album_title:
+                    release_context = ReleaseEnrichmentContext(
+                        context.artist, context.album_title
+                    )
+
+                    def collect_lastfm_release():
+                        return self._lastfm_release_semantics(release_context)
+
+                    lastfm_release = collect_lastfm_release
+                artist_context = (
+                    context.artists[0]
+                    if context.artists
+                    else ArtistEnrichmentContext(context.artist, credit_index=1)
+                )
+
+                def collect_lastfm_artist():
+                    return self._lastfm_artist_semantics(artist_context)
+
+                lastfm_artist = collect_lastfm_artist
+            semantic = collect_semantic_enrichment(
+                semantic_fields,
+                musicbrainz_tracks=musicbrainz_tracks,
+                musicbrainz_artists=musicbrainz_artists,
+                lastfm_track=lastfm_track,
+                lastfm_release=lastfm_release,
+                lastfm_artist=lastfm_artist,
+                genre_settings=self._genre_settings(),
+                max_moods=self._mood_settings().max_moods,
+            )
+            candidates.extend(semantic.candidates)
         return tuple(candidates)
 
     def _build_change_plan_for_release(
@@ -1314,14 +1390,6 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 )
             )
 
-        if provider_can_contribute(policy, LASTFM_SPEC):
-            candidates.extend(
-                self._collect_provider_candidates(
-                    LASTFM_SPEC,
-                    lambda: self._lastfm_candidates(context),
-                )
-            )
-
         if provider_can_contribute(policy, ITUNES_SPEC):
             storefront = self.config["providers"]["itunes"]["storefront"].as_str()
             candidates.extend(
@@ -1330,6 +1398,32 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     lambda: self._itunes_candidates(context, storefront),
                 )
             )
+
+        release_semantic_fields = {
+            field for field in ("genres", "styles") if policy.is_field_enabled(field)
+        }
+        if release_semantic_fields:
+            musicbrainz_release = None
+            if policy.is_provider_enabled("musicbrainz"):
+                def collect_musicbrainz_release():
+                    return self._musicbrainz_release_semantics(context)
+
+                musicbrainz_release = collect_musicbrainz_release
+            lastfm_release = None
+            if policy.is_provider_enabled("lastfm"):
+                def collect_lastfm_release():
+                    return self._lastfm_release_semantics(context)
+
+                lastfm_release = collect_lastfm_release
+            semantic = collect_semantic_enrichment(
+                release_semantic_fields,
+                musicbrainz_release=musicbrainz_release,
+                discogs_metadata=candidates,
+                lastfm_release=lastfm_release,
+                genre_settings=self._genre_settings(),
+                max_moods=self._mood_settings().max_moods,
+            )
+            candidates.extend(semantic.candidates)
 
         ordinary_candidates = tuple(
             candidate for candidate in candidates if candidate.field != "genres"
@@ -1389,7 +1483,27 @@ class NoqlenMetaPlugin(BeetsPlugin):
     ) -> tuple[MetadataCandidate, ...]:
         from beetsplug.noqlenmeta.providers.musicbrainz import MusicBrainzProvider
 
-        return tuple(MusicBrainzProvider().get_candidates(context))
+        if self._musicbrainz_provider is None:
+            self._musicbrainz_provider = MusicBrainzProvider(cache=self._semantic_cache)
+        return tuple(self._musicbrainz_provider.get_candidates(context))
+
+    def _musicbrainz_client(self):
+        from beetsplug.noqlenmeta.providers.musicbrainz_semantic import (
+            MusicBrainzSemanticClient,
+        )
+
+        if self._musicbrainz_semantic_client is None:
+            self._musicbrainz_semantic_client = MusicBrainzSemanticClient(
+                cache=self._semantic_cache
+            )
+        return self._musicbrainz_semantic_client
+
+    def _musicbrainz_release_semantics(self, context: ReleaseEnrichmentContext):
+        from beetsplug.noqlenmeta.providers.musicbrainz import MusicBrainzProvider
+
+        if self._musicbrainz_provider is None:
+            self._musicbrainz_provider = MusicBrainzProvider(cache=self._semantic_cache)
+        return self._musicbrainz_provider.get_semantic_evidence(context)
 
     def _itunes_candidates(
         self, context: ReleaseEnrichmentContext, storefront: str
@@ -1406,6 +1520,45 @@ class NoqlenMetaPlugin(BeetsPlugin):
         if self._lastfm_provider is None:
             self._lastfm_provider = LastFmProvider()
         return tuple(self._lastfm_provider.get_candidates(context))
+
+    def _lastfm_release_semantics(self, context: ReleaseEnrichmentContext):
+        from beetsplug.noqlenmeta.providers.lastfm import LastFmProvider
+
+        if self._lastfm_provider is None:
+            self._lastfm_provider = LastFmProvider()
+        try:
+            return self._lastfm_provider.get_semantic_evidence(context)
+        except ProviderError:
+            self._log.warning(
+                "Noqlen Meta: Last.fm enrichment unavailable; processing will continue"
+            )
+            raise
+
+    def _lastfm_track_semantics(self, context: TrackEnrichmentContext):
+        from beetsplug.noqlenmeta.providers.lastfm import LastFmTrackProvider
+
+        if self._lastfm_track_provider is None:
+            self._lastfm_track_provider = LastFmTrackProvider()
+        try:
+            return self._lastfm_track_provider.get_semantic_evidence(context)
+        except ProviderError:
+            self._log.warning(
+                "Noqlen Meta: Last.fm enrichment unavailable; processing will continue"
+            )
+            raise
+
+    def _lastfm_artist_semantics(self, context):
+        from beetsplug.noqlenmeta.providers.lastfm import LastFmArtistProvider
+
+        if self._lastfm_artist_provider is None:
+            self._lastfm_artist_provider = LastFmArtistProvider()
+        try:
+            return self._lastfm_artist_provider.get_semantic_evidence(context)
+        except ProviderError:
+            self._log.warning(
+                "Noqlen Meta: Last.fm enrichment unavailable; processing will continue"
+            )
+            raise
 
     def _lrclib_candidates(
         self, context: TrackEnrichmentContext
