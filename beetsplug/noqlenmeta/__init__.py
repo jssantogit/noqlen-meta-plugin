@@ -107,6 +107,7 @@ from beetsplug.noqlenmeta.integration import (
     resolve_discogs_token,
 )
 from beetsplug.noqlenmeta.library_application import (
+    LibraryApplicationError,
     LibraryApplicationMode,
     LibraryApplicationResult,
     apply_library_target_plan,
@@ -122,6 +123,7 @@ from beetsplug.noqlenmeta.library_mapping import (
     map_change_plan_to_library_album,
 )
 from beetsplug.noqlenmeta.library_track_application import (
+    LibraryTrackApplicationError,
     LibraryTrackApplicationResult,
     apply_library_track_plan,
 )
@@ -198,10 +200,16 @@ def _render_file_sync_error(plan: FileSyncPlan, error: FileSyncApplicationError)
     status = "uncertain" if error.state_uncertain else (
         "committed-error" if error.committed else "failed"
     )
+    retained = (
+        "; recovery_artifact_retained=true"
+        if error.recovery_artifact_retained
+        else ""
+    )
     ui.print_(
         "Noqlen Meta / file application: "
-        f"Item {plan.item_id}; status={status}; fields=0; "
-        f"blockers={len(plan.blockers)}; reason={error}"
+        f"Item {plan.item_id}; status={status}; "
+        f"fields={len(plan.changes) if error.committed else 0}; "
+        f"blockers={len(plan.blockers)}; reason={error}{retained}"
     )
 
 
@@ -761,16 +769,31 @@ class NoqlenMetaPlugin(BeetsPlugin):
             for file_plan in file_plans:
                 verify_file_sync_plan(lib, file_plan)
 
+        earlier_database_changes_committed = False
         album_results: list[LibraryApplicationResult | None] = []
         for album_plan in prepared_albums:
-            album_results.append(
-                apply_library_target_plan(
-                    album_plan.album,
-                    album_plan.target_plan,
-                    mode=application_mode,
+            try:
+                application_result = (
+                    apply_library_target_plan(
+                        album_plan.album,
+                        album_plan.target_plan,
+                        mode=application_mode,
+                    )
+                    if apply_enabled
+                    else None
                 )
-                if apply_enabled
-                else None
+            except LibraryApplicationError as error:
+                if earlier_database_changes_committed:
+                    raise LibraryApplicationError(
+                        "ordinary database application stopped after earlier target "
+                        "changes were committed"
+                    ) from error
+                raise
+            album_results.append(application_result)
+            earlier_database_changes_committed = (
+                earlier_database_changes_committed
+                or application_result is not None
+                and application_result.stored
             )
         track_mode = (
             TrackApplicationMode.PARTIAL
@@ -779,14 +802,28 @@ class NoqlenMetaPlugin(BeetsPlugin):
         )
         item_results: list[LibraryTrackApplicationResult | None] = []
         for item_plan in prepared_items:
-            item_results.append(
-                apply_library_track_plan(
-                    item_plan.item,
-                    item_plan.target_plan,
-                    mode=track_mode,
+            try:
+                application_result = (
+                    apply_library_track_plan(
+                        item_plan.item,
+                        item_plan.target_plan,
+                        mode=track_mode,
+                    )
+                    if apply_enabled
+                    else None
                 )
-                if apply_enabled
-                else None
+            except LibraryTrackApplicationError as error:
+                if earlier_database_changes_committed:
+                    raise LibraryTrackApplicationError(
+                        "ordinary database application stopped after earlier target "
+                        "changes were committed"
+                    ) from error
+                raise
+            item_results.append(application_result)
+            earlier_database_changes_committed = (
+                earlier_database_changes_committed
+                or application_result is not None
+                and application_result.stored
             )
 
         for album_plan, application_result in zip(
