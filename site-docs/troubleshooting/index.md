@@ -53,7 +53,7 @@ Keep the database unchanged and inspect the identity preview. When decisive
 AcoustID recording evidence contradicts every structurally valid MusicBrainz
 candidate, Noqlen returns `acoustid_recording_conflict` rather than choosing a
 release anyway. AcoustID only removes incompatible candidates; it does not add
-score or relax the normal identity gates. See the [`--identity` reference](../reference/commands.md#--identity).
+score or relax the normal identity gates. See the [`--identity` reference](../reference/commands.md).
 
 ## Why Did AcoustID Not Run During `--identity`?
 
@@ -75,7 +75,7 @@ exposing or guessing a key.
 Add `--apply` only after reviewing the standalone preview. `--fingerprint-missing`
 permits local fingerprint calculation; it does not grant database-write
 authority. Standalone AcoustID `--apply` can change only `acoustid_id` and
-`acoustid_fingerprint`, never audio files. See the [`--acoustid` reference](../reference/commands.md#--acoustid).
+`acoustid_fingerprint`, never audio files. See the [`--acoustid` reference](../reference/commands.md).
 
 ## What Is The Difference Between Chromaprint, `fpcalc`, AcoustID, And beets `chroma`?
 
