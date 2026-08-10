@@ -2,133 +2,166 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement the approved Semantic Enrichment phase so exact MusicBrainz identities provide useful zero-credential genres, moods, lyric languages, artist languages, and artist geography, while Discogs and Last.fm improve coverage without weakening Noqlen's deterministic resolution and write-safety model.
+**Goal:** Implement the approved Semantic Enrichment phase so exact MusicBrainz identities produce useful zero-credential genres, moods, lyric languages, artist languages, and artist geography, while Discogs and Last.fm improve coverage without weakening deterministic resolution or write safety.
 
-**Architecture:** Extend the Foundation's `RELEASE`, `TRACK`, and `ARTIST` provider scopes instead of creating field-specific mini-systems. Providers produce structured metadata plus normalized semantic evidence; pure classifiers/resolvers select canonical values; the existing change-plan/application pipeline remains the only mutation path. Use exact-entity command-lifetime caching and lazy Last.fm fallback so one entity lookup can feed every enabled semantic field.
+**Architecture:** Extend the Foundation's `RELEASE`, `TRACK`, and `ARTIST` scopes. Providers emit structured metadata and normalized semantic evidence; pure resolvers choose canonical values; only the existing change-plan/application layer may mutate beets or media files. Use one command-lifetime exact-entity cache and field-aware Last.fm fallback so data already collected for one field is reused by every compatible field.
 
-**Tech Stack:** Python 3.10-3.14, beets >=2.12,<3, mediafile/mutagen through beets, requests, pytest, ruff, existing Noqlen provider/change-plan/file-sync infrastructure.
+**Tech Stack:** Python 3.10-3.14, beets >=2.12,<3, mediafile/mutagen through beets, requests, pytest, ruff, MkDocs, existing Noqlen provider/change-plan/file-sync infrastructure.
 
 ## Global Constraints
 
-- Base branch for this work: `feat/semantic-enrichment`, created from `docs/v2-enrichment-design` after V2 Foundation + Genre Foundation merge commit `f651dafc3691d33287b2dca38f960a4c5b533f42`.
-- Approved design: `docs/superpowers/specs/2026-08-10-semantic-enrichment-design.md`.
-- MusicBrainz is the zero-credential semantic backbone and must use exact existing MBIDs; do not add fuzzy MusicBrainz identity search.
+- Work on `feat/semantic-enrichment`, whose semantic spec commit is `a857b1cd5b88d39e2e1e7393b455645e1867c532` and whose v2 Foundation base is `f651dafc3691d33287b2dca38f960a4c5b533f42`.
+- Design authority: `docs/superpowers/specs/2026-08-10-semantic-enrichment-design.md`.
+- MusicBrainz is the zero-credential semantic backbone and must use exact MBIDs already selected/stored by beets/Noqlen. Do not add fuzzy MusicBrainz identity search.
 - Discogs remains opt-in and is the structured style authority.
-- Last.fm remains opt-in and contributes community evidence with lazy Track -> Release -> Artist fallback.
-- `moods.max_moods` defaults to `1`; accept only integer values `1..10`.
-- Every canonical community term has one primary category: `GENRE`, `STYLE`, `MOOD`, `ORIGIN`, `DESCRIPTOR`, or `NOISE`.
-- Unknown/raw community tags are never persisted automatically.
-- `lyrics_languages` and `artist_languages` persist canonical three-letter MusicBrainz language codes, not translated names.
-- `artist_languages` is derived only from identified Works in the current target; never crawl the artist's full catalogue.
-- `artist_countries` means trustworthy geographic identification/origin, not citizenship; never infer it from language, title script, release country, artist name, or geographic-name string matching.
-- Missing evidence is preferable to fabricated metadata.
-- Provider/network failures remain local when safe; structural plan/write failures remain blocking.
-- No persistent API cache and no arbitrary request-budget setting in this phase.
-- `--write` authorizes only already-planned file mutations and must never trigger additional provider work.
-- Importer and existing-library paths must share context, evidence, classification, resolution, and field semantics.
-- Preserve identity, AcoustID, existing genre ranking, `genres.num_genres`, `genres.promote_styles`, and legacy `style` migration behavior.
-- Do not implement Cover Art Archive, artwork sidecars/embedding, BPM providers/local analysis, `[audio]`, local ML mood classification, or a release/version bump in this plan.
+- Last.fm remains opt-in and uses field-aware Track -> Release -> Artist fallback.
+- `moods.max_moods` defaults to `1` and accepts only integer values from `1` through `10`.
+- Every accepted community term has exactly one primary category: `GENRE`, `STYLE`, `MOOD`, `ORIGIN`, `DESCRIPTOR`, or `NOISE`.
+- Unknown community tags are never persisted automatically.
+- `lyrics_languages` and `artist_languages` persist canonical three-letter language codes.
+- `artist_languages` is derived only from identified Works in the current target. Do not crawl an artist's full catalogue.
+- `artist_countries` is geographic identification/origin, not citizenship. Never infer it from language, artist name, release country, title script, or geographic-name string matching.
+- Provider/network failures are local when safe. Structural plan/file-safety failures remain blocking.
+- Do not add a persistent API cache or request-budget setting.
+- `--write` must not add provider calls or collection work.
+- Importer and existing-library paths share contexts, evidence, classification, resolution, and semantics.
+- Preserve identity/AcoustID behavior, Genre Foundation ranking, `genres.num_genres`, `genres.promote_styles`, and legacy scalar `style` fallback.
+- Do not implement Cover Art Archive, artwork download/embed, BPM, `[audio]`, local ML mood analysis, or a release/version bump.
 - Do not add another mandatory beets plugin dependency.
-- Keep production behavior compatible with beets 2.12 and the latest beets `<3` CI lane.
+- CI compatibility targets remain beets `2.12.0` and latest beets `<3`.
 
 ---
 
-## File Structure
+## File Map
 
-### New semantic core
+### Create
 
-- Create `beetsplug/noqlenmeta/semantic_tags.py` — semantic categories, normalized community-tag evidence, classifier, aliases, and bundled mood/style/origin/noise vocabulary.
-- Create `beetsplug/noqlenmeta/semantic_resolution.py` — pure style/mood selection and semantic result types; genre selection remains in the existing specialized genre resolver.
-- Create `beetsplug/noqlenmeta/provider_cache.py` — command-lifetime exact-entity response/negative cache; transient exceptions are not cached.
+- `beetsplug/noqlenmeta/semantic_tags.py` — semantic categories, canonical tag evidence, deterministic classifier, compact mood/style/origin/noise vocabularies.
+- `beetsplug/noqlenmeta/semantic_resolution.py` — pure style and mood resolution.
+- `beetsplug/noqlenmeta/provider_cache.py` — command-lifetime exact-entity payload and negative cache.
+- `beetsplug/noqlenmeta/providers/musicbrainz_semantic.py` — exact Recording/Work/Artist/Area semantic lookups and normalization.
+- `beetsplug/noqlenmeta/semantic_enrichment.py` — shared semantic orchestration and explicit field outcomes.
+- `beetsplug/noqlenmeta/semantic_media.py` — registered semantic MediaFile descriptors and lossless mapping capability checks.
+- `tests/test_semantic_tags.py`
+- `tests/test_semantic_resolution.py`
+- `tests/test_provider_cache.py`
+- `tests/test_musicbrainz_semantic.py`
+- `tests/test_semantic_enrichment.py`
+- `tests/test_semantic_media.py`
 
-### Provider changes
+### Modify
 
-- Modify `beetsplug/noqlenmeta/providers/specs.py` — declare MusicBrainz and Last.fm capabilities at release/track/artist scopes.
-- Modify `beetsplug/noqlenmeta/providers/musicbrainz.py` — expand release lookup to unioned semantic includes and emit release semantic evidence.
-- Create `beetsplug/noqlenmeta/providers/musicbrainz_semantic.py` — exact Recording, Work, Artist, and Area lookups plus normalized track/artist/language/geographic semantic output.
-- Modify `beetsplug/noqlenmeta/providers/lastfm.py` — add exact-context Track/Release/Artist top-tag collection without independent fuzzy identity search.
-- Modify `beetsplug/noqlenmeta/providers/discogs.py` only where needed to expose the already-structured `styles`/`genres` cleanly to semantic orchestration; do not add track/artist crawling.
-
-### Orchestration/application
-
-- Modify `beetsplug/noqlenmeta/domain.py` — add semantic bundle/result values only if they are provider-independent domain objects.
-- Modify `beetsplug/noqlenmeta/genre_pipeline.py` — accept MusicBrainz/Last.fm genre evidence at track/release/artist scopes while preserving current ranking behavior.
-- Modify `beetsplug/noqlenmeta/__init__.py` — configuration, enabled-field planning, scoped provider registration/collection, lazy fallback, shared cache lifetime, preview/outcome reporting, and existing-library orchestration.
-- Modify the existing importer enrichment module(s) used by Noqlen Meta — route importer targets through the same semantic collection/resolution entry point; do not duplicate classifier/resolver logic.
-- Modify `beetsplug/noqlenmeta/file_sync.py` — add only lossless semantic media mappings; unsupported mappings remain explicit blockers.
-
-### Tests/docs
-
-- Create `tests/test_semantic_tags.py`.
-- Create `tests/test_semantic_resolution.py`.
-- Create `tests/test_provider_cache.py`.
-- Create `tests/test_musicbrainz_semantic.py`.
-- Extend `tests/test_musicbrainz_provider.py`.
-- Extend `tests/test_lastfm_provider.py`.
-- Extend `tests/test_genre_pipeline.py` / existing genre-resolution tests.
-- Extend `tests/test_v2_foundation_command.py` for command/application behavior.
-- Extend importer integration tests in the existing importer test module(s).
-- Extend the real-media-file tests that currently verify `--apply --write` observable outcomes.
-- Modify `README.md`, `site-docs/reference/configuration.md`, `site-docs/concepts/preview-apply-write.md`, and the relevant provider/reference page(s) to document the implemented semantic behavior truthfully.
+- `beetsplug/noqlenmeta/domain.py`
+- `beetsplug/noqlenmeta/configuration.py`
+- `beetsplug/noqlenmeta/providers/specs.py`
+- `beetsplug/noqlenmeta/providers/musicbrainz.py`
+- `beetsplug/noqlenmeta/providers/lastfm.py`
+- `beetsplug/noqlenmeta/providers/discogs.py`
+- `beetsplug/noqlenmeta/genre_pipeline.py`
+- `beetsplug/noqlenmeta/integration.py`
+- `beetsplug/noqlenmeta/track_integration.py`
+- `beetsplug/noqlenmeta/library_integration.py`
+- `beetsplug/noqlenmeta/file_sync.py`
+- `beetsplug/noqlenmeta/__init__.py`
+- `tests/test_provider_specs.py`
+- `tests/test_musicbrainz_provider.py`
+- `tests/test_lastfm_provider.py`
+- `tests/test_discogs_provider.py`
+- `tests/test_genre_pipeline.py`
+- `tests/test_genre_resolution.py`
+- `tests/test_file_sync.py`
+- `tests/test_v2_foundation_command.py`
+- `tests/test_beets_integration.py`
+- `README.md`
+- `site-docs/reference/configuration.md`
+- `site-docs/concepts/preview-apply-write.md`
 
 ---
 
-### Task 1: Semantic classifier, mood/style evidence, and configuration
+### Task 1: Semantic classifier, mood/style resolution, and config
 
 **Files:**
 - Create: `beetsplug/noqlenmeta/semantic_tags.py`
 - Create: `beetsplug/noqlenmeta/semantic_resolution.py`
 - Modify: `beetsplug/noqlenmeta/domain.py`
+- Modify: `beetsplug/noqlenmeta/configuration.py`
 - Modify: `beetsplug/noqlenmeta/__init__.py`
 - Test: `tests/test_semantic_tags.py`
 - Test: `tests/test_semantic_resolution.py`
 - Test: `tests/test_v2_foundation_command.py`
 
 **Interfaces:**
-- Produces:
-  - `SemanticCategory(Enum)` with `GENRE`, `STYLE`, `MOOD`, `ORIGIN`, `DESCRIPTOR`, `NOISE`.
-  - `SemanticTagEvidence(term: str, category: SemanticCategory, provider: str, scope: ProviderScope, confidence: float, source_id: str, source_url: str | None = None, weight: int | None = None, raw_tag: str | None = None)`.
-  - `SemanticEvidenceBundle(metadata: tuple[MetadataCandidate, ...] = (), genres: tuple[GenreEvidence, ...] = (), tags: tuple[SemanticTagEvidence, ...] = ())`.
-  - `classify_semantic_tag(raw_tag: str, *, provider: str, scope: ProviderScope, confidence: float, source_id: str, source_url: str | None = None, weight: int | None = None) -> SemanticTagEvidence | None`.
-  - `resolve_styles(structured: Sequence[MetadataCandidate], community: Sequence[SemanticTagEvidence]) -> tuple[str, ...]`.
-  - `resolve_moods(evidence: Sequence[SemanticTagEvidence], *, max_moods: int) -> tuple[str, ...]`.
-  - `MoodSettings(max_moods: int)` validation through plugin configuration.
-- Consumes: existing `ProviderScope`, `MetadataCandidate`, Genre Foundation taxonomy/classifier functions, and existing preserve/change-plan semantics.
-
-- [ ] **Step 1: Write classifier tests before production code**
-
-Create tests covering unique category assignment and representative aliases:
 
 ```python
-@pytest.mark.parametrize(
-    ("raw", "category", "term"),
-    [
-        ("melancholy", SemanticCategory.MOOD, "Melancholic"),
-        ("melancholic", SemanticCategory.MOOD, "Melancholic"),
-        ("dreamy", SemanticCategory.MOOD, "Dreamy"),
-        ("atmospheric", SemanticCategory.MOOD, "Atmospheric"),
-        ("progressive metal", SemanticCategory.STYLE, "Progressive Metal"),
-        ("k-pop", SemanticCategory.GENRE, "K-pop"),
-        ("korean", SemanticCategory.ORIGIN, "Korean"),
-        ("seen live", SemanticCategory.NOISE, "Seen Live"),
-    ],
-)
-def test_semantic_tag_has_one_canonical_category(raw, category, term):
-    result = classify_semantic_tag(
-        raw,
-        provider="musicbrainz",
-        scope=ProviderScope.TRACK,
-        confidence=0.8,
-        source_id="recording-1",
-    )
-    assert result is not None
-    assert result.category is category
-    assert result.term == term
+class SemanticCategory(Enum):
+    GENRE = "genre"
+    STYLE = "style"
+    MOOD = "mood"
+    ORIGIN = "origin"
+    DESCRIPTOR = "descriptor"
+    NOISE = "noise"
+
+@dataclass(frozen=True, slots=True)
+class SemanticTagEvidence:
+    term: str
+    category: SemanticCategory
+    provider: str
+    scope: ProviderScope
+    confidence: float
+    source_id: str
+    source_url: str | None = None
+    weight: int | None = None
+    raw_tag: str | None = None
+
+@dataclass(frozen=True, slots=True)
+class SemanticEvidenceBundle:
+    metadata: tuple[MetadataCandidate, ...] = ()
+    genres: tuple[GenreEvidence, ...] = ()
+    tags: tuple[SemanticTagEvidence, ...] = ()
+
+def classify_semantic_tag(
+    raw_tag: str,
+    *,
+    provider: str,
+    scope: ProviderScope,
+    confidence: float,
+    source_id: str,
+    source_url: str | None = None,
+    weight: int | None = None,
+) -> SemanticTagEvidence | None: ...
+
+def resolve_styles(
+    structured: Sequence[MetadataCandidate],
+    community: Sequence[SemanticTagEvidence],
+) -> tuple[str, ...]: ...
+
+def resolve_moods(
+    evidence: Sequence[SemanticTagEvidence],
+    *,
+    max_moods: int,
+) -> tuple[str, ...]: ...
 ```
 
-Add explicit tests that blank/unknown tags return `None`, genre recognition reuses the bundled Noqlen genre taxonomy, and one raw tag never emits multiple evidence objects.
+The function bodies above are signatures only; implementation steps below define their required behavior.
 
-- [ ] **Step 2: Run the focused classifier tests and confirm RED**
+- [ ] **Step 1: Write RED classifier tests**
+
+Create `tests/test_semantic_tags.py` with a local helper that constructs evidence and tests these exact classifications:
+
+```python
+CASES = (
+    ("melancholy", SemanticCategory.MOOD, "Melancholic"),
+    ("melancholic", SemanticCategory.MOOD, "Melancholic"),
+    ("dreamy", SemanticCategory.MOOD, "Dreamy"),
+    ("atmospheric", SemanticCategory.MOOD, "Atmospheric"),
+    ("progressive metal", SemanticCategory.STYLE, "Progressive Metal"),
+    ("k-pop", SemanticCategory.GENRE, "K-pop"),
+    ("korean", SemanticCategory.ORIGIN, "Korean"),
+    ("seen live", SemanticCategory.NOISE, "Seen Live"),
+)
+```
+
+Also assert blank and unknown tags return `None`, Genre Foundation classification is reused for genre terms, and one raw tag yields only one category.
 
 Run:
 
@@ -136,255 +169,196 @@ Run:
 pytest -q tests/test_semantic_tags.py
 ```
 
-Expected: collection/import failure because `semantic_tags` does not exist yet.
+Expected: FAIL because the semantic classifier does not exist yet.
 
-- [ ] **Step 3: Implement the deterministic classifier with small bundled vocabularies**
+- [ ] **Step 2: Implement the deterministic classifier**
 
-Use normalization in this order:
+Normalize with NFKC + casefold + collapsed whitespace. Classification precedence is fixed:
 
-```python
-def _identity(text: str) -> str:
-    return " ".join(unicodedata.normalize("NFKC", text).casefold().split())
+```text
+NOISE
+-> existing Genre Foundation taxonomy
+-> STYLE allowlist
+-> MOOD taxonomy/aliases
+-> ORIGIN allowlist
+-> DESCRIPTOR allowlist
+-> unknown => None
 ```
 
-Classification precedence must be explicit and single-valued:
+Keep the initial non-genre vocabularies compact. Include only reviewed canonical terms and aliases required by the design/tests; do not import a large external tag list wholesale.
+
+- [ ] **Step 3: Write RED resolver tests**
+
+Required assertions:
 
 ```python
-def classify_semantic_tag(...):
-    key = _identity(raw_tag)
-    if not key:
-        return None
-    if key in NOISE_TERMS:
-        category, canonical = SemanticCategory.NOISE, NOISE_TERMS[key]
-    elif (genre := classify_genre(raw_tag)) is not None:
-        category, canonical = SemanticCategory.GENRE, genre
-    elif key in STYLE_TERMS:
-        category, canonical = SemanticCategory.STYLE, STYLE_TERMS[key]
-    elif key in MOOD_TERMS:
-        category, canonical = SemanticCategory.MOOD, MOOD_TERMS[key]
-    elif key in ORIGIN_TERMS:
-        category, canonical = SemanticCategory.ORIGIN, ORIGIN_TERMS[key]
-    elif key in DESCRIPTOR_TERMS:
-        category, canonical = SemanticCategory.DESCRIPTOR, DESCRIPTOR_TERMS[key]
-    else:
-        return None
-    return SemanticTagEvidence(...)
+assert resolve_moods(
+    (
+        mood_evidence("Melancholic", "musicbrainz", ProviderScope.TRACK, 8),
+        mood_evidence("Dreamy", "musicbrainz", ProviderScope.TRACK, 7),
+    ),
+    max_moods=1,
+) == ("Melancholic",)
+
+assert resolve_moods(
+    (
+        mood_evidence("Dreamy", "musicbrainz", ProviderScope.RELEASE, 7),
+        mood_evidence("Dreamy", "lastfm", ProviderScope.RELEASE, 70),
+        mood_evidence("Melancholic", "musicbrainz", ProviderScope.RELEASE, 8),
+    ),
+    max_moods=1,
+) == ("Dreamy",)
+
+assert resolve_styles(
+    (
+        MetadataCandidate(
+            "styles",
+            ("Progressive Metal", "Technical Death Metal"),
+            "discogs",
+            0.95,
+            "discogs-release-1",
+        ),
+    ),
+    (
+        style_evidence("Alternative Metal", "lastfm", ProviderScope.RELEASE, 80),
+    ),
+) == ("Progressive Metal", "Technical Death Metal")
 ```
 
-Keep the first vocabulary deliberately compact. Include only terms represented in tests/spec examples plus a small useful canonical mood core; do not bulk-copy Forge or LastGenre lists without semantic review.
+The test module must define `mood_evidence()` and `style_evidence()` as explicit constructors for `SemanticTagEvidence`; do not hide policy in test fixtures.
 
-- [ ] **Step 4: Write mood/style resolver tests**
-
-Cover:
-
-```python
-def test_default_mood_returns_only_best_value():
-    evidence = (
-        tag("Melancholic", provider="musicbrainz", scope=ProviderScope.TRACK, weight=8),
-        tag("Dreamy", provider="musicbrainz", scope=ProviderScope.TRACK, weight=7),
-    )
-    assert resolve_moods(evidence, max_moods=1) == ("Melancholic",)
-
-
-def test_cross_provider_corroboration_breaks_equivalent_tie():
-    evidence = (
-        tag("Dreamy", provider="musicbrainz", scope=ProviderScope.RELEASE, weight=7),
-        tag("Dreamy", provider="lastfm", scope=ProviderScope.RELEASE, weight=70),
-        tag("Melancholic", provider="musicbrainz", scope=ProviderScope.RELEASE, weight=8),
-    )
-    assert resolve_moods(evidence, max_moods=1) == ("Dreamy",)
-
-
-def test_discogs_structured_styles_are_not_replaced_by_community_soup():
-    structured = (
-        MetadataCandidate("styles", ("Progressive Metal", "Technical Death Metal"), "discogs", 0.95, "1"),
-    )
-    community = (tag("Alternative Metal", provider="lastfm", category=SemanticCategory.STYLE),)
-    assert resolve_styles(structured, community) == (
-        "Progressive Metal",
-        "Technical Death Metal",
-    )
-```
-
-Also test stable ordering, provider-count corroboration, scope preference only after eligibility, deduplication, and `max_moods=3` without artificial padding.
-
-- [ ] **Step 5: Run resolver tests and confirm RED**
+Run:
 
 ```bash
 pytest -q tests/test_semantic_resolution.py
 ```
 
-- [ ] **Step 6: Implement the pure style/mood resolvers**
+Expected: FAIL because the resolvers do not exist yet.
 
-Do not create a universal numeric magic score. Express ranking as an ordered key whose components mirror the design:
+- [ ] **Step 4: Implement pure resolvers**
 
-```python
-rank = (
-    scope_rank,
-    distinct_provider_count,
-    evidence_strength,
-    native_weight_or_zero,
-    stable_order,
-)
+Filter invalid/unrecognized evidence first. Rank using ordered policy components rather than a universal summed score:
+
+```text
+eligible evidence
+-> scope relevance
+-> distinct-provider corroboration
+-> evidence strength
+-> native provider weight
+-> stable input/canonical ordering
 ```
 
-Filter ineligible/unrecognized evidence before rank computation. For styles, return structured Discogs values unchanged when eligible structured style evidence exists; use community `STYLE` evidence as fallback coverage rather than uncontrolled union.
+For `styles`, eligible structured Discogs styles win as the preserved ordered tuple; community `STYLE` evidence is fallback coverage when structured styles are absent.
 
-- [ ] **Step 7: Add and validate `moods.max_moods`**
+- [ ] **Step 5: Add `moods.max_moods` config validation**
 
-Default configuration:
+Add to `default_config()`:
 
 ```yaml
 moods:
   max_moods: 1
 ```
 
-Add command-level tests proving `0`, `11`, booleans, and strings are rejected before provider work, while `1` and `3` are accepted.
+Add command-level tests proving integer `1` and `3` are accepted and values `0`, `11`, `True`, and `"1"` are rejected before any provider call.
 
-- [ ] **Step 8: Run focused tests**
+- [ ] **Step 6: Verify Task 1**
 
 ```bash
 pytest -q tests/test_semantic_tags.py tests/test_semantic_resolution.py tests/test_v2_foundation_command.py
-ruff check beetsplug/noqlenmeta/semantic_tags.py beetsplug/noqlenmeta/semantic_resolution.py tests/test_semantic_tags.py tests/test_semantic_resolution.py
+ruff check beetsplug/noqlenmeta/semantic_tags.py beetsplug/noqlenmeta/semantic_resolution.py beetsplug/noqlenmeta/domain.py beetsplug/noqlenmeta/configuration.py tests/test_semantic_tags.py tests/test_semantic_resolution.py
 ```
 
-Expected: PASS.
-
-- [ ] **Step 9: Commit Task 1**
+- [ ] **Step 7: Commit Task 1**
 
 ```bash
-git add beetsplug/noqlenmeta/semantic_tags.py beetsplug/noqlenmeta/semantic_resolution.py beetsplug/noqlenmeta/domain.py beetsplug/noqlenmeta/__init__.py tests/test_semantic_tags.py tests/test_semantic_resolution.py tests/test_v2_foundation_command.py
+git add beetsplug/noqlenmeta/semantic_tags.py beetsplug/noqlenmeta/semantic_resolution.py beetsplug/noqlenmeta/domain.py beetsplug/noqlenmeta/configuration.py beetsplug/noqlenmeta/__init__.py tests/test_semantic_tags.py tests/test_semantic_resolution.py tests/test_v2_foundation_command.py
 git commit -m "feat: add semantic tag classification"
 ```
 
 ---
 
-### Task 2: Command-lifetime exact-entity cache and provider scope declarations
+### Task 2: Command cache and multi-scope provider capabilities
 
 **Files:**
 - Create: `beetsplug/noqlenmeta/provider_cache.py`
 - Modify: `beetsplug/noqlenmeta/providers/specs.py`
 - Test: `tests/test_provider_cache.py`
-- Extend: `tests/test_provider_specs.py` or the existing provider-spec registry tests
+- Test: `tests/test_provider_specs.py`
 
 **Interfaces:**
-- Produces:
-  - `EntityCacheKey(provider: str, entity_type: str, entity_id: str)`.
-  - `CommandEntityCache.get_or_fetch(key: EntityCacheKey, fetcher: Callable[[], Mapping[str, object] | None]) -> Mapping[str, object] | None`.
-  - Separate MusicBrainz and Last.fm specs at `RELEASE`, `TRACK`, and `ARTIST` scopes using the same provider name and different `(name, scope)` registry keys.
-- Consumes: existing multi-scope provider registry from Foundation.
-
-- [ ] **Step 1: Write cache behavior tests**
-
-Required cases:
 
 ```python
-def test_successful_payload_is_fetched_once():
-    calls = 0
-    cache = CommandEntityCache()
-    key = EntityCacheKey("musicbrainz", "artist", ARTIST_MBID)
-    ...
-    assert cache.get_or_fetch(key, fetcher) == payload
-    assert cache.get_or_fetch(key, fetcher) == payload
-    assert calls == 1
+@dataclass(frozen=True, slots=True)
+class EntityCacheKey:
+    provider: str
+    entity_type: str
+    entity_id: str
 
-
-def test_not_found_is_negatively_cached():
-    ...
-    assert cache.get_or_fetch(key, fetcher) is None
-    assert cache.get_or_fetch(key, fetcher) is None
-    assert calls == 1
-
-
-def test_transient_exception_is_not_cached():
-    ...
-    with pytest.raises(RequestException):
-        cache.get_or_fetch(key, failing_fetcher)
-    assert cache.get_or_fetch(key, succeeding_fetcher) == payload
+class CommandEntityCache:
+    def get_or_fetch(
+        self,
+        key: EntityCacheKey,
+        fetcher: Callable[[], Mapping[str, object] | None],
+    ) -> Mapping[str, object] | None: ...
 ```
 
-- [ ] **Step 2: Run cache tests and confirm RED**
+- [ ] **Step 1: Write RED cache tests**
+
+Test three observable behaviors with integer call counters:
+
+1. Two identical successful lookups invoke the fetcher once.
+2. Two identical definitive `None` lookups invoke the fetcher once.
+3. A first fetcher raising `RequestException` is not cached; a second fetcher for the same key runs and can succeed.
+
+Run:
 
 ```bash
 pytest -q tests/test_provider_cache.py
 ```
 
-- [ ] **Step 3: Implement the small cache**
+Expected: FAIL because `provider_cache.py` does not exist.
 
-Use two dictionaries/sets only; no TTL/database/thread service:
+- [ ] **Step 2: Implement the cache**
 
-```python
-class CommandEntityCache:
-    def __init__(self) -> None:
-        self._payloads: dict[EntityCacheKey, Mapping[str, object]] = {}
-        self._missing: set[EntityCacheKey] = set()
+Use exactly one payload dictionary and one negative-cache set. Let fetcher exceptions propagate without modifying either collection. Validate non-empty canonical strings in `EntityCacheKey`.
 
-    def get_or_fetch(self, key, fetcher):
-        if key in self._payloads:
-            return self._payloads[key]
-        if key in self._missing:
-            return None
-        payload = fetcher()  # exceptions escape and are not cached
-        if payload is None:
-            self._missing.add(key)
-            return None
-        self._payloads[key] = payload
-        return payload
+- [ ] **Step 3: Expand provider specs without name collisions**
+
+Keep release specs and add distinct `(name, scope)` entries:
+
+```text
+musicbrainz / RELEASE
+musicbrainz / TRACK
+musicbrainz / ARTIST
+lastfm / RELEASE
+lastfm / TRACK
+lastfm / ARTIST
 ```
 
-Validate/canonicalize non-empty provider/entity type/entity ID at `EntityCacheKey` construction.
+Capabilities after this phase:
 
-- [ ] **Step 4: Extend provider specs for multi-scope semantic capability**
-
-Keep existing names and registry shape. Add track/artist specs without overwriting release specs. Capability intent:
-
-```python
-MUSICBRAINZ_TRACK_SPEC = ProviderSpec(
-    name="musicbrainz",
-    display_name="MusicBrainz",
-    supported_fields=frozenset({"genres", "moods", "lyrics_languages"}),
-    scope=ProviderScope.TRACK,
-)
-MUSICBRAINZ_ARTIST_SPEC = ProviderSpec(
-    name="musicbrainz",
-    display_name="MusicBrainz",
-    supported_fields=frozenset({"genres", "moods", "artist_countries", "artist_areas"}),
-    scope=ProviderScope.ARTIST,
-)
-LASTFM_TRACK_SPEC = ProviderSpec(
-    name="lastfm",
-    display_name="Last.fm",
-    supported_fields=frozenset({"genres", "styles", "moods"}),
-    scope=ProviderScope.TRACK,
-)
-LASTFM_ARTIST_SPEC = ProviderSpec(... same semantic fields ..., scope=ProviderScope.ARTIST)
+```text
+MusicBrainz TRACK: genres, moods, lyrics_languages
+MusicBrainz ARTIST: genres, moods, artist_countries, artist_areas
+Last.fm TRACK: genres, styles, moods
+Last.fm RELEASE: genres, styles, moods
+Last.fm ARTIST: genres, styles, moods
 ```
 
-Release specs must advertise only actually implemented release semantic fields after this phase. `artist_languages` is derived by orchestration from Work languages, not fetched as an artist-profile field.
+`artist_languages` is derived by orchestration and is not advertised as an Artist-provider lookup field.
 
-- [ ] **Step 5: Test registry collisions and lookups**
+- [ ] **Step 4: Add registry regression tests**
 
-Assert these all coexist:
+Assert all six keys coexist and that existing release/track registries still return the expected specs. Search and update any production caller that retrieves a provider only by `name` when scope is required.
 
-```python
-("musicbrainz", ProviderScope.RELEASE)
-("musicbrainz", ProviderScope.TRACK)
-("musicbrainz", ProviderScope.ARTIST)
-("lastfm", ProviderScope.RELEASE)
-("lastfm", ProviderScope.TRACK)
-("lastfm", ProviderScope.ARTIST)
-```
-
-Also run every existing provider-registry test to catch callers that still do `.get(name)` without scope.
-
-- [ ] **Step 6: Run focused tests**
+- [ ] **Step 5: Verify Task 2**
 
 ```bash
 pytest -q tests/test_provider_cache.py tests/test_provider_specs.py
-ruff check beetsplug/noqlenmeta/provider_cache.py beetsplug/noqlenmeta/providers/specs.py tests/test_provider_cache.py
+ruff check beetsplug/noqlenmeta/provider_cache.py beetsplug/noqlenmeta/providers/specs.py tests/test_provider_cache.py tests/test_provider_specs.py
 ```
 
-- [ ] **Step 7: Commit Task 2**
+- [ ] **Step 6: Commit Task 2**
 
 ```bash
 git add beetsplug/noqlenmeta/provider_cache.py beetsplug/noqlenmeta/providers/specs.py tests/test_provider_cache.py tests/test_provider_specs.py
@@ -393,64 +367,69 @@ git commit -m "refactor: add semantic provider cache scopes"
 
 ---
 
-### Task 3: MusicBrainz exact semantic enrichment across Release, Recording, Work, Artist, and Area
+### Task 3: MusicBrainz semantic evidence from exact entities
 
 **Files:**
 - Modify: `beetsplug/noqlenmeta/providers/musicbrainz.py`
 - Create: `beetsplug/noqlenmeta/providers/musicbrainz_semantic.py`
 - Modify: `beetsplug/noqlenmeta/genre_pipeline.py`
 - Test: `tests/test_musicbrainz_provider.py`
-- Create: `tests/test_musicbrainz_semantic.py`
-- Extend: existing genre-pipeline/resolution tests
+- Test: `tests/test_musicbrainz_semantic.py`
+- Test: `tests/test_genre_pipeline.py`
+- Test: `tests/test_genre_resolution.py`
 
 **Interfaces:**
-- Consumes: `CommandEntityCache`, `SemanticEvidenceBundle`, `classify_semantic_tag`, existing `GenreEvidence`, exact MBIDs from Release/Track/Artist contexts.
-- Produces:
-  - `MusicBrainzSemanticClient` with cached `release`, `recording`, `work`, `artist`, and `area` exact lookups.
-  - `MusicBrainzTrackProvider.get_semantic_evidence(context: TrackEnrichmentContext) -> SemanticEvidenceBundle`.
-  - `MusicBrainzArtistProvider.get_semantic_evidence(context: ArtistEnrichmentContext) -> SemanticEvidenceBundle`.
-  - release provider method `get_semantic_evidence(context: ReleaseEnrichmentContext) -> SemanticEvidenceBundle` while preserving existing `get_candidates()` behavior for ordinary release metadata.
-  - pure helpers for Work language normalization and Area->country resolution.
-
-- [ ] **Step 1: Add release semantic lookup tests**
-
-Use sanitized representative payloads to assert a single release lookup can expose existing release metadata plus `genres`/`tags` when those capabilities are requested. Verify the includes passed to the fetch boundary are a union, not one request per field.
-
-Example assertion:
 
 ```python
-assert fetch_release.call_count == 1
-assert set(fetch_release.call_args.kwargs["includes"]) >= {"labels", "media", "genres", "tags"}
+class MusicBrainzSemanticClient:
+    def release(self, mbid: str) -> Mapping[str, object] | None: ...
+    def recording(self, mbid: str) -> Mapping[str, object] | None: ...
+    def work(self, mbid: str) -> Mapping[str, object] | None: ...
+    def artist(self, mbid: str) -> Mapping[str, object] | None: ...
+    def area(self, mbid: str) -> Mapping[str, object] | None: ...
+
+class MusicBrainzTrackProvider:
+    name = "musicbrainz"
+    def get_semantic_evidence(
+        self,
+        context: TrackEnrichmentContext,
+    ) -> SemanticEvidenceBundle: ...
+
+class MusicBrainzArtistProvider:
+    name = "musicbrainz"
+    def get_semantic_evidence(
+        self,
+        context: ArtistEnrichmentContext,
+    ) -> SemanticEvidenceBundle: ...
 ```
 
-Preserve existing release ID-response validation and ProviderError behavior.
+Existing `MusicBrainzProvider.get_candidates()` remains available for ordinary release fields; add a release semantic-evidence method instead of breaking that contract.
 
-- [ ] **Step 2: Add Recording -> Work language tests**
+- [ ] **Step 1: Write RED release union-lookup tests**
 
-Cases:
+Inject a fetch function that records requested includes. For enabled release semantics, assert one release request contains the union of existing and semantic includes needed by implementation, including existing `labels`/`media` and semantic `genres`/`tags`. Preserve exact response-MBID validation.
 
-```python
-def test_recording_work_languages_are_canonical_and_deduplicated():
-    # Recording has two Work relationships; Work payloads yield kor, eng, kor.
-    ...
-    assert bundle.metadata contains MetadataCandidate(
-        field="lyrics_languages",
-        value=("kor", "eng"),
-        provider="musicbrainz",
-        ...,
-    )
+- [ ] **Step 2: Write RED Recording -> Work language tests**
 
+Use fixed UUID constants in the test module. Cover:
 
-def test_instrumental_or_missing_work_language_does_not_fabricate_language():
-    ...
-    assert no candidate has field == "lyrics_languages"
+- one Recording linked to two Works returning `kor`, `eng`, `kor` -> one candidate `("kor", "eng")`;
+- two tracks linked to the same Work -> one Work fetch via `CommandEntityCache`;
+- Work with absent language -> no `lyrics_languages` candidate;
+- explicit instrumental/no-lyrics Work -> no fabricated language;
+- malformed language token -> ignored, not translated or guessed.
+
+Run:
+
+```bash
+pytest -q tests/test_musicbrainz_semantic.py
 ```
 
-Also test multiple Works, malformed language values, and exact Work MBID deduplication through the command cache.
+Expected: FAIL because the semantic MusicBrainz adapter does not exist.
 
-- [ ] **Step 3: Add Recording and Artist semantic-tag/genre tests**
+- [ ] **Step 3: Write RED genre/tag scope tests**
 
-Representative payload:
+Representative Recording payload must include:
 
 ```python
 {
@@ -460,94 +439,63 @@ Representative payload:
         {"name": "dreamy", "count": 8},
         {"name": "seen live", "count": 2},
     ],
-    "relations": [... Work ...],
+    "relations": [],
 }
 ```
 
-Assert:
-- `K-pop` becomes Track-scope `GenreEvidence`.
-- `Dreamy` becomes Track-scope `MOOD` tag evidence.
-- `seen live` never becomes a persisted metadata candidate.
-- artist genres/tags are Artist-scope evidence and remain weaker by scope than eligible Track/Release evidence.
+Assert `K-pop` becomes Track-scope direct genre evidence, `Dreamy` becomes Track-scope mood evidence, and `seen live` never becomes a metadata value. Add equivalent Release- and Artist-scope cases.
 
-- [ ] **Step 4: Add Artist main-area/country tests**
+- [ ] **Step 4: Write RED artist geography tests**
 
-Required cases:
+Cover these exact cases:
 
-```python
-main area = Salvador (City), ancestry/ISO support resolves Brazil
--> artist_areas=("Salvador",)
--> artist_countries=("Brazil",)
-
-main area = trustworthy city, country ancestry unavailable
--> artist_areas=("City",)
--> no artist_countries candidate
-
-main area absent, begin-area trustworthy and structurally resolvable
--> controlled fallback may produce area/country
-
-main area present + conflicting begin-area
--> main area wins; begin-area does not override
+```text
+main area = Salvador; structural Area ancestry reaches Brazil -> area Salvador + country Brazil
+main area = trustworthy city; country ancestry unavailable -> area only
+main area absent; trustworthy begin-area structurally resolves -> controlled fallback allowed
+main area present; conflicting begin-area -> main area wins
 ```
 
-Never assert country from string parsing such as checking whether `"Salvador"` belongs to Brazil.
+No test may derive country by parsing the area name.
 
-- [ ] **Step 5: Run MusicBrainz tests and confirm RED**
+- [ ] **Step 5: Implement cached exact lookups**
 
-```bash
-pytest -q tests/test_musicbrainz_provider.py tests/test_musicbrainz_semantic.py
+Use keys:
+
+```text
+musicbrainz/release/<release MBID>
+musicbrainz/recording/<recording MBID>
+musicbrainz/work/<work MBID>
+musicbrainz/artist/<artist MBID>
+musicbrainz/area/<area MBID>
 ```
 
-- [ ] **Step 6: Implement `MusicBrainzSemanticClient` exact lookups**
+Every payload that contains an `id` must canonicalize to the requested MBID. Mismatch is `ProviderError`, not negative cache.
 
-Use the existing beets MusicBrainz boundary where it supports the required lookup. Keep fetch functions injectable for tests. Build includes once from enabled capabilities before the first exact lookup.
+- [ ] **Step 6: Normalize MusicBrainz semantic data**
 
-Cache keys:
+Rules:
 
-```python
-EntityCacheKey("musicbrainz", "release", release_mbid)
-EntityCacheKey("musicbrainz", "recording", recording_mbid)
-EntityCacheKey("musicbrainz", "work", work_mbid)
-EntityCacheKey("musicbrainz", "artist", artist_mbid)
-EntityCacheKey("musicbrainz", "area", area_mbid)
-```
+- direct MusicBrainz genres -> existing `GenreEvidence` direct kind at entity scope;
+- MusicBrainz community tags -> `classify_semantic_tag()`;
+- classified community `GENRE` -> weaker community `GenreEvidence`;
+- classified `MOOD`/`STYLE` -> semantic tag evidence;
+- classified `ORIGIN` never creates geographic metadata;
+- Work language accepts only lowercase/normalized three-letter codes and preserves provider order with deduplication;
+- area/country comes only from MusicBrainz Area structure/type/ISO/ancestry.
 
-A response whose returned `id` does not canonicalize to the requested MBID is invalid and raises `ProviderError`; do not cache it as not-found.
+- [ ] **Step 7: Integrate new genre scopes without changing ranking**
 
-- [ ] **Step 7: Normalize MusicBrainz genres/tags into structural evidence**
+Pass eligible Track/Release/Artist MusicBrainz genre evidence into the existing specialized resolver. Preserve filtering before scope preference and distinct-provider corroboration by provider identity, not row count.
 
-Direct MB `genres` -> `GenreEvidence(kind=GENRE, scope=<entity scope>)`.
-
-MB community `tags` -> `classify_semantic_tag(...)`; if classified `GENRE`, convert to weaker `GenreEvidence(kind=COMMUNITY_TAG)`; otherwise retain `STYLE`/`MOOD` semantic evidence as appropriate. `ORIGIN` community tags remain classification evidence only and must not create `artist_countries`.
-
-- [ ] **Step 8: Normalize Work languages and artist geography**
-
-Language acceptance:
-
-```python
-def canonical_language_code(value: object) -> str | None:
-    text = value.strip().lower() if isinstance(value, str) else ""
-    return text if re.fullmatch(r"[a-z]{3}", text) else None
-```
-
-Keep exact provider values that satisfy the canonical three-letter contract; do not translate names locally.
-
-Geography must use structural Area data/type/ISO/parent relationships. Stop once a trustworthy country is established; if it cannot be, preserve specific main area without a country candidate.
-
-- [ ] **Step 9: Wire MusicBrainz evidence into existing genre pipeline without changing genre policy**
-
-Add Track/Release/Artist evidence to the evidence set passed to `resolve_genres`. Keep quality filtering before scope ranking and distinct-provider corroboration counting providers, not rows.
-
-- [ ] **Step 10: Run focused semantic + genre regression tests**
+- [ ] **Step 8: Verify Task 3**
 
 ```bash
 pytest -q tests/test_musicbrainz_provider.py tests/test_musicbrainz_semantic.py tests/test_genre_pipeline.py tests/test_genre_resolution.py
-ruff check beetsplug/noqlenmeta/providers/musicbrainz.py beetsplug/noqlenmeta/providers/musicbrainz_semantic.py
+ruff check beetsplug/noqlenmeta/providers/musicbrainz.py beetsplug/noqlenmeta/providers/musicbrainz_semantic.py beetsplug/noqlenmeta/genre_pipeline.py tests/test_musicbrainz_semantic.py
 ```
 
-Expected: PASS; existing Genre Foundation tests unchanged unless fixture capabilities legitimately expand.
-
-- [ ] **Step 11: Commit Task 3**
+- [ ] **Step 9: Commit Task 3**
 
 ```bash
 git add beetsplug/noqlenmeta/providers/musicbrainz.py beetsplug/noqlenmeta/providers/musicbrainz_semantic.py beetsplug/noqlenmeta/genre_pipeline.py tests/test_musicbrainz_provider.py tests/test_musicbrainz_semantic.py tests/test_genre_pipeline.py tests/test_genre_resolution.py
@@ -556,76 +504,52 @@ git commit -m "feat: add MusicBrainz semantic evidence"
 
 ---
 
-### Task 4: Last.fm lazy multi-scope fallback and Discogs structured-style authority
+### Task 4: Last.fm lazy multi-scope fallback and Discogs style authority
 
 **Files:**
 - Modify: `beetsplug/noqlenmeta/providers/lastfm.py`
-- Modify: `beetsplug/noqlenmeta/providers/discogs.py` only if normalized structured output needs a small adapter change
+- Modify: `beetsplug/noqlenmeta/providers/discogs.py`
 - Modify: `beetsplug/noqlenmeta/semantic_resolution.py`
 - Test: `tests/test_lastfm_provider.py`
-- Test: existing Discogs provider tests
+- Test: `tests/test_discogs_provider.py`
 - Test: `tests/test_semantic_resolution.py`
+- Test: `tests/test_genre_pipeline.py`
 
-**Interfaces:**
-- Produces Last.fm semantic evidence for Track, Release, and Artist using exact context/known MBID when supported.
-- Does not perform provider-wide fuzzy search.
-- Structured Discogs `styles` remain primary style tuple; Discogs genre/style promotion behavior remains unchanged.
-- Consumes `SemanticEvidenceBundle`, `classify_semantic_tag`, command cache, and Foundation provider contexts.
+- [ ] **Step 1: Write RED Last.fm scope tests**
 
-- [ ] **Step 1: Write Last.fm scope tests**
+Add separate tests for Track, Release, and Artist top-tag normalization. Each accepted tag must preserve provider, scope, source identity, native weight, and canonical category. Unknown/noise tags must not become metadata.
 
-Add independent normalized adapter tests for:
+- [ ] **Step 2: Write RED field-aware fallback tests**
+
+Use explicit call counters and assert:
 
 ```text
-Track top tags -> TRACK SemanticTagEvidence
-Album/release top tags -> RELEASE SemanticTagEvidence
-Artist top tags -> ARTIST SemanticTagEvidence
+Track resolves genre + mood -> Release calls 0; Artist calls 0
+Track resolves genre only -> Release may run for mood
+Release then resolves mood -> Artist calls 0
+Track/Release remain insufficient -> Artist may run for unresolved fields
 ```
 
-Each test must retain native weight, source ID/URL, provider name, and scope. Tags classified as noise/unknown must not enter metadata.
+Genre being resolved must not prevent a later fallback call needed only for mood or style.
 
-- [ ] **Step 2: Write field-aware lazy fallback tests**
+- [ ] **Step 3: Implement scoped Last.fm collection**
 
-At orchestration boundary or a small pure helper, prove:
+Reuse the existing Last.fm authenticated request boundary and existing error semantics. Prefer a known MBID when the endpoint supports it; otherwise use exact already-identified context strings. Do not add a Last.fm identity-search/disambiguation subsystem.
 
-```python
-# Track resolves both genre and mood -> no Release/Artist Last.fm call.
-assert release_calls == 0
-assert artist_calls == 0
+Route every returned community tag through `classify_semantic_tag()` before it can influence genre/style/mood.
 
-# Track resolves genre but not mood -> Release may be queried for mood.
-assert release_calls == 1
+- [ ] **Step 4: Preserve structured Discogs styles**
 
-# Release resolves remaining mood -> Artist is not queried.
-assert artist_calls == 0
-```
+Keep Discogs release `styles` as structured ordered metadata. Do not require those values to pass the community style allowlist. Preserve existing independent style->genre promotion only when `genres.promote_styles` is enabled and the genre taxonomy recognizes the style.
 
-The stop condition is per unresolved semantic field, not a single global boolean.
-
-- [ ] **Step 3: Run Last.fm tests and confirm RED**
-
-```bash
-pytest -q tests/test_lastfm_provider.py tests/test_semantic_resolution.py
-```
-
-- [ ] **Step 4: Implement scoped Last.fm collection**
-
-Reuse the existing authenticated request boundary and error semantics. Preserve current release genre behavior while routing returned tags through the Noqlen semantic classifier instead of treating arbitrary tags as genres.
-
-When Last.fm accepts an MBID for the method being called, prefer the exact known MBID. Otherwise use the exact context fields (`artist`, `title`, `album_title`) already associated with the identified target. Do not add a separate search/disambiguation stage.
-
-- [ ] **Step 5: Preserve Discogs structured style semantics**
-
-Ensure the semantic resolver receives the structured Discogs `styles` candidate as structured evidence. Do not force those styles through the community style allowlist. Continue independent promotion into `GenreEvidence` only when `genres.promote_styles` is enabled and the genre taxonomy recognizes the style.
-
-- [ ] **Step 6: Run provider and resolver tests**
+- [ ] **Step 5: Verify Task 4**
 
 ```bash
 pytest -q tests/test_lastfm_provider.py tests/test_discogs_provider.py tests/test_semantic_resolution.py tests/test_genre_pipeline.py tests/test_genre_resolution.py
-ruff check beetsplug/noqlenmeta/providers/lastfm.py beetsplug/noqlenmeta/providers/discogs.py
+ruff check beetsplug/noqlenmeta/providers/lastfm.py beetsplug/noqlenmeta/providers/discogs.py beetsplug/noqlenmeta/semantic_resolution.py
 ```
 
-- [ ] **Step 7: Commit Task 4**
+- [ ] **Step 6: Commit Task 4**
 
 ```bash
 git add beetsplug/noqlenmeta/providers/lastfm.py beetsplug/noqlenmeta/providers/discogs.py beetsplug/noqlenmeta/semantic_resolution.py tests/test_lastfm_provider.py tests/test_discogs_provider.py tests/test_semantic_resolution.py tests/test_genre_pipeline.py tests/test_genre_resolution.py
@@ -634,115 +558,112 @@ git commit -m "feat: add scoped semantic fallback"
 
 ---
 
-### Task 5: Shared semantic orchestration, derived artist languages, and import/library parity
+### Task 5: Shared orchestration, derived artist languages, parity, and outcome reporting
 
 **Files:**
 - Create: `beetsplug/noqlenmeta/semantic_enrichment.py`
+- Modify: `beetsplug/noqlenmeta/integration.py`
+- Modify: `beetsplug/noqlenmeta/track_integration.py`
+- Modify: `beetsplug/noqlenmeta/library_integration.py`
 - Modify: `beetsplug/noqlenmeta/__init__.py`
-- Modify: existing importer enrichment module(s)
-- Modify: `beetsplug/noqlenmeta/library_application.py` and/or `library_track_application.py` only where target application requires semantic fields
 - Test: `tests/test_semantic_enrichment.py`
-- Extend: `tests/test_v2_foundation_command.py`
-- Extend: existing importer integration tests
+- Test: `tests/test_v2_foundation_command.py`
+- Test: `tests/test_beets_integration.py`
 
 **Interfaces:**
-- Produces:
-  - `SemanticFieldStatus(Enum)` values `RESOLVED`, `NO_EVIDENCE`, `UNAVAILABLE`, `CONFLICT`, `BLOCKED`.
-  - `SemanticFieldOutcome(field: str, status: SemanticFieldStatus, value: MetadataValue | None, provenance: tuple[str, ...], reason: str)`.
-  - `SemanticEnrichmentResult(metadata: tuple[MetadataCandidate, ...], genre_decision: ..., outcomes: tuple[SemanticFieldOutcome, ...])`.
-  - `collect_semantic_enrichment(...)` as the single importer/library semantic orchestration entry point.
-- Consumes release/track/artist contexts, enabled field set, provider registry/config, `CommandEntityCache`, semantic resolvers, and existing change-plan builders.
-
-- [ ] **Step 1: Write pure orchestration tests for field gating**
-
-Prove disabled fields do not trigger supporting lookups:
 
 ```python
-fields = {"genres": True, "moods": False, "lyrics_languages": False}
-result = collect_semantic_enrichment(...)
-assert work_fetch_calls == 0
-assert no outcome.field == "moods"
-assert no outcome.field == "lyrics_languages"
+class SemanticFieldStatus(Enum):
+    RESOLVED = "resolved"
+    NO_EVIDENCE = "no-evidence"
+    UNAVAILABLE = "unavailable"
+    CONFLICT = "conflict"
+    BLOCKED = "blocked"
+
+@dataclass(frozen=True, slots=True)
+class SemanticFieldOutcome:
+    field: str
+    status: SemanticFieldStatus
+    value: MetadataValue | None
+    provenance: tuple[str, ...]
+    reason: str
+
+@dataclass(frozen=True, slots=True)
+class SemanticEnrichmentResult:
+    metadata: tuple[MetadataCandidate, ...]
+    outcomes: tuple[SemanticFieldOutcome, ...]
+
+def derive_artist_languages(
+    track_languages: Sequence[tuple[int, tuple[str, ...]]],
+) -> tuple[str, ...]: ...
 ```
 
-Also prove `--write` is not part of the collection input and cannot increase provider call counts.
+`track_languages` uses credited-artist order index plus already-resolved current-target Work languages; it never triggers network work itself.
 
-- [ ] **Step 2: Write `artist_languages` derivation tests**
+- [ ] **Step 1: Write RED field-gating tests**
 
-Example:
+With only `genres` enabled, assert Work-language fetch count is zero and no mood/language outcome is emitted. Repeat with moods disabled and lyric languages enabled to prove only required capabilities are requested.
+
+- [ ] **Step 2: Write RED artist-language/credit-order tests**
+
+Use this exact input and expected output:
 
 ```python
-track_work_languages = (
-    ("Artist A", 1, ("kor",)),
-    ("Artist A", 1, ("kor", "eng")),
-    ("Artist B", 2, ("jpn",)),
+track_languages = (
+    (1, ("kor",)),
+    (1, ("kor", "eng")),
+    (2, ("jpn",)),
 )
-assert derive_artist_languages(track_work_languages) == ("kor", "eng", "jpn")
+assert derive_artist_languages(track_languages) == ("kor", "eng", "jpn")
 ```
 
-Add a test demonstrating that no extra artist-catalogue lookup is invoked to derive this field.
+Add artist country/area aggregation tests preserving first credit order and deduplicating repeated values.
 
-- [ ] **Step 3: Write multiple-credit area/country ordering tests**
+- [ ] **Step 3: Write RED outcome-state tests**
 
-For Artist A `South Korea`, Artist B `United States`, Artist C also `South Korea`, preserve first credit order and deduplicate final tuple:
-
-```python
-assert artist_countries == ("South Korea", "United States")
-```
-
-Do the same for areas.
-
-- [ ] **Step 4: Write local-failure/outcome-state tests**
-
-Required distinctions:
+Assert these distinctions:
 
 ```text
-Work exists but has no language -> NO_EVIDENCE
-Work lookup network failure -> UNAVAILABLE
-Two eligible moods with no deterministic winner -> CONFLICT
-Lossless destination mapping unavailable -> BLOCKED
-Resolved semantic field -> RESOLVED
+Work exists but no usable language -> NO_EVIDENCE
+Work network lookup fails -> UNAVAILABLE
+eligible evidence has no deterministic winner -> CONFLICT
+lossless target mapping unavailable -> BLOCKED
+safe selected value -> RESOLVED
 ```
 
-A provider failure for one field/target must not erase unrelated successful candidates.
+One field/provider failure must not erase unrelated successful metadata candidates.
 
-- [ ] **Step 5: Run orchestration tests and confirm RED**
+- [ ] **Step 4: Implement one shared `collect_semantic_enrichment()` flow**
 
-```bash
-pytest -q tests/test_semantic_enrichment.py tests/test_v2_foundation_command.py
-```
-
-- [ ] **Step 6: Implement one shared semantic orchestration entry point**
-
-Required collection sequence:
+Execution order is fixed:
 
 ```text
-1. Determine enabled semantic fields.
-2. Build/obtain exact Release, Track, Artist contexts from already-known target IDs.
-3. Create one CommandEntityCache for the command execution.
-4. Collect MusicBrainz exact evidence for required scopes/entities.
-5. Resolve fields that can already be resolved.
-6. If Last.fm enabled, request Track -> Release -> Artist only for still-unresolved community semantic fields.
-7. Combine Discogs structured styles/genres when Discogs is enabled.
-8. Resolve genres/styles/moods.
-9. Derive artist_languages from current-target Work languages.
-10. Aggregate ordered/deduplicated artist areas/countries by credit order.
-11. Emit candidates + explicit outcomes into existing ChangePlan construction.
+compute enabled semantic fields
+-> build exact release/track/artist contexts from existing IDs
+-> create/reuse one CommandEntityCache for command execution
+-> collect MusicBrainz evidence only for required scopes/capabilities
+-> combine configured Discogs structured evidence
+-> resolve currently resolvable fields
+-> if Last.fm enabled, query Track -> Release -> Artist only for still-unresolved community fields
+-> resolve genres/styles/moods
+-> derive artist_languages from current-target Work languages
+-> aggregate artist areas/countries in credit order
+-> return candidates + explicit outcomes
 ```
 
-Do not write DB/files inside this function.
+No DB or file write is allowed inside `collect_semantic_enrichment()`.
 
-- [ ] **Step 7: Route existing-library `beet nm` through the shared entry point**
+- [ ] **Step 5: Wire existing-library command path**
 
-Use Album targets plus their Items, and standalone Items where equivalent. Reuse stored MBIDs rather than searching. Preserve Foundation global preflight before mutation and existing partial-commit truthfulness.
+Use `context_from_library_album()` / `context_from_library_item()` plus new Artist-context extraction in `library_integration.py`. Keep Foundation command-wide file preflight before DB mutation when `--write` is requested.
 
-- [ ] **Step 8: Route importer enrichment through the same entry point**
+- [ ] **Step 6: Wire importer path without re-identification**
 
-Use beets-selected exact release/recording/artist IDs already available in importer metadata. Do not re-identify the release. Import and library adapters may differ only in target extraction/application.
+In `_import_task_choice`, reuse the selected `AlbumInfo`/`TrackInfo` MBIDs already exposed through `integration.py` and `track_integration.py`. Both release and track importer branches must call the same semantic orchestration/resolvers used by existing-library targets.
 
-- [ ] **Step 9: Add parity scenarios**
+- [ ] **Step 7: Add parity tests**
 
-For the same synthetic identified album/track fixtures, assert importer and library paths resolve identical canonical values for:
+For one deterministic selected album/track fixture, assert importer and library flows resolve identical canonical values for:
 
 ```text
 genres
@@ -754,158 +675,89 @@ artist_countries
 artist_areas
 ```
 
-Allow only target-specific application representation differences explicitly required by beets.
+- [ ] **Step 8: Add concise normal preview/outcome tests**
 
-- [ ] **Step 10: Run focused orchestration/parity tests**
+Normal output must show resolved field/value and useful provenance, plus explicit `no-evidence`, `unavailable`, `conflict`, or `blocked` when relevant. Rejected raw tags such as `seen live` must not appear in normal output.
+
+Preserve Foundation output phases: database preview, file preview, then actual application result.
+
+- [ ] **Step 9: Verify Task 5**
 
 ```bash
 pytest -q tests/test_semantic_enrichment.py tests/test_v2_foundation_command.py tests/test_beets_integration.py
-ruff check beetsplug/noqlenmeta/semantic_enrichment.py beetsplug/noqlenmeta/__init__.py
+ruff check beetsplug/noqlenmeta/semantic_enrichment.py beetsplug/noqlenmeta/integration.py beetsplug/noqlenmeta/track_integration.py beetsplug/noqlenmeta/library_integration.py beetsplug/noqlenmeta/__init__.py tests/test_semantic_enrichment.py
 ```
 
-- [ ] **Step 11: Commit Task 5**
+- [ ] **Step 10: Commit Task 5**
 
 ```bash
-git add beetsplug/noqlenmeta/semantic_enrichment.py beetsplug/noqlenmeta/__init__.py beetsplug/noqlenmeta/library_application.py beetsplug/noqlenmeta/library_track_application.py tests/test_semantic_enrichment.py tests/test_v2_foundation_command.py tests/test_beets_integration.py
-git add beetsplug/noqlenmeta tests
+git add beetsplug/noqlenmeta/semantic_enrichment.py beetsplug/noqlenmeta/integration.py beetsplug/noqlenmeta/track_integration.py beetsplug/noqlenmeta/library_integration.py beetsplug/noqlenmeta/__init__.py tests/test_semantic_enrichment.py tests/test_v2_foundation_command.py tests/test_beets_integration.py
 git commit -m "feat: integrate semantic enrichment pipeline"
 ```
 
-Before committing, inspect `git diff --cached --name-only` and unstage unrelated files; the broad second `git add` is only to capture the exact existing importer module path if it differs from the names above.
-
 ---
 
-### Task 6: Lossless semantic media fields and `--apply --write` observable verification
+### Task 6: Lossless semantic file sync, docs, and final verification
 
 **Files:**
 - Create: `beetsplug/noqlenmeta/semantic_media.py`
-- Modify: `beetsplug/noqlenmeta/__init__.py`
 - Modify: `beetsplug/noqlenmeta/file_sync.py`
-- Test: create/extend the existing media-field/file-sync tests
-- Extend: `tests/test_v2_foundation_command.py`
-
-**Interfaces:**
-- Produces `register_semantic_media_fields(plugin: BeetsPlugin) -> None` and file-sync mappings for semantic fields that have a lossless media representation.
-- Consumes the existing Foundation `FileSyncPlan`/application safety model.
-
-Official beets supports plugin-added `MediaField` descriptors through `BeetsPlugin.add_media_field()`. Use that extension point rather than bypassing MediaFile with ad-hoc direct Mutagen mutation.
-
-- [ ] **Step 1: Write descriptor round-trip tests before registration**
-
-Use temporary real media fixtures already used by Foundation. Cover at least FLAC/Vorbis-comment storage first because it naturally supports repeated/custom fields. Expected canonical tag keys:
-
-```text
-NOQLEN_STYLES
-NOQLEN_MOODS
-NOQLEN_LYRICS_LANGUAGES
-NOQLEN_ARTIST_LANGUAGES
-NOQLEN_ARTIST_COUNTRIES
-NOQLEN_ARTIST_AREAS
-```
-
-The descriptor/codec must round-trip tuples exactly and preserve order. Tests must use values containing spaces/hyphens to prove no lossy split/join logic.
-
-- [ ] **Step 2: Run media tests and confirm RED**
-
-Run the exact new media test file plus current `file_sync` tests.
-
-- [ ] **Step 3: Register MediaFile descriptors through the plugin**
-
-Use `mediafile.MediaField`/storage styles behind `add_media_field`. For each supported container/tag family, use a representation that reads back as the same ordered tuple. If a format cannot represent the tuple losslessly with the chosen MediaFile abstraction, do not silently join it; leave that format/field unsupported so Foundation produces an explicit mapping blocker.
-
-Keep canonical database names unchanged (`styles`, `moods`, `lyrics_languages`, `artist_languages`, `artist_countries`, `artist_areas`); tag storage names are an implementation detail documented as Noqlen custom tags.
-
-- [ ] **Step 4: Extend `file_sync` mapping**
-
-Add semantic canonical field -> registered MediaFile field mappings only after the descriptor is available. Keep blocker generation for unsupported fields/formats and keep global preflight before DB mutation when `--write` is requested.
-
-- [ ] **Step 5: Verify the actual file after write**
-
-Command integration test:
-
-```python
-invoke(plugin, library, ["--apply", "--write", "--all"])
-fresh_file = MediaFile(path)
-assert tuple(fresh_file.noqlen_moods) == ("Melancholic",)
-assert tuple(fresh_file.noqlen_lyrics_languages) == ("kor", "eng")
-```
-
-Use the actual registered property names chosen in `semantic_media.py`; do not assert only internal `FileSyncResult` flags.
-
-Also test that a deliberately unsupported lossless mapping blocks before DB mutation under the Foundation global-preflight contract.
-
-- [ ] **Step 6: Run all file-sync/media tests**
-
-```bash
-pytest -q tests/test_v2_foundation_command.py tests/test_file_sync.py tests/test_media_snapshot.py
-ruff check beetsplug/noqlenmeta/semantic_media.py beetsplug/noqlenmeta/file_sync.py
-```
-
-Include the exact semantic media test file created in Step 1 in the command.
-
-- [ ] **Step 7: Commit Task 6**
-
-```bash
-git add beetsplug/noqlenmeta/semantic_media.py beetsplug/noqlenmeta/__init__.py beetsplug/noqlenmeta/file_sync.py tests
-git commit -m "feat: sync semantic metadata to media files"
-```
-
-Inspect staged files before commit and exclude unrelated test changes.
-
----
-
-### Task 7: Truthful preview/docs and integrated verification
-
-**Files:**
 - Modify: `beetsplug/noqlenmeta/__init__.py`
+- Create: `tests/test_semantic_media.py`
+- Modify: `tests/test_file_sync.py`
+- Modify: `tests/test_v2_foundation_command.py`
 - Modify: `README.md`
 - Modify: `site-docs/reference/configuration.md`
 - Modify: `site-docs/concepts/preview-apply-write.md`
-- Modify: relevant provider/reference documentation already present in `site-docs/`
-- Test: `tests/test_v2_foundation_command.py`
-- Test: all semantic/provider/file-sync suites from Tasks 1-6
 
-**Interfaces:**
-- Normal CLI shows final semantic decisions + useful provenance and explicit `NO_EVIDENCE` / `UNAVAILABLE` / `CONFLICT` / `BLOCKED` status where relevant.
-- Verbose/debug output may expose raw evidence; normal output does not dump every provider tag.
+Official beets exposes plugin-added MediaFile fields through `BeetsPlugin.add_media_field()`. Use that mechanism; do not bypass MediaFile with direct Mutagen writes.
 
-- [ ] **Step 1: Write preview/output regression tests**
+- [ ] **Step 1: Write RED real-file round-trip tests**
 
-Capture CLI output and assert useful lines rather than full snapshots:
-
-```python
-assert any("mood" in line and "Melancholic" in line for line in output)
-assert any("MusicBrainz" in line for line in output)
-assert any("lyrics_languages" in line and "kor" in line for line in output)
-assert any("no-evidence" in line for line in missing_language_output)
-assert any("unavailable" in line for line in provider_failure_output)
-```
-
-Verify normal output does not include rejected raw tags such as `seen live`.
-
-- [ ] **Step 2: Run output tests and confirm RED where new reporting is absent**
-
-```bash
-pytest -q tests/test_v2_foundation_command.py
-```
-
-- [ ] **Step 3: Implement concise outcome/provenance rendering**
-
-Normal preview should describe the resolved value, selected source/scope, and fallback note only when helpful. Keep raw evidence details behind existing verbosity/debug facilities.
-
-Preserve Foundation separation of:
+Register Noqlen semantic media fields with these logical storage purposes:
 
 ```text
-database PREVIEW
-file PREVIEW
-application result
+styles
+moods
+lyrics_languages
+artist_languages
+artist_countries
+artist_areas
 ```
 
-Do not print `stored`/`committed` before those observable actions have actually succeeded.
+For each mapping enabled in production, the test must write an ordered multivalue tuple to a copied real media fixture, reopen it through `MediaFile`, and assert the same values/order are observed. Include values containing spaces and hyphens. A format/field combination that cannot round-trip losslessly must not be enabled in the mapping table.
 
-- [ ] **Step 4: Update configuration and behavior docs truthfully**
+Run:
 
-Document exact defaults:
+```bash
+pytest -q tests/test_semantic_media.py tests/test_file_sync.py
+```
+
+Expected: FAIL because semantic descriptors/mappings do not exist.
+
+- [ ] **Step 2: Implement registered semantic media fields**
+
+Create descriptors in `semantic_media.py` and register them from `NoqlenMetaPlugin.__init__()` using `add_media_field`. Keep canonical DB field names unchanged. The descriptor/storage choice must pass the Step 1 observable round-trip test before the field is added to `file_sync` mappings.
+
+Do not serialize multivalue tuples into an ambiguous human separator merely to avoid a blocker.
+
+- [ ] **Step 3: Extend Foundation file-sync mapping**
+
+Map only semantic fields whose registered MediaFile descriptor is lossless for the target. Preserve existing global preflight, candidate-save verification, stale source checks, recovery artifact behavior, and final reopen/read verification. Unsupported lossless mappings remain `blocked` before DB mutation under `--apply --write`.
+
+- [ ] **Step 4: Add command-level observable write test**
+
+Prepare a temporary real media file and deterministic semantic candidates. Run:
+
+```text
+beet nm --apply --write --all
+```
+
+through the test invocation helper, then reopen both library DB and MediaFile. Assert DB and file contain the same semantic values. Do not assert only `FileSyncResult` flags.
+
+- [ ] **Step 5: Update docs with exact implemented behavior**
+
+Document:
 
 ```yaml
 moods:
@@ -920,18 +772,9 @@ providers:
     enabled: false
 ```
 
-Document:
-- MusicBrainz exact-ID semantic scope behavior;
-- Discogs structured style authority;
-- Last.fm lazy opt-in fallback;
-- canonical three-letter language fields;
-- contextual `artist_languages` semantics;
-- geographic identification vs citizenship;
-- Noqlen custom semantic media tags and any format limitations actually implemented;
-- `--write` not causing provider work;
-- Artwork/BPM still outside this phase.
+Also document exact-ID MusicBrainz semantics, Discogs structured styles, Last.fm lazy fallback, three-letter language fields, contextual artist languages, geographic-identification semantics, the semantic media fields actually supported, `--write` not triggering collection, and Artwork/BPM remaining for the next phase.
 
-- [ ] **Step 5: Run focused semantic suites**
+- [ ] **Step 6: Run focused semantic/file suites**
 
 ```bash
 pytest -q \
@@ -941,89 +784,106 @@ pytest -q \
   tests/test_musicbrainz_provider.py \
   tests/test_musicbrainz_semantic.py \
   tests/test_lastfm_provider.py \
+  tests/test_discogs_provider.py \
   tests/test_genre_pipeline.py \
   tests/test_genre_resolution.py \
   tests/test_semantic_enrichment.py \
-  tests/test_v2_foundation_command.py
+  tests/test_semantic_media.py \
+  tests/test_file_sync.py \
+  tests/test_v2_foundation_command.py \
+  tests/test_beets_integration.py
 ```
 
-Include the exact semantic media/importer test modules created or extended in Tasks 5-6.
-
-- [ ] **Step 6: Run full local verification**
+- [ ] **Step 7: Run exact CI-equivalent local checks**
 
 ```bash
 ruff check .
-pytest -q
-python scripts/check_docs.py
+pytest -m "not live"
+python scripts/check_repo_contamination.py
+python scripts/check_public_docs.py
+mkdocs build --strict
 python -m build
 python -m twine check --strict dist/*
 python scripts/check_distribution.py dist
 ```
 
-Use the repository's exact current docs/check-distribution commands if their filenames have changed; do not omit an existing CI-equivalent check because a path changed.
+- [ ] **Step 8: Run exact beets compatibility suites**
 
-- [ ] **Step 7: Run supported beets compatibility lanes**
+Minimum lane:
 
-Execute the repository's existing focused compatibility test command/environment for:
-
-```text
-beets == 2.12.0
-latest beets < 3
+```bash
+python -m pip install -e ".[dev]" "beets==2.12.0"
+pytest \
+  tests/test_plugin_loads.py \
+  tests/test_beets_integration.py \
+  tests/test_library_cli.py \
+  tests/identity/test_library_identity_command.py \
+  tests/identity/test_identity_tag_command.py
 ```
 
-Both must pass before PR readiness.
+Latest-below-3 lane in a clean environment:
 
-- [ ] **Step 8: Perform two observable smoke scenarios**
+```bash
+python -m pip install -e ".[dev]" "beets<3"
+pytest \
+  tests/test_plugin_loads.py \
+  tests/test_beets_integration.py \
+  tests/test_library_cli.py \
+  tests/identity/test_library_identity_command.py \
+  tests/identity/test_identity_tag_command.py
+```
 
-1. Existing-library dry run against deterministic fixtures/stubs: confirm semantic decisions appear with no DB/file mutation.
-2. `--apply --write` against a synthetic temporary media fixture: reopen database and media file, verifying canonical persisted values rather than trusting internal result flags.
+Do not reuse one environment for both version assertions without reinstalling the intended beets constraint.
 
-Never run tests against the user's real music library.
+- [ ] **Step 9: Run package clean-install smoke**
 
-- [ ] **Step 9: Inspect final diff against the semantic branch base**
+```bash
+rm -rf /tmp/noqlen-smoke
+python -m venv /tmp/noqlen-smoke
+/tmp/noqlen-smoke/bin/python -m pip install dist/*.whl
+/tmp/noqlen-smoke/bin/python -c "import beetsplug.noqlenmeta"
+/tmp/noqlen-smoke/bin/beet -p noqlenmeta nm --help
+```
+
+- [ ] **Step 10: Inspect final branch diff and scope**
 
 ```bash
 git status --short
-git diff --stat a857b1cd5b88d39e2e1e7393b455645e1867c532..HEAD
 git diff --check a857b1cd5b88d39e2e1e7393b455645e1867c532..HEAD
+git diff --stat a857b1cd5b88d39e2e1e7393b455645e1867c532..HEAD
+git grep -n "beetsplug.lastgenre" -- beetsplug tests
 ```
 
-Confirm no artwork/BPM/version-bump implementation leaked into the branch and no runtime dependency on beets LastGenre reappeared.
+Confirm there is no Artwork/CAA/BPM/version-bump implementation and no runtime dependency on beets LastGenre.
 
-- [ ] **Step 10: Commit docs/reporting cleanup**
+- [ ] **Step 11: Commit Task 6**
 
 ```bash
-git add beetsplug/noqlenmeta/__init__.py README.md site-docs tests/test_v2_foundation_command.py
-git commit -m "docs: document semantic enrichment behavior"
+git add beetsplug/noqlenmeta/semantic_media.py beetsplug/noqlenmeta/file_sync.py beetsplug/noqlenmeta/__init__.py tests/test_semantic_media.py tests/test_file_sync.py tests/test_v2_foundation_command.py README.md site-docs/reference/configuration.md site-docs/concepts/preview-apply-write.md
+git commit -m "feat: complete semantic enrichment integration"
 ```
 
-If Step 3 required no production change beyond an earlier task, commit only the docs/tests actually changed.
+- [ ] **Step 12: Record PR-readiness evidence**
 
-- [ ] **Step 11: PR readiness evidence**
-
-Before opening/declaring the PR ready, record the exact current `HEAD`, full verification results, compatibility-lane results, and diff summary. PR base remains `docs/v2-enrichment-design`; do not retarget to `main` as part of this plan.
+Record the exact current `HEAD`, full CI-equivalent result, both beets compatibility results, package smoke result, and final diff summary. Open the PR against `docs/v2-enrichment-design`; do not retarget to `main`. Do not merge without a new explicit user authorization after fresh CI/review inspection.
 
 ---
 
-## Plan self-review checklist
+## Self-Review Coverage Matrix
 
-The executor must preserve these coverage links:
+- Semantic classification and unique categories -> Task 1.
+- Genre multi-scope evidence -> Tasks 3-5.
+- Structured/community styles -> Tasks 1, 4-6.
+- Hybrid moods + default one -> Tasks 1, 3-6.
+- Recording -> Work lyric languages -> Tasks 3, 5, 6.
+- Contextual artist languages -> Tasks 5, 6.
+- Artist main-area/country -> Tasks 3, 5, 6.
+- Multi-scope provider specs/cache -> Tasks 2-5.
+- Field-aware Last.fm fallback -> Tasks 4-5.
+- Explicit no-evidence/unavailable/conflict/blocked outcomes -> Task 5.
+- Import/existing-library parity -> Task 5.
+- Lossless file sync + observable reopen verification -> Task 6.
+- CI/package/beets compatibility -> Task 6.
+- Artwork/BPM/version bump remain out of scope -> Global Constraints + Task 6 diff inspection.
 
-- Spec §2 semantic classification -> Task 1.
-- Spec §3 genres -> Tasks 1, 3, 4, 5.
-- Spec §4 styles -> Tasks 1, 4, 5, 6.
-- Spec §5 moods + `max_moods=1` -> Tasks 1, 3, 4, 5, 6.
-- Spec §6 lyrics languages -> Tasks 3, 5, 6.
-- Spec §7 contextual artist languages -> Task 5, 6.
-- Spec §8 artist areas/countries -> Tasks 3, 5, 6.
-- Spec §9 provider collection -> Tasks 2-5.
-- Spec §10 cache/request efficiency -> Tasks 2-5.
-- Spec §11 resolution/fallback -> Tasks 1, 4, 5.
-- Spec §12 configuration -> Tasks 1, 2, 7.
-- Spec §13 preview/outcomes -> Tasks 5, 7.
-- Spec §14 failure behavior -> Tasks 2, 3, 4, 5, 6.
-- Spec §15 import/library parity -> Task 5.
-- Spec §16 verification -> Tasks 1-7, especially Task 7.
-- Artwork/BPM non-goals -> Global Constraints + Task 7 final diff inspection.
-
-No task authorizes merge or release. Merge remains a separate explicit user decision after fresh PR/CI/review verification.
+No task authorizes merge or release.
