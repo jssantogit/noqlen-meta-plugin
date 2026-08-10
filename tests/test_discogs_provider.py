@@ -10,6 +10,7 @@ from beetsplug.noqlenmeta.domain import ExternalIdentifier, ReleaseEnrichmentCon
 from beetsplug.noqlenmeta.providers import ProviderError, ReleaseMetadataProvider
 from beetsplug.noqlenmeta.providers.discogs import DiscogsProvider
 from beetsplug.noqlenmeta.providers.specs import DISCOGS_SPEC
+from beetsplug.noqlenmeta.semantic_resolution import resolve_styles
 
 FIXTURES = Path(__file__).parent / "fixtures" / "discogs"
 DEFAULT_RELEASE = object()
@@ -262,6 +263,7 @@ def test_concrete_release_normalization_preserves_structured_metadata() -> None:
         "media": ("Vinyl",),
         "format_descriptions": ("LP", "Album", "Limited Edition"),
     }
+    assert resolve_styles(fields["styles"], ()) == ("Ambient", "Experimental")
 
 
 def test_candidates_have_concrete_release_provenance() -> None:

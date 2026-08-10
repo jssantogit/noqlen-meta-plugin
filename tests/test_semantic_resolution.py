@@ -1,6 +1,15 @@
-from beetsplug.noqlenmeta.domain import SemanticCategory, SemanticTagEvidence
+from beetsplug.noqlenmeta.domain import (
+    SemanticCategory,
+    SemanticEvidenceBundle,
+    SemanticTagEvidence,
+)
+from beetsplug.noqlenmeta.genre_evidence import GenreEvidence, GenreEvidenceKind
 from beetsplug.noqlenmeta.providers.specs import ProviderScope
-from beetsplug.noqlenmeta.semantic_resolution import resolve_moods, resolve_styles
+from beetsplug.noqlenmeta.semantic_resolution import (
+    collect_scoped_semantic_fallback,
+    resolve_moods,
+    resolve_styles,
+)
 
 
 def evidence(
@@ -75,3 +84,99 @@ def test_mood_limit_never_pads_missing_values() -> None:
         max_moods=3,
     )
     assert result == ("Dreamy", "Melancholic")
+
+
+def semantic_bundle(*fields: str) -> SemanticEvidenceBundle:
+    genres = ()
+    tags = []
+    if "genres" in fields:
+        genres = (
+            GenreEvidence(
+                "K-pop",
+                "lastfm",
+                ProviderScope.TRACK,
+                GenreEvidenceKind.COMMUNITY_TAG,
+                0.85,
+                "synthetic",
+            ),
+        )
+    for field, category, term in (
+        ("moods", SemanticCategory.MOOD, "Dreamy"),
+        ("styles", SemanticCategory.STYLE, "Alternative Metal"),
+    ):
+        if field in fields:
+            tags.append(
+                SemanticTagEvidence(
+                    term,
+                    category,
+                    "lastfm",
+                    ProviderScope.TRACK,
+                    0.85,
+                    "synthetic",
+                    None,
+                    50,
+                    term,
+                )
+            )
+    return SemanticEvidenceBundle(genres=genres, tags=tuple(tags))
+
+
+def test_fallback_stops_after_track_resolves_all_requested_fields() -> None:
+    calls = []
+
+    def collect(scope: str, bundle: SemanticEvidenceBundle):
+        def inner() -> SemanticEvidenceBundle:
+            calls.append(scope)
+            return bundle
+
+        return inner
+
+    bundles = collect_scoped_semantic_fallback(
+        {"genres", "moods"},
+        set(),
+        collect("track", semantic_bundle("genres", "moods")),
+        collect("release", semantic_bundle("moods")),
+        collect("artist", semantic_bundle("moods")),
+    )
+    assert calls == ["track"]
+    assert len(bundles) == 1
+
+
+def test_fallback_continues_only_until_remaining_field_is_resolved() -> None:
+    calls = []
+
+    def collect(scope: str, bundle: SemanticEvidenceBundle):
+        def inner() -> SemanticEvidenceBundle:
+            calls.append(scope)
+            return bundle
+
+        return inner
+
+    collect_scoped_semantic_fallback(
+        {"genres", "moods"},
+        set(),
+        collect("track", semantic_bundle("genres")),
+        collect("release", semantic_bundle("moods")),
+        collect("artist", semantic_bundle("moods")),
+    )
+    assert calls == ["track", "release"]
+
+
+def test_fallback_reaches_artist_when_track_and_release_are_insufficient() -> None:
+    calls = []
+
+    def collect(scope: str, bundle: SemanticEvidenceBundle):
+        def inner() -> SemanticEvidenceBundle:
+            calls.append(scope)
+            return bundle
+
+        return inner
+
+    collect_scoped_semantic_fallback(
+        {"moods"},
+        set(),
+        collect("track", semantic_bundle()),
+        collect("release", semantic_bundle()),
+        collect("artist", semantic_bundle("moods")),
+    )
+    assert calls == ["track", "release", "artist"]

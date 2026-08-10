@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 
-from beetsplug.noqlenmeta.domain import SemanticCategory, SemanticTagEvidence
+from beetsplug.noqlenmeta.domain import (
+    SemanticCategory,
+    SemanticEvidenceBundle,
+    SemanticTagEvidence,
+)
 from beetsplug.noqlenmeta.providers.specs import ProviderScope
 
 _SCOPE_RANK = {
@@ -14,6 +18,49 @@ _SCOPE_RANK = {
     ProviderScope.RELEASE: 1,
     ProviderScope.ARTIST: 2,
 }
+
+
+def collect_scoped_semantic_fallback(
+    requested_fields: Collection[str],
+    resolved_fields: Collection[str],
+    track: Callable[[], SemanticEvidenceBundle],
+    release: Callable[[], SemanticEvidenceBundle],
+    artist: Callable[[], SemanticEvidenceBundle],
+) -> tuple[SemanticEvidenceBundle, ...]:
+    """Collect Track -> Release -> Artist only while requested fields remain unresolved."""
+    requested = set(requested_fields) & {"genres", "styles", "moods"}
+    unresolved = requested - set(resolved_fields)
+    bundles: list[SemanticEvidenceBundle] = []
+    for collector in (track, release, artist):
+        if not unresolved:
+            break
+        bundle = _filter_bundle(collector(), unresolved)
+        bundles.append(bundle)
+        unresolved -= _bundle_fields(bundle)
+    return tuple(bundles)
+
+
+def _bundle_fields(bundle: SemanticEvidenceBundle) -> set[str]:
+    fields = {"genres"} if bundle.genres else set()
+    if any(item.category is SemanticCategory.STYLE for item in bundle.tags):
+        fields.add("styles")
+    if any(item.category is SemanticCategory.MOOD for item in bundle.tags):
+        fields.add("moods")
+    return fields
+
+
+def _filter_bundle(
+    bundle: SemanticEvidenceBundle, fields: Collection[str]
+) -> SemanticEvidenceBundle:
+    categories = {
+        SemanticCategory.STYLE: "styles",
+        SemanticCategory.MOOD: "moods",
+    }
+    return SemanticEvidenceBundle(
+        metadata=bundle.metadata,
+        genres=bundle.genres if "genres" in fields else (),
+        tags=tuple(item for item in bundle.tags if categories.get(item.category) in fields),
+    )
 
 
 @dataclass(frozen=True, slots=True)
