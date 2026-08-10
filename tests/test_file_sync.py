@@ -143,6 +143,8 @@ def test_post_replace_db_failure_restores_original(media_item, monkeypatch) -> N
 
     assert not result.committed
     assert path.read_bytes() == before
+    assert MediaFile(path).bpm is None
+    assert not tuple(path.parent.glob(".noqlen-meta-*"))
 
 
 def test_notification_failure_reports_committed_file(media_item, monkeypatch) -> None:
@@ -164,3 +166,119 @@ def test_notification_failure_reports_committed_file(media_item, monkeypatch) ->
     assert not captured.value.state_uncertain
     assert not captured.value.recovery_artifact_retained
     assert MediaFile(path).bpm == 126
+
+
+def test_post_store_verification_failure_is_committed_and_uncertain(
+    media_item, monkeypatch
+) -> None:
+    library, item, path = media_item
+    plan = plan_file_sync(item, (planned_change("bpm", 126.0),))
+    original_get_item = library.get_item
+    get_calls = 0
+
+    def fail_after_mtime_commit(item_id: int):
+        nonlocal get_calls
+        get_calls += 1
+        fresh = original_get_item(item_id)
+        if get_calls == 3:
+            return None
+        return fresh
+
+    monkeypatch.setattr(library, "get_item", fail_after_mtime_commit)
+
+    with pytest.raises(FileSyncApplicationError) as captured:
+        apply_file_sync_plan(library, plan)
+
+    assert captured.value.committed
+    assert captured.value.state_uncertain
+    assert captured.value.recovery_artifact_retained
+    assert MediaFile(path).bpm == 126
+    assert original_get_item(item.id).mtime != plan.item_mtime
+    assert tuple(path.parent.glob(".noqlen-meta-backup-*"))
+
+
+def test_committed_cleanup_failure_preserves_commit_state(media_item, monkeypatch) -> None:
+    library, item, path = media_item
+    plan = plan_file_sync(item, (planned_change("bpm", 126.0),))
+    original_unlink = file_sync_module.os.unlink
+
+    def fail_backup_unlink(target: bytes) -> None:
+        if b".noqlen-meta-backup-" in target:
+            raise PermissionError("synthetic cleanup failure")
+        original_unlink(target)
+
+    monkeypatch.setattr(file_sync_module.os, "unlink", fail_backup_unlink)
+
+    with pytest.raises(FileSyncApplicationError) as captured:
+        apply_file_sync_plan(library, plan)
+
+    assert captured.value.committed
+    assert not captured.value.state_uncertain
+    assert captured.value.recovery_artifact_retained
+    assert MediaFile(path).bpm == 126
+    assert tuple(path.parent.glob(".noqlen-meta-backup-*"))
+
+
+def test_corrupt_backup_blocks_before_source_replace(media_item, monkeypatch) -> None:
+    library, item, path = media_item
+    plan = plan_file_sync(item, (planned_change("bpm", 126.0),))
+    before = path.read_bytes()
+    original_copy = file_sync_module.copy_regular_file_without_source_atime
+
+    def corrupt_backup(source: bytes, destination: bytes, **kwargs: object) -> None:
+        original_copy(source, destination, **kwargs)  # type: ignore[arg-type]
+        if b".noqlen-meta-backup-" in destination:
+            with open(destination, "ab") as stream:
+                stream.write(b"corrupt")
+
+    monkeypatch.setattr(
+        file_sync_module, "copy_regular_file_without_source_atime", corrupt_backup
+    )
+
+    result = apply_file_sync_plan(library, plan)
+
+    assert not result.committed
+    assert path.read_bytes() == before
+    assert MediaFile(path).bpm is None
+
+
+def test_unprovable_restoration_retains_recovery_artifact(media_item, monkeypatch) -> None:
+    library, item, path = media_item
+    plan = plan_file_sync(item, (planned_change("bpm", 126.0),))
+
+    def corrupt_backup_then_fail(*args: object) -> None:
+        backup = next(path.parent.glob(".noqlen-meta-backup-*"))
+        with backup.open("ab") as stream:
+            stream.write(b"corrupt")
+        raise OSError("synthetic database failure")
+
+    monkeypatch.setattr(
+        file_sync_module, "_store_operational_mtime", corrupt_backup_then_fail
+    )
+
+    with pytest.raises(FileSyncApplicationError) as captured:
+        apply_file_sync_plan(library, plan)
+
+    assert captured.value.committed
+    assert captured.value.state_uncertain
+    assert captured.value.recovery_artifact_retained
+    assert MediaFile(path).bpm == 126
+    assert tuple(path.parent.glob(".noqlen-meta-backup-*"))
+
+
+def test_mapped_change_with_blocker_reports_partial_commit(media_item) -> None:
+    library, item, path = media_item
+    plan = plan_file_sync(
+        item,
+        (
+            planned_change("lyrics", "Synthetic line"),
+            planned_change("moods", ("Dark",)),
+        ),
+    )
+
+    result = apply_file_sync_plan(library, plan)
+
+    assert result.committed
+    assert result.blocker_count == 1
+    assert result.blocked_reason
+    assert MediaFile(path).lyrics == "Synthetic line"

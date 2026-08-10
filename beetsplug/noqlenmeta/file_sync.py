@@ -20,6 +20,7 @@ from beetsplug.noqlenmeta.changeplan import PlannedChange
 from beetsplug.noqlenmeta.media_snapshot import (
     MediaFileSnapshot,
     copy_regular_file_without_source_atime,
+    digest_regular_file_without_atime,
     filesystem_metadata,
     fingerprint_media_file,
     freeze_media_value,
@@ -73,6 +74,7 @@ class FileSyncResult:
     item_id: int
     applied_fields: tuple[str, ...] = ()
     blocked_reason: str | None = None
+    blocker_count: int = 0
     committed: bool = False
     state_uncertain: bool = False
     recovery_artifact_retained: bool = False
@@ -195,12 +197,17 @@ def apply_file_sync_plan(library: Library, plan: FileSyncPlan) -> FileSyncResult
     """Apply one plan through verified candidate copy and replace."""
     verify_file_sync_plan(library, plan)
     if plan.blockers and not plan.changes:
-        return FileSyncResult(plan.item_id, blocked_reason=plan.blockers[0].reason)
+        return FileSyncResult(
+            plan.item_id,
+            blocked_reason=plan.blockers[0].reason,
+            blocker_count=len(plan.blockers),
+        )
     if not plan.changes:
         return FileSyncResult(plan.item_id)
 
     candidate: bytes | None = None
     backup: bytes | None = None
+    backup_digest: bytes | None = None
     replaced = False
     mtime_committed = False
     try:
@@ -232,6 +239,7 @@ def apply_file_sync_plan(library: Library, plan: FileSyncPlan) -> FileSyncResult
         copy_regular_file_without_source_atime(
             plan.path, backup, destination_exists=False
         )
+        backup_digest = _verify_recovery_artifact(plan.path, backup, plan)
         _require_source_snapshot(plan)
         os.replace(candidate, plan.path)
         candidate = None
@@ -252,20 +260,35 @@ def apply_file_sync_plan(library: Library, plan: FileSyncPlan) -> FileSyncResult
                 "ordinary metadata synchronization committed but notification failed",
                 committed=True,
             ) from error
-        _remove(backup)
+        if not _remove(backup):
+            raise FileSyncApplicationError(
+                "ordinary metadata synchronization committed but artifact cleanup failed",
+                committed=True,
+                recovery_artifact_retained=True,
+            )
         backup = None
         return FileSyncResult(
             plan.item_id,
             tuple(change.canonical_field for change in plan.changes),
             blocked_reason=plan.blockers[0].reason if plan.blockers else None,
+            blocker_count=len(plan.blockers),
             committed=True,
         )
     except FileSyncApplicationError as error:
         retained = backup is not None and os.path.exists(backup)
-        if replaced and error.committed and not error.state_uncertain:
-            _remove(backup)
-            backup = None
-            retained = False
+        if replaced and error.committed and not (
+            error.state_uncertain or error.recovery_artifact_retained
+        ):
+            if _remove(backup):
+                backup = None
+                retained = False
+            else:
+                retained = backup is not None and os.path.exists(backup)
+                raise FileSyncApplicationError(
+                    "ordinary metadata synchronization committed but artifact cleanup failed",
+                    committed=True,
+                    recovery_artifact_retained=retained,
+                ) from error
         if retained != error.recovery_artifact_retained:
             raise FileSyncApplicationError(
                 str(error),
@@ -284,18 +307,9 @@ def apply_file_sync_plan(library: Library, plan: FileSyncPlan) -> FileSyncResult
                     recovery_artifact_retained=retained,
                 ) from error
             try:
-                if backup is None:
+                if backup is None or backup_digest is None:
                     raise ValueError("recovery artifact unavailable")
-                os.replace(backup, plan.path)
-                backup = None
-                _fsync_directory(plan.path)
-                restored = snapshot_media_file(plan.path, fields=_ALL_MEDIA_FIELDS)
-                if (
-                    restored.values != plan.snapshot.values
-                    or restored.format_name != plan.snapshot.format_name
-                    or restored.filesystem_metadata != plan.snapshot.filesystem_metadata
-                ):
-                    raise ValueError("recovery artifact verification failed")
+                _restore_original(plan, backup, backup_digest)
             except Exception as restore_error:
                 retained = backup is not None and os.path.exists(backup)
                 raise FileSyncApplicationError(
@@ -304,11 +318,19 @@ def apply_file_sync_plan(library: Library, plan: FileSyncPlan) -> FileSyncResult
                     state_uncertain=True,
                     recovery_artifact_retained=retained,
                 ) from restore_error
+            retained = not _remove(backup)
+            if not retained:
+                backup = None
             return FileSyncResult(
                 plan.item_id,
                 blocked_reason="ordinary metadata original restored after failed synchronization",
+                recovery_artifact_retained=retained,
             )
-        return FileSyncResult(plan.item_id, blocked_reason=_safe_reason(error))
+        return FileSyncResult(
+            plan.item_id,
+            blocked_reason=_safe_reason(error),
+            blocker_count=len(plan.blockers),
+        )
     except BaseException as error:
         if replaced:
             retained = backup is not None and os.path.exists(backup)
@@ -421,6 +443,57 @@ def _require_source_snapshot(plan: FileSyncPlan) -> None:
         raise ValueError("ordinary metadata source changed")
 
 
+def _verify_recovery_artifact(
+    source: bytes, backup: bytes, plan: FileSyncPlan
+) -> bytes:
+    """Prove the recovery copy represents the still-current planned source."""
+    _require_source_snapshot(plan)
+    source_digest = digest_regular_file_without_atime(source)
+    _verify_original_snapshot(backup, plan, source_digest)
+    _require_source_snapshot(plan)
+    return source_digest
+
+
+def _verify_original_snapshot(path: bytes, plan: FileSyncPlan, digest: bytes) -> None:
+    snapshot = snapshot_media_file(path, fields=_ALL_MEDIA_FIELDS)
+    fingerprint = snapshot.fingerprint
+    expected = plan.snapshot
+    if (
+        digest_regular_file_without_atime(path) != digest
+        or fingerprint.size != expected.fingerprint.size
+        or fingerprint.mode != expected.fingerprint.mode
+        or fingerprint.mtime_ns != expected.fingerprint.mtime_ns
+        or fingerprint.link_count != 1
+        or snapshot.values != expected.values
+        or snapshot.format_name != expected.format_name
+        or snapshot.filesystem_metadata != expected.filesystem_metadata
+    ):
+        raise ValueError("ordinary metadata recovery artifact verification failed")
+
+
+def _restore_original(plan: FileSyncPlan, backup: bytes, digest: bytes) -> None:
+    """Restore through a separately verified candidate, retaining the backup."""
+    _verify_original_snapshot(backup, plan, digest)
+    restore: bytes | None = None
+    try:
+        restore, descriptor = _candidate_path(plan.path)
+        copy_regular_file_without_source_atime(
+            backup,
+            restore,
+            destination_exists=True,
+            destination_descriptor=descriptor,
+        )
+        _verify_original_snapshot(restore, plan, digest)
+        os.replace(restore, plan.path)
+        restore = None
+        _fsync_directory(plan.path)
+        _verify_original_snapshot(plan.path, plan, digest)
+        _restore_atime(plan.path, plan.snapshot.filesystem_metadata.atime_ns)
+        verify_candidate_metadata(plan.path, plan.snapshot.filesystem_metadata)
+    finally:
+        _remove(restore)
+
+
 def _candidate_path(path: bytes) -> tuple[bytes, int]:
     parent = os.path.dirname(path) or os.fsencode(".")
     suffix = os.path.splitext(path)[1]
@@ -468,25 +541,32 @@ def _store_operational_mtime(library: Library, plan: FileSyncPlan, mtime: float)
     fresh.mtime = mtime
     try:
         fresh.store(fields={"mtime"})
+        verified = library.get_item(plan.item_id)
+        if (
+            type(verified) is not Item
+            or verified.path != plan.path
+            or verified.mtime != mtime
+        ):
+            raise ValueError("ordinary metadata mtime verification failed")
+        return verified
     except Exception as error:
         raise FileSyncApplicationError(
             "ordinary metadata mtime commit state is uncertain",
             committed=True,
             state_uncertain=True,
         ) from error
-    verified = library.get_item(plan.item_id)
-    if type(verified) is not Item or verified.path != plan.path or verified.mtime != mtime:
-        raise ValueError("ordinary metadata mtime verification failed")
-    return verified
 
 
-def _remove(path: bytes | None) -> None:
+def _remove(path: bytes | None) -> bool:
     if path is None:
-        return
+        return True
     try:
         os.unlink(path)
     except FileNotFoundError:
-        pass
+        return True
+    except OSError:
+        return False
+    return True
 
 
 def _safe_reason(error: Exception) -> str:

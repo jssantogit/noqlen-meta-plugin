@@ -219,6 +219,20 @@ def verify_candidate_metadata(path: bytes, expected: FilesystemMetadata) -> None
         raise ValueError("filesystem metadata cannot be preserved safely")
 
 
+def digest_regular_file_without_atime(path: bytes) -> bytes:
+    """Hash one regular file without following links or advancing source atime."""
+    no_atime = getattr(os, "O_NOATIME", None)
+    no_follow = getattr(os, "O_NOFOLLOW", None)
+    if no_atime is None or no_follow is None:
+        raise OSError("atime-safe file reads are unsupported")
+    descriptor = os.open(path, os.O_RDONLY | no_atime | no_follow)
+    digest = hashlib.sha256()
+    with os.fdopen(descriptor, "rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.digest()
+
+
 def freeze_media_value(value: object) -> object:
     if value is None or isinstance(value, (str, int, float, bool, bytes)):
         return value
