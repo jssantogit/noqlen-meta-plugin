@@ -4,7 +4,24 @@ All notable user-facing changes are recorded here.
 
 ## Unreleased
 
-No user-facing changes yet.
+### Added
+
+- Existing-library AcoustID evidence workflow for complete Albums and standalone Items.
+- `beet nm --acoustid` preview mode with optional database-only `--apply`.
+- `--fingerprint-missing` authority for explicitly calculating missing fingerprints in standalone AcoustID mode.
+- Reuse of valid stored AcoustID fingerprints and bounded `fpcalc` generation with source-file stability checks.
+- Bounded AcoustID `recordingids` lookup using the environment-only `NOQLENMETA_ACOUSTID_API_KEY` credential.
+- Optional AcoustID recording-compatibility filtering for existing-library `--identity` when enabled by configuration.
+- Public `acoustid` configuration for reuse, lookup, evidence thresholds, pacing, cache size, and `fpcalc` location.
+
+### Safety
+
+- AcoustID is recording-level evidence only: it does not add MusicBrainz structural score, select a release occurrence by itself, or relax identity gates.
+- `--identity` never calculates a missing fingerprint, even when standalone missing-fingerprint calculation is configured.
+- Standalone AcoustID `--apply` changes only `acoustid_id` and `acoustid_fingerprint` in the beets database and never writes audio files.
+- Existing non-empty AcoustID conflicts, stale database targets, and changed generated source files block before the first write.
+- Fingerprints, private media paths, API keys, backend output, and raw provider exceptions remain excluded from public output.
+- Native beets `chroma` continues to own importer acoustic matching and fingerprint submission; Noqlen adds no importer AcoustID autotagger path.
 
 ## 1.0.0 - 2026-08-02
 
