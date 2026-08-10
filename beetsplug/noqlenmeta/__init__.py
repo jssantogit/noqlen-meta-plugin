@@ -50,6 +50,7 @@ from beetsplug.noqlenmeta.file_sync import (
 )
 from beetsplug.noqlenmeta.genre_pipeline import resolve_release_genre_decision
 from beetsplug.noqlenmeta.genre_resolution import GenreSettings
+from beetsplug.noqlenmeta.semantic_resolution import MoodSettings
 from beetsplug.noqlenmeta.identity import (
     AcoustIDRecordingExpectations,
     BeetsMusicBrainzIdentitySource,
@@ -1192,6 +1193,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
     def _resolution_policy(self) -> ResolutionPolicy:
         self._genre_settings()
+        self._mood_settings()
         try:
             validate_local_analysis_config(self.config["local_analysis"].get(dict))
         except (confuse.ConfigError, ValueError) as error:
@@ -1230,6 +1232,15 @@ class NoqlenMetaPlugin(BeetsPlugin):
         except (confuse.ConfigError, TypeError, ValueError) as error:
             raise ui.UserError(
                 f"noqlenmeta: invalid genres configuration: {error}"
+            ) from None
+
+    def _mood_settings(self) -> MoodSettings:
+        try:
+            value = self.config["moods"]["max_moods"].get()
+            return MoodSettings(max_moods=value)
+        except (confuse.ConfigError, TypeError, ValueError) as error:
+            raise ui.UserError(
+                f"noqlenmeta: invalid moods configuration: {error}"
             ) from None
 
     @staticmethod

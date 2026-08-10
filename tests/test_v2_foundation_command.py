@@ -142,6 +142,41 @@ def test_genre_settings_accept_three_and_reject_non_boolean_promotion() -> None:
         plugin._genre_settings()
 
 
+@pytest.mark.parametrize("max_moods", [1, 3])
+def test_mood_settings_accept_valid_limits(max_moods: int) -> None:
+    plugin = NoqlenMetaPlugin()
+    plugin.config["moods"]["max_moods"].set(max_moods)
+    assert plugin._mood_settings().max_moods == max_moods
+
+
+@pytest.mark.parametrize("max_moods", [0, 11, True, "1"])
+def test_invalid_mood_limit_is_rejected_before_provider_work(
+    max_moods: object, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    library = Library(str(tmp_path / "library.db"), set_music_dir=False)
+    library.add_album(
+        [
+            Item(
+                path=b"synthetic.flac",
+                albumartist="Synthetic Artist",
+                album="Synthetic Album",
+                artist="Synthetic Artist",
+                title="Synthetic Track",
+            )
+        ]
+    )
+    plugin = NoqlenMetaPlugin()
+    plugin.config["moods"]["max_moods"].set(max_moods)
+    monkeypatch.setattr(
+        plugin,
+        "_musicbrainz_candidates",
+        lambda *args: pytest.fail("invalid mood config reached provider work"),
+    )
+
+    with pytest.raises(ui.UserError, match="invalid moods configuration"):
+        invoke(plugin, library, ["--all"])
+
+
 def test_ordinary_apply_write_updates_database_and_real_media_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

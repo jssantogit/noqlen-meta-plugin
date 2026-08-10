@@ -4,12 +4,69 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from enum import Enum
 from math import isfinite
-from typing import TypeAlias
+from typing import TYPE_CHECKING, TypeAlias
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from beetsplug.noqlenmeta.genre_evidence import GenreEvidence
+    from beetsplug.noqlenmeta.providers.specs import ProviderScope
 
 ScalarMetadataValue: TypeAlias = str | int | float | bool
 MetadataValue: TypeAlias = ScalarMetadataValue | tuple[str, ...]
+
+
+class SemanticCategory(Enum):
+    GENRE = "genre"
+    STYLE = "style"
+    MOOD = "mood"
+    ORIGIN = "origin"
+    DESCRIPTOR = "descriptor"
+    NOISE = "noise"
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticTagEvidence:
+    canonical_term: str
+    category: SemanticCategory
+    provider: str
+    scope: ProviderScope
+    confidence: float
+    source_id: str
+    source_url: str | None
+    native_weight: int | None
+    raw_tag: str
+
+    def __post_init__(self) -> None:
+        from beetsplug.noqlenmeta.providers.specs import ProviderScope
+
+        for field, label in (
+            ("canonical_term", "canonical term"),
+            ("provider", "provider"),
+            ("source_id", "source ID"),
+            ("raw_tag", "raw tag"),
+        ):
+            object.__setattr__(self, field, _text(getattr(self, field), label))
+        object.__setattr__(self, "source_url", _optional_text(self.source_url, "source URL"))
+        if not isinstance(self.category, SemanticCategory):
+            raise TypeError("category must be a SemanticCategory")
+        if not isinstance(self.scope, ProviderScope):
+            raise TypeError("scope must be a ProviderScope")
+        if (
+            isinstance(self.confidence, bool)
+            or not isinstance(self.confidence, (int, float))
+            or not isfinite(self.confidence)
+            or not 0.0 <= self.confidence <= 1.0
+        ):
+            raise ValueError("confidence must be a finite number between 0.0 and 1.0")
+        object.__setattr__(self, "confidence", float(self.confidence))
+        if self.native_weight is not None and (
+            isinstance(self.native_weight, bool)
+            or not isinstance(self.native_weight, int)
+            or self.native_weight < 0
+        ):
+            raise ValueError("native weight must be a non-negative integer")
 
 
 def canonical_uuid(value: object) -> str | None:
@@ -227,3 +284,23 @@ class MetadataCandidate:
                 raise ValueError("multi-value candidate value must not be empty")
             return tuple(_text(item, "multi-value candidate item") for item in value)
         raise TypeError("candidate value must be a string, number, boolean, or tuple of strings")
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticEvidenceBundle:
+    metadata: tuple[MetadataCandidate, ...] = ()
+    genres: tuple[GenreEvidence, ...] = ()
+    tags: tuple[SemanticTagEvidence, ...] = ()
+
+    def __post_init__(self) -> None:
+        from beetsplug.noqlenmeta.genre_evidence import GenreEvidence
+
+        for values, expected, label in (
+            (self.metadata, MetadataCandidate, "metadata"),
+            (self.genres, GenreEvidence, "genres"),
+            (self.tags, SemanticTagEvidence, "tags"),
+        ):
+            normalized = tuple(values)
+            if not all(isinstance(value, expected) for value in normalized):
+                raise TypeError(f"{label} contains an invalid value")
+            object.__setattr__(self, label, normalized)
