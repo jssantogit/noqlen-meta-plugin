@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from beets import config, ui
@@ -25,7 +26,10 @@ from beetsplug.noqlenmeta.identity import (
     MusicBrainzReleaseIdentity,
     MusicBrainzTrackIdentity,
 )
-from tests.identity.helpers import mbid
+
+
+def mbid(number: int) -> str:
+    return str(UUID(int=number))
 
 
 @pytest.fixture(autouse=True)
