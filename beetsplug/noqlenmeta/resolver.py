@@ -139,7 +139,7 @@ class FieldDecision:
 
 
 _DEFAULT_AUTHORITY: dict[str, tuple[str, ...]] = {
-    "genres": ("discogs", "lastfm", "itunes"),
+    "genres": ("musicbrainz", "discogs", "lastfm", "itunes"),
     "styles": ("discogs", "lastfm", "musicbrainz"),
     "labels": ("discogs", "musicbrainz", "itunes"),
     "catalog_numbers": ("discogs", "musicbrainz", "itunes"),
