@@ -174,7 +174,11 @@ def verify_file_sync_plan(library: Library, plan: FileSyncPlan) -> None:
     """Verify a canonical plan against fresh database and exact source state."""
     _validate_plan(plan)
     fresh = library.get_item(plan.item_id)
-    if type(fresh) is not Item or fresh.path != plan.path:
+    if (
+        type(fresh) is not Item
+        or fresh.path != plan.path
+        or float(fresh.mtime or 0.0) != plan.item_mtime
+    ):
         raise FileSyncApplicationError("ordinary metadata source changed before synchronization")
     try:
         fingerprint = fingerprint_media_file(plan.path)
@@ -198,6 +202,7 @@ def apply_file_sync_plan(library: Library, plan: FileSyncPlan) -> FileSyncResult
     candidate: bytes | None = None
     backup: bytes | None = None
     replaced = False
+    mtime_committed = False
     try:
         candidate, descriptor = _candidate_path(plan.path)
         copy_regular_file_without_source_atime(
@@ -238,8 +243,15 @@ def apply_file_sync_plan(library: Library, plan: FileSyncPlan) -> FileSyncResult
         verify_candidate_metadata(plan.path, plan.snapshot.filesystem_metadata)
         mtime = os.stat(plan.path, follow_symlinks=False).st_mtime
         fresh = _store_operational_mtime(library, plan, mtime)
-        plugins.send("after_write", item=fresh, path=plan.path)
-        plugins.send("database_change", lib=library, model=fresh)
+        mtime_committed = True
+        try:
+            plugins.send("after_write", item=fresh, path=plan.path)
+            plugins.send("database_change", lib=library, model=fresh)
+        except Exception as error:
+            raise FileSyncApplicationError(
+                "ordinary metadata synchronization committed but notification failed",
+                committed=True,
+            ) from error
         _remove(backup)
         backup = None
         return FileSyncResult(
@@ -248,10 +260,29 @@ def apply_file_sync_plan(library: Library, plan: FileSyncPlan) -> FileSyncResult
             blocked_reason=plan.blockers[0].reason if plan.blockers else None,
             committed=True,
         )
-    except FileSyncApplicationError:
+    except FileSyncApplicationError as error:
+        retained = backup is not None and os.path.exists(backup)
+        if replaced and error.committed and not error.state_uncertain:
+            _remove(backup)
+            backup = None
+            retained = False
+        if retained != error.recovery_artifact_retained:
+            raise FileSyncApplicationError(
+                str(error),
+                committed=error.committed,
+                state_uncertain=error.state_uncertain,
+                recovery_artifact_retained=retained,
+            ) from error
         raise
     except Exception as error:
         if replaced:
+            if mtime_committed:
+                retained = backup is not None and os.path.exists(backup)
+                raise FileSyncApplicationError(
+                    "ordinary metadata synchronization committed but finalization failed",
+                    committed=True,
+                    recovery_artifact_retained=retained,
+                ) from error
             try:
                 if backup is None:
                     raise ValueError("recovery artifact unavailable")
@@ -428,10 +459,21 @@ def _fsync_directory(path: bytes) -> None:
 
 def _store_operational_mtime(library: Library, plan: FileSyncPlan, mtime: float) -> Item:
     fresh = library.get_item(plan.item_id)
-    if type(fresh) is not Item or fresh.path != plan.path:
+    if (
+        type(fresh) is not Item
+        or fresh.path != plan.path
+        or float(fresh.mtime or 0.0) != plan.item_mtime
+    ):
         raise ValueError("ordinary metadata Item changed before mtime update")
     fresh.mtime = mtime
-    fresh.store(fields={"mtime"})
+    try:
+        fresh.store(fields={"mtime"})
+    except Exception as error:
+        raise FileSyncApplicationError(
+            "ordinary metadata mtime commit state is uncertain",
+            committed=True,
+            state_uncertain=True,
+        ) from error
     verified = library.get_item(plan.item_id)
     if type(verified) is not Item or verified.path != plan.path or verified.mtime != mtime:
         raise ValueError("ordinary metadata mtime verification failed")

@@ -143,3 +143,24 @@ def test_post_replace_db_failure_restores_original(media_item, monkeypatch) -> N
 
     assert not result.committed
     assert path.read_bytes() == before
+
+
+def test_notification_failure_reports_committed_file(media_item, monkeypatch) -> None:
+    library, item, path = media_item
+    plan = plan_file_sync(item, (planned_change("bpm", 126.0),))
+    original_send = file_sync_module.plugins.send
+
+    def fail_after_write(event: str, **kwargs: object) -> None:
+        if event == "after_write":
+            raise OSError("notification")
+        original_send(event, **kwargs)
+
+    monkeypatch.setattr(file_sync_module.plugins, "send", fail_after_write)
+
+    with pytest.raises(FileSyncApplicationError) as captured:
+        apply_file_sync_plan(library, plan)
+
+    assert captured.value.committed
+    assert not captured.value.state_uncertain
+    assert not captured.value.recovery_artifact_retained
+    assert MediaFile(path).bpm == 126
