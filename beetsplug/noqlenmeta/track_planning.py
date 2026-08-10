@@ -28,7 +28,27 @@ from beetsplug.noqlenmeta.track_mapping import (
     map_change_plan_to_track_info,
 )
 
-_TRACK_CURRENT_FIELDS = ("lyrics", "synced_lyrics")
+_TRACK_CURRENT_FIELDS = (
+    "lyrics",
+    "synced_lyrics",
+    "bpm",
+    "moods",
+    "lyrics_languages",
+    "artist_countries",
+    "artist_areas",
+    "artist_languages",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class TrackPlanningResult:
+    """Provider-independent track resolution and target plan."""
+
+    context: TrackEnrichmentContext
+    candidate_count: int
+    decisions: tuple[FieldDecision, ...]
+    change_plan: ChangePlan
+    target_plan: TrackTargetPlan
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,20 +104,39 @@ def build_import_track_planning_result(
     policy: ResolutionPolicy,
 ) -> ImportTrackPlanningResult:
     """Resolve validated candidates through the shared canonical planning path."""
-    collected = tuple(candidates)
-    decisions = resolve_metadata(
+    result = build_track_planning_result(
+        context,
         effective_current_values_for_import_track(
             selected,
             from_scratch=from_scratch,
         ),
-        collected,
-        policy,
+        candidates=candidates,
+        policy=policy,
     )
-    change_plan = build_change_plan(decisions)
     return ImportTrackPlanningResult(
         selected=selected,
         context=context,
         from_scratch=from_scratch,
+        candidate_count=result.candidate_count,
+        decisions=result.decisions,
+        change_plan=result.change_plan,
+        target_plan=result.target_plan,
+    )
+
+
+def build_track_planning_result(
+    context: TrackEnrichmentContext,
+    current_values: Mapping[str, MetadataValue],
+    *,
+    candidates: Sequence[MetadataCandidate],
+    policy: ResolutionPolicy,
+) -> TrackPlanningResult:
+    """Resolve one track through the shared canonical planning path."""
+    collected = tuple(candidates)
+    decisions = resolve_metadata(current_values, collected, policy)
+    change_plan = build_change_plan(decisions)
+    return TrackPlanningResult(
+        context=context,
         candidate_count=len(collected),
         decisions=decisions,
         change_plan=change_plan,

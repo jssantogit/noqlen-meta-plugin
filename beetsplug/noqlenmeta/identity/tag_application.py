@@ -7,12 +7,13 @@ import secrets
 import tempfile
 from dataclasses import dataclass
 from enum import Enum
-from hashlib import sha256
 
 from beets import plugins, ui
 from beets.dbcore.db import Transaction
 from beets.library import Item, Library
 from mediafile import MediaFile
+
+from beetsplug.noqlenmeta.media_snapshot import digest_regular_file_without_atime
 
 from .domain import canonical_mbid
 from .tag_filesystem import (
@@ -619,16 +620,7 @@ def _restore_atime(path: bytes, atime_ns: int) -> None:
 
 
 def _file_digest(path: bytes) -> bytes:
-    digest = sha256()
-    no_atime = getattr(os, "O_NOATIME", None)
-    if no_atime is None:
-        raise OSError("atime-safe file reads are unsupported")
-    flags = os.O_RDONLY | no_atime
-    descriptor = os.open(path, flags)
-    with os.fdopen(descriptor, "rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.digest()
+    return digest_regular_file_without_atime(path)
 
 
 def _stat_fingerprint(path: bytes) -> IdentityTagFileFingerprint:

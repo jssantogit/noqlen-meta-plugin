@@ -279,11 +279,17 @@ def test_current_values_from_track_info_are_explicit_trimmed_strings() -> None:
     info = track_info(
         lyrics="  line one\nline two  ",
         synced_lyrics="  [00:01.00]line one\n[00:02.00]line two  ",
+        bpm=126.4,
+        moods=[" Dark ", "Energetic"],
+        lyrics_languages=["English", " Korean "],
     )
 
     assert current_values_from_track_info(info) == {
         "lyrics": "line one\nline two",
         "synced_lyrics": "[00:01.00]line one\n[00:02.00]line two",
+        "bpm": 126.4,
+        "moods": ("Dark", "Energetic"),
+        "lyrics_languages": ("English", "Korean"),
     }
     assert current_values_from_track_info(track_info(lyrics=" ", synced_lyrics=None)) == {}
 
@@ -296,6 +302,8 @@ def test_current_values_from_item_are_local_and_read_only(
         title="Flying Whales",
         lyrics=" line one\nline two ",
         synced_lyrics=" [00:01.00]line one ",
+        bpm=126.4,
+        moods=["Dark", "Energetic"],
     )
     snapshot = copy.deepcopy(dict(item))
     original_get = Item.get
@@ -311,6 +319,8 @@ def test_current_values_from_item_are_local_and_read_only(
     assert current_values_from_library_item(item) == {
         "lyrics": "line one\nline two",
         "synced_lyrics": "[00:01.00]line one",
+        "bpm": 126.0,
+        "moods": ("Dark", "Energetic"),
     }
     assert dict(item) == snapshot
 

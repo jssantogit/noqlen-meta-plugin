@@ -59,8 +59,8 @@ def test_policy_distinguishes_known_and_enabled_fields() -> None:
     resolution_policy = default_resolution_policy()
 
     assert resolution_policy.is_field_enabled("genres")
-    assert "mood" in resolution_policy.field_rules
-    assert not resolution_policy.is_field_enabled("mood")
+    assert "moods" in resolution_policy.field_rules
+    assert not resolution_policy.is_field_enabled("moods")
     assert not resolution_policy.is_field_enabled("unknown")
 
 
@@ -228,6 +228,12 @@ def test_default_authority_keeps_discogs_ahead_for_labels() -> None:
 
 def test_default_genres_authority_selects_discogs_over_lastfm_and_itunes() -> None:
     baseline = default_resolution_policy()
+    assert baseline.field_rules["genres"].authority == (
+        "musicbrainz",
+        "discogs",
+        "lastfm",
+        "itunes",
+    )
     resolution_policy = ResolutionPolicy(
         baseline.field_rules,
         {"discogs": True, "lastfm": True, "itunes": True},

@@ -6,6 +6,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
+from math import isfinite
+from typing import Any
 
 from beets.autotag.hooks import AlbumInfo, TrackInfo
 from beets.library import Item
@@ -160,19 +162,15 @@ def apply_track_target_plan(
                 f"selected metadata for {change.canonical_field!r} no longer matches the plan"
             )
 
-    materialized: list[tuple[str, str]] = []
+    materialized: list[tuple[str, Any]] = []
     seen_targets: set[str] = set()
     for change in plan.mapped_changes:
-        if change.target_shape is not TrackTargetShape.SCALAR_STRING:
-            raise TrackApplicationError("unsupported TrackInfo target shape")
-        if not isinstance(change.target_value, str) or not change.target_value:
-            raise TrackApplicationError("scalar-string target requires a non-empty string")
         if change.target_field in seen_targets:
             raise TrackApplicationError(
                 f"duplicate TrackInfo target field {change.target_field!r}"
             )
         seen_targets.add(change.target_field)
-        materialized.append((change.target_field, change.target_value))
+        materialized.append((change.target_field, _materialize_value(change)))
 
     for target_field, value in materialized:
         selected.track_info[target_field] = value
@@ -187,3 +185,34 @@ def apply_track_target_plan(
         resolution_review_count=result.resolution_review_count,
         mapping_blocker_count=result.mapping_blocker_count,
     )
+
+
+def _materialize_value(change: TrackTargetChange) -> Any:
+    value = change.target_value
+    if change.target_shape is TrackTargetShape.STRING_LIST:
+        if (
+            not isinstance(value, tuple)
+            or not value
+            or any(
+                not isinstance(item, str) or not item or item != item.strip()
+                for item in value
+            )
+        ):
+            raise TrackApplicationError("string-list target requires canonical strings")
+        return list(value)
+    if change.target_shape is TrackTargetShape.SCALAR_FLOAT:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not isfinite(value)
+            or value <= 0
+        ):
+            raise TrackApplicationError("scalar-float target requires a finite positive number")
+        return float(value)
+    if change.target_shape is TrackTargetShape.SCALAR_STRING:
+        if not isinstance(value, str) or not value or value != value.strip():
+            raise TrackApplicationError(
+                "scalar-string target requires a non-empty string in canonical form"
+            )
+        return value
+    raise TrackApplicationError("unsupported TrackInfo target shape")

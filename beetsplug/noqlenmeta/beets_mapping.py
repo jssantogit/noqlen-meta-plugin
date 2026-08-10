@@ -47,7 +47,7 @@ class BeetsFieldTarget:
 
 _TARGETS = (
     BeetsFieldTarget("genres", "genres", BeetsTargetShape.STRING_LIST),
-    BeetsFieldTarget("styles", "style", BeetsTargetShape.SCALAR_STRING),
+    BeetsFieldTarget("styles", "styles", BeetsTargetShape.STRING_LIST),
     BeetsFieldTarget("labels", "label", BeetsTargetShape.SCALAR_STRING),
     BeetsFieldTarget("catalog_numbers", "catalognum", BeetsTargetShape.SCALAR_STRING),
     BeetsFieldTarget("barcodes", "barcode", BeetsTargetShape.SCALAR_STRING),

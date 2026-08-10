@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 
@@ -41,10 +42,19 @@ def default_config() -> dict[str, Any]:
             "year": True,
             "media": True,
             "format_descriptions": True,
-            "mood": False,
+            "moods": True,
+            "bpm": True,
+            "lyrics_languages": True,
+            "artist_countries": True,
+            "artist_areas": False,
+            "artist_languages": True,
             "lyrics": False,
             "synced_lyrics": False,
-            "cover": False,
+            "cover": True,
+        },
+        "genres": {
+            "num_genres": 1,
+            "promote_styles": True,
         },
         "providers": {
             "discogs": {
@@ -52,7 +62,7 @@ def default_config() -> dict[str, Any]:
                 "user_token": "",
             },
             "musicbrainz": {
-                "enabled": False,
+                "enabled": True,
             },
             "lastfm": {
                 "enabled": False,
@@ -70,4 +80,24 @@ def default_config() -> dict[str, Any]:
             "min_confidence": {},
             "preserve_existing": {},
         },
+        "local_analysis": {
+            "bpm": {"enabled": True, "mode": "fallback"},
+            "mood": {"enabled": False},
+        },
     }
+
+
+def validate_local_analysis_config(value: object) -> None:
+    """Validate the inert Foundation analysis structure without loading a backend."""
+    if not isinstance(value, Mapping) or set(value) != {"bpm", "mood"}:
+        raise ValueError("local_analysis must contain bpm and mood sections")
+    bpm = value["bpm"]
+    mood = value["mood"]
+    if not isinstance(bpm, Mapping) or set(bpm) != {"enabled", "mode"}:
+        raise ValueError("local_analysis.bpm is invalid")
+    if type(bpm["enabled"]) is not bool or bpm["mode"] != "fallback":
+        raise ValueError("local_analysis.bpm is invalid")
+    if not isinstance(mood, Mapping) or set(mood) != {"enabled"}:
+        raise ValueError("local_analysis.mood is invalid")
+    if type(mood["enabled"]) is not bool:
+        raise ValueError("local_analysis.mood is invalid")

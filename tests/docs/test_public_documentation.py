@@ -17,7 +17,16 @@ def test_default_config_is_fresh_and_complete() -> None:
     first["fields"]["genres"] = False
 
     assert second["fields"]["genres"] is True
+    assert second["genres"] == {"num_genres": 1, "promote_styles": True}
     assert second["providers"]["discogs"]["user_token"] == ""
+    assert second["fields"]["moods"] is True
+    assert "mood" not in second["fields"]
+    assert second["fields"]["artist_areas"] is False
+    assert second["providers"]["musicbrainz"]["enabled"] is True
+    assert second["local_analysis"] == {
+        "bpm": {"enabled": True, "mode": "fallback"},
+        "mood": {"enabled": False},
+    }
 
 
 def test_public_documentation_gate() -> None:
@@ -39,7 +48,7 @@ def test_command_help_explains_modes_and_write_boundaries() -> None:
     assert "--identity" in help_text
     assert "--identity-tags" in help_text
     assert "--apply" in help_text
-    assert "never writes files" in help_text
+    assert "ordinary file sync with --apply" in help_text
     assert "ordinary metadata only" in help_text
     assert "--write" in help_text
     assert "all targets in the selected mode" in help_text

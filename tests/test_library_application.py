@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from beets.library import Album, Item, Library
+from beets.util import cached_classproperty
 
 import beetsplug.noqlenmeta.library_application as application_module
 from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
@@ -116,7 +117,6 @@ def test_genres_persist_and_inherit_as_a_fresh_list(
 @pytest.mark.parametrize(
     ("field", "value", "target", "expected"),
     [
-        ("styles", ("Progressive Metal",), "style", "Progressive Metal"),
         ("labels", ("Roadrunner",), "label", "Roadrunner"),
         ("catalog_numbers", ("RR-123",), "catalognum", "RR-123"),
         ("barcodes", ("0123456789012",), "barcode", "0123456789012"),
@@ -139,6 +139,29 @@ def test_scalar_fields_persist_and_inherit(
     reloaded = library.get_album(album.id)
     assert getattr(reloaded, target) == expected
     assert [getattr(item, target) for item in reloaded.items()] == [expected, expected]
+
+
+def test_styles_persist_losslessly(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    from beets import plugins
+
+    from beetsplug.noqlenmeta import NoqlenMetaPlugin
+
+    monkeypatch.setattr(plugins, "_instances", [NoqlenMetaPlugin()])
+    monkeypatch.delitem(cached_classproperty.cache, (Album, "_types"), raising=False)
+    album = add_album(library)
+
+    result = apply_library_target_plan(
+        album,
+        target_plan(
+            planned_change("styles", ("Progressive Metal", "Technical Death Metal"))
+        ),
+    )
+
+    reloaded = library.get_album(album.id)
+    assert result.stored
+    assert reloaded["styles"] == ["Progressive Metal", "Technical Death Metal"]
 
 
 def test_empty_plan_does_not_store(monkeypatch: pytest.MonkeyPatch, library: Library) -> None:

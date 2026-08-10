@@ -3,6 +3,8 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from beetsplug.noqlenmeta.providers.specs import (
+    BUILTIN_ARTIST_PROVIDER_SPECS,
+    BUILTIN_PROVIDER_NAMES,
     BUILTIN_PROVIDER_SPECS,
     BUILTIN_RELEASE_PROVIDER_SPECS,
     BUILTIN_TRACK_PROVIDER_SPECS,
@@ -70,14 +72,17 @@ def test_provider_spec_and_supported_fields_are_immutable() -> None:
 
 def test_builtin_provider_mapping_is_immutable() -> None:
     assert dict(BUILTIN_PROVIDER_SPECS) == {
-        "discogs": DISCOGS_SPEC,
-        "musicbrainz": MUSICBRAINZ_SPEC,
-        "lastfm": LASTFM_SPEC,
-        "itunes": ITUNES_SPEC,
-        "lrclib": LRCLIB_SPEC,
+        ("discogs", ProviderScope.RELEASE): DISCOGS_SPEC,
+        ("musicbrainz", ProviderScope.RELEASE): MUSICBRAINZ_SPEC,
+        ("lastfm", ProviderScope.RELEASE): LASTFM_SPEC,
+        ("itunes", ProviderScope.RELEASE): ITUNES_SPEC,
+        ("lrclib", ProviderScope.TRACK): LRCLIB_SPEC,
     }
+    assert BUILTIN_PROVIDER_NAMES == frozenset(
+        {"discogs", "musicbrainz", "lastfm", "itunes", "lrclib"}
+    )
     with pytest.raises(TypeError):
-        BUILTIN_PROVIDER_SPECS["other"] = ITUNES_SPEC  # type: ignore[index]
+        BUILTIN_PROVIDER_SPECS[("other", ProviderScope.RELEASE)] = ITUNES_SPEC  # type: ignore[index]
 
 
 def test_builtin_provider_scopes_and_filtered_registries_are_explicit() -> None:
@@ -88,6 +93,8 @@ def test_builtin_provider_scopes_and_filtered_registries_are_explicit() -> None:
         "itunes": ITUNES_SPEC,
     }
     assert dict(BUILTIN_TRACK_PROVIDER_SPECS) == {"lrclib": LRCLIB_SPEC}
+    assert dict(BUILTIN_ARTIST_PROVIDER_SPECS) == {}
+    assert ProviderScope.ARTIST.value == "artist"
     with pytest.raises(TypeError):
         BUILTIN_RELEASE_PROVIDER_SPECS["other"] = ITUNES_SPEC  # type: ignore[index]
     with pytest.raises(TypeError):
@@ -98,7 +105,23 @@ def test_test_only_track_provider_spec_retains_scope() -> None:
     spec = ProviderSpec("lyrics", "Lyrics", frozenset({"lyrics"}), ProviderScope.TRACK)
 
     assert spec.scope is ProviderScope.TRACK
-    assert "lyrics" not in BUILTIN_PROVIDER_SPECS
+    assert "lyrics" not in BUILTIN_PROVIDER_NAMES
+
+
+def test_provider_registry_keys_same_provider_name_by_scope() -> None:
+    artist_spec = ProviderSpec(
+        "musicbrainz",
+        "MusicBrainz",
+        frozenset({"artist_countries"}),
+        ProviderScope.ARTIST,
+    )
+    registry = {
+        (spec.name, spec.scope): spec for spec in (MUSICBRAINZ_SPEC, artist_spec)
+    }
+
+    assert registry[("musicbrainz", ProviderScope.RELEASE)] is MUSICBRAINZ_SPEC
+    assert registry[("musicbrainz", ProviderScope.ARTIST)] is artist_spec
+    assert (MUSICBRAINZ_SPEC.name, ProviderScope.RELEASE) in BUILTIN_PROVIDER_SPECS
 
 
 def test_provider_spec_rejects_arbitrary_scope_strings() -> None:

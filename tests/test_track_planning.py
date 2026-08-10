@@ -14,6 +14,7 @@ from beetsplug.noqlenmeta.track_integration import (
 )
 from beetsplug.noqlenmeta.track_planning import (
     build_import_track_planning_result,
+    build_track_planning_result,
     effective_current_values_for_import_track,
     selected_metadata_current_values,
 )
@@ -198,6 +199,28 @@ def test_proposed_plain_lyrics_maps_to_track_info() -> None:
     assert len(result.target_plan.mapped_changes) == 1
     assert result.target_plan.mapped_changes[0].target_field == "lyrics"
     assert result.target_plan.blocked_changes == ()
+
+
+def test_generic_track_planning_collects_candidates_once() -> None:
+    context = TrackEnrichmentContext("Synthetic Artist", "Synthetic Track")
+    candidates = (
+        candidate
+        for candidate in (
+            MetadataCandidate("bpm", 126.4, "catalog", 0.95, "42"),
+        )
+    )
+    result = build_track_planning_result(
+        context,
+        {},
+        candidates=candidates,
+        policy=ResolutionPolicy(
+            {"bpm": FieldRule(True, ("catalog",), 0.8)}, {"catalog": True}
+        ),
+    )
+
+    assert result.context is context
+    assert result.candidate_count == 1
+    assert result.target_plan.mapped_changes[0].target_value == 126.4
 
 
 def test_proposed_synced_lyrics_becomes_mapping_blocker() -> None:

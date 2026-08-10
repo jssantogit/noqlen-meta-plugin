@@ -52,6 +52,9 @@ where = ["."]
 include = ["beetsplug.noqlenmeta*"]
 namespaces = true
 
+[tool.setuptools.package-data]
+"beetsplug.noqlenmeta.genre_taxonomy" = ["genres.txt"]
+
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]
