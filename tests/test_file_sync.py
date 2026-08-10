@@ -119,8 +119,8 @@ def test_forged_plan_is_rejected(media_item) -> None:
 
 def test_candidate_save_failure_leaves_original(media_item, monkeypatch) -> None:
     library, item, path = media_item
-    plan = plan_file_sync(item, (planned_change("bpm", 126.0),))
     before = path.read_bytes()
+    plan = plan_file_sync(item, (planned_change("bpm", 126.0),))
     monkeypatch.setattr(MediaFile, "save", lambda self: (_ for _ in ()).throw(OSError("save")))
 
     result = apply_file_sync_plan(library, plan)
@@ -131,8 +131,8 @@ def test_candidate_save_failure_leaves_original(media_item, monkeypatch) -> None
 
 def test_post_replace_db_failure_restores_original(media_item, monkeypatch) -> None:
     library, item, path = media_item
-    plan = plan_file_sync(item, (planned_change("bpm", 126.0),))
     before = path.read_bytes()
+    plan = plan_file_sync(item, (planned_change("bpm", 126.0),))
     monkeypatch.setattr(
         file_sync_module,
         "_store_operational_mtime",
@@ -221,8 +221,8 @@ def test_committed_cleanup_failure_preserves_commit_state(media_item, monkeypatc
 
 def test_corrupt_backup_blocks_before_source_replace(media_item, monkeypatch) -> None:
     library, item, path = media_item
-    plan = plan_file_sync(item, (planned_change("bpm", 126.0),))
     before = path.read_bytes()
+    plan = plan_file_sync(item, (planned_change("bpm", 126.0),))
     original_copy = file_sync_module.copy_regular_file_without_source_atime
 
     def corrupt_backup(source: bytes, destination: bytes, **kwargs: object) -> None:
