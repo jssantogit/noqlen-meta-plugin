@@ -297,6 +297,19 @@ def test_library_adapter_omits_invalid_year(year: object) -> None:
     assert "year" not in current_values_from_library_album(album)
 
 
+def test_library_adapter_prefers_plural_styles_over_legacy_style() -> None:
+    album = Album(albumartist="Artist", album="Album", style="Legacy")
+    album["styles"] = ["Modern A", "Modern B"]
+
+    assert current_values_from_library_album(album)["styles"] == ("Modern A", "Modern B")
+
+
+def test_library_adapter_falls_back_to_legacy_style() -> None:
+    album = Album(albumartist="Artist", album="Album", style="Legacy")
+
+    assert current_values_from_library_album(album)["styles"] == ("Legacy",)
+
+
 @pytest.mark.parametrize("field", ["albumartist", "album"])
 def test_library_adapter_requires_artist_and_title(field: str) -> None:
     album = Album(albumartist="Artist", album="Album")

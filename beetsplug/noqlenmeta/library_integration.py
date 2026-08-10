@@ -73,8 +73,15 @@ def current_values_from_library_album(album: Album) -> dict[str, MetadataValue]:
     if genres:
         current_values["genres"] = genres
 
+    styles = _text_tuple(album.get("styles", None))
+    if not styles:
+        legacy_style = _optional_text(album.style)
+        if legacy_style is not None:
+            styles = (legacy_style,)
+    if styles:
+        current_values["styles"] = styles
+
     singular_fields = {
-        "styles": album.style,
         "labels": album.label,
         "catalog_numbers": album.catalognum,
         "barcodes": album.barcode,

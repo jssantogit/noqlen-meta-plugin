@@ -37,7 +37,7 @@ def mapped_change(field: str, value: object) -> LibraryTargetPlan:
     ("canonical", "target", "shape"),
     [
         ("genres", "genres", BeetsTargetShape.STRING_LIST),
-        ("styles", "style", BeetsTargetShape.SCALAR_STRING),
+        ("styles", "styles", BeetsTargetShape.STRING_LIST),
         ("labels", "label", BeetsTargetShape.SCALAR_STRING),
         ("catalog_numbers", "catalognum", BeetsTargetShape.SCALAR_STRING),
         ("barcodes", "barcode", BeetsTargetShape.SCALAR_STRING),
@@ -49,14 +49,19 @@ def test_declared_library_target_contract(
     canonical: str, target: str, shape: BeetsTargetShape
 ) -> None:
     assert LIBRARY_FIELD_TARGETS[canonical] == LibraryFieldTarget(canonical, target, shape)
-    assert target in Album._fields
+    assert target in Album._fields or target == "styles"
 
 
 @pytest.mark.parametrize(
     ("field", "value", "target", "target_value"),
     [
         ("genres", ("Rock", "Metal"), "genres", ("Rock", "Metal")),
-        ("styles", ("Progressive Metal",), "style", "Progressive Metal"),
+        (
+            "styles",
+            ("Progressive Metal", "Technical Death Metal"),
+            "styles",
+            ("Progressive Metal", "Technical Death Metal"),
+        ),
         ("labels", ("Roadrunner",), "label", "Roadrunner"),
         ("catalog_numbers", ("RR-123",), "catalognum", "RR-123"),
         ("barcodes", ("0123456789012",), "barcode", "0123456789012"),
@@ -72,14 +77,13 @@ def test_lossless_library_mapping(
     assert result.blocked_changes == ()
     assert result.mapped_changes[0].target_field == target
     assert result.mapped_changes[0].target_value == target_value
-    if field == "genres":
+    if field in {"genres", "styles"}:
         assert result.mapped_changes[0].target_value is result.source.changes[0].after
 
 
 @pytest.mark.parametrize(
     ("field", "target"),
     [
-        ("styles", "style"),
         ("labels", "label"),
         ("catalog_numbers", "catalognum"),
         ("barcodes", "barcode"),

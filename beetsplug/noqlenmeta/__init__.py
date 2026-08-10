@@ -36,6 +36,7 @@ from beetsplug.noqlenmeta.domain import (
     ReleaseEnrichmentContext,
     TrackEnrichmentContext,
 )
+from beetsplug.noqlenmeta.field_types import ALBUM_FIELD_TYPES, ITEM_FIELD_TYPES
 from beetsplug.noqlenmeta.identity import (
     AcoustIDRecordingExpectations,
     BeetsMusicBrainzIdentitySource,
@@ -180,6 +181,12 @@ class PreparedLibraryIdentityPlan:
 
 class NoqlenMetaPlugin(BeetsPlugin):
     """Entry point loaded by beets as the ``noqlenmeta`` plugin."""
+
+    item_types = dict(ITEM_FIELD_TYPES)
+
+    @property
+    def album_types(self) -> dict[str, object]:
+        return dict(ALBUM_FIELD_TYPES)
 
     def __init__(self) -> None:
         super().__init__()

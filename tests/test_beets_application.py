@@ -100,7 +100,12 @@ def test_successful_genres_application_materializes_fresh_list() -> None:
 @pytest.mark.parametrize(
     ("field", "value", "target", "expected"),
     [
-        ("styles", ("Progressive Metal",), "style", "Progressive Metal"),
+        (
+            "styles",
+            ("Progressive Metal", "Technical Death Metal"),
+            "styles",
+            ["Progressive Metal", "Technical Death Metal"],
+        ),
         ("labels", ("Roadrunner",), "label", "Roadrunner"),
         ("catalog_numbers", ("RR-123",), "catalognum", "RR-123"),
         ("barcodes", ("0123456789012",), "barcode", "0123456789012"),

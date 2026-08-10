@@ -277,6 +277,19 @@ def test_current_values_omit_empty_invalid_and_unmapped_values() -> None:
     assert "format_descriptions" not in current_values_from_album_info(info)
 
 
+def test_current_values_prefer_plural_styles_over_legacy_style() -> None:
+    info = album_info(style="Legacy")
+    info["styles"] = ["Modern A", "Modern B"]
+
+    assert current_values_from_album_info(info)["styles"] == ("Modern A", "Modern B")
+
+
+def test_current_values_fall_back_to_legacy_style() -> None:
+    assert current_values_from_album_info(album_info(style="Legacy"))["styles"] == (
+        "Legacy",
+    )
+
+
 def test_settings_only_override_known_policy_enablement() -> None:
     baseline = default_resolution_policy()
     policy = resolution_policy_from_settings(
