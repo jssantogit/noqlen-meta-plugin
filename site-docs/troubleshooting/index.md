@@ -47,6 +47,45 @@ Keep the database unchanged and inspect the preview's score, margin,
 assignment, and completeness. Repair requires one unique, strong, complete
 candidate and a fresh target. See the [identity guide](../guides/musicbrainz-identity.md).
 
+## Why Did AcoustID Block MusicBrainz Identity Repair?
+
+Keep the database unchanged and inspect the identity preview. When decisive
+AcoustID recording evidence contradicts every structurally valid MusicBrainz
+candidate, Noqlen returns `acoustid_recording_conflict` rather than choosing a
+release anyway. AcoustID only removes incompatible candidates; it does not add
+score or relax the normal identity gates. See the [`--identity` reference](../reference/commands.md#identity).
+
+## Why Did AcoustID Not Run During `--identity`?
+
+Check `noqlenmeta.acoustid.enabled`, `use_for_identity`, `lookup`, and whether a
+valid stored fingerprint exists. Existing-library identity intentionally never
+calculates a missing fingerprint, including when `compute_missing` is true.
+Use standalone `--acoustid --fingerprint-missing` when you explicitly want
+missing fingerprints calculated. See the [configuration reference](../reference/configuration.md).
+
+## Why Does AcoustID Say The Client Key Is Missing?
+
+Set `NOQLENMETA_ACOUSTID_API_KEY` in the environment that runs beets. The key
+is intentionally not a YAML setting and should not be committed to the beets
+configuration. Missing credentials make lookup unavailable rather than
+exposing or guessing a key.
+
+## Why Did `--fingerprint-missing` Not Change The Database?
+
+Add `--apply` only after reviewing the standalone preview. `--fingerprint-missing`
+permits local fingerprint calculation; it does not grant database-write
+authority. Standalone AcoustID `--apply` can change only `acoustid_id` and
+`acoustid_fingerprint`, never audio files. See the [`--acoustid` reference](../reference/commands.md#acoustid).
+
+## What Is The Difference Between Chromaprint, `fpcalc`, AcoustID, And beets `chroma`?
+
+Use `fpcalc` only when you explicitly need Noqlen to calculate a missing
+fingerprint. Chromaprint is the fingerprint algorithm/tooling family, `fpcalc`
+is its local executable, and AcoustID is the lookup service that maps a
+fingerprint to recording evidence. Native beets `chroma` remains responsible
+for importer acoustic matching and fingerprint submission. Noqlen's AcoustID
+feature operates on existing-library targets and does not replace `chroma`.
+
 ## Why Did One Matching Track Select The Complete Album?
 
 Narrow the Item query if you selected the wrong album, then preview again.
@@ -55,9 +94,10 @@ complete Album once. See [query semantics](../reference/commands.md#query-semant
 
 ## Why Was A Singleton Included?
 
-Check whether the matching Item has no Album association. Identity and
-identity-tag modes support standalone Items, including through `--all`.
-Ordinary enrichment remains Album-only. See the [command reference](../reference/commands.md).
+Check whether the matching Item has no Album association. Identity,
+standalone AcoustID, and identity-tag modes support standalone Items, including
+through `--all`. Ordinary enrichment remains Album-only. See the [command
+reference](../reference/commands.md).
 
 ## Why Is Database Identity Incomplete?
 
@@ -83,8 +123,9 @@ atomic replacement. Unsupported guarantees block before writing. See
 ## Why Does Navidrome Still Show Old Metadata?
 
 Confirm the file tags changed, then allow or request a Navidrome rescan using
-Navidrome's own administration. `nm --apply` changes only the beets database,
-and Navidrome scans can be delayed or cached. Follow the [Navidrome guide](../guides/navidrome.md).
+Navidrome's own administration. `nm --apply` and `nm --acoustid --apply` change
+only the beets database, and Navidrome scans can be delayed or cached. Follow
+the [Navidrome guide](../guides/navidrome.md).
 
 ## Why Did An Enabled Provider Contribute Nothing?
 
