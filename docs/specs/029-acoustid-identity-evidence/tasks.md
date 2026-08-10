@@ -63,9 +63,9 @@ Detailed stage history and review findings are recorded in the Stage 01-05 brief
 - [x] Synchronize current context and handoff to the merged Stage 05 baseline.
 - [x] Public command and configuration references include standalone AcoustID and identity-filter behavior.
 - [x] Public configuration examples include the frozen `acoustid` subtree.
-- [ ] Replace the empty `Unreleased` changelog entry with Block 029 user-facing changes.
-- [ ] Add concise README capability/write-boundary coverage for AcoustID.
-- [ ] Add practical AcoustID troubleshooting coverage, including credential/fingerprint/chroma boundaries.
+- [x] Replace the empty `Unreleased` changelog entry with Block 029 user-facing changes.
+- [x] Add concise README capability/write-boundary coverage for AcoustID.
+- [x] Add practical AcoustID troubleshooting coverage, including credential/fingerprint/chroma boundaries.
 - [ ] Pass CI on the documentation-only completion/release-readiness PR.
 - [ ] Obtain final documentation/release-readiness reviewer PASS.
 
