@@ -101,7 +101,7 @@ identity, or file guards.
 - Database: preview is read-only; `--apply` repairs four MBID columns.
 - Files: never read or written for tags.
 - Valid with: `--apply` or `--all`.
-- Invalid with: `--identity-tags`, `--acoustid`, or `--partial`.
+- Invalid with: `--identity-tags`, `--acoustid`, `--partial`, or `--write`.
 - Common block: candidate evidence is ambiguous, weak, incomplete, or stale.
 
 ```bash
@@ -186,6 +186,7 @@ beet nm --apply --write album:"Example Album"
 | `--identity-tags --apply` | identity tags cannot use apply |
 | `--identity-tags --partial` | identity tags cannot use partial |
 | `--identity --partial` | identity cannot use partial |
+| `--identity --write` | identity file sync requires `--identity-tags --write` instead |
 | query plus `--all` | choose query or all, not both |
 | no query and no `--all` | mode-specific query requirement |
 

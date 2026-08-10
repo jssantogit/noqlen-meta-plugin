@@ -41,7 +41,9 @@ from beetsplug.noqlenmeta.domain import (
 )
 from beetsplug.noqlenmeta.field_types import ALBUM_FIELD_TYPES, ITEM_FIELD_TYPES
 from beetsplug.noqlenmeta.file_sync import (
+    FileSyncApplicationError,
     FileSyncPlan,
+    FileSyncResult,
     apply_file_sync_plan,
     plan_file_sync,
     verify_file_sync_plan,
@@ -171,6 +173,36 @@ _RESOLUTION_SECTIONS = frozenset({"authority", "min_confidence", "preserve_exist
 
 def _identity_backend_forbidden() -> FingerprintBackend:
     raise RuntimeError("fingerprint generation is forbidden during identity audit")
+
+
+def _render_file_sync_result(result: FileSyncResult) -> None:
+    if result.state_uncertain:
+        status = "uncertain"
+    elif result.committed and result.blocker_count:
+        status = "committed-partial"
+    elif result.committed:
+        status = "committed-complete"
+    elif result.blocked_reason:
+        status = "blocked"
+    else:
+        status = "no-op"
+    reason = f"; reason={result.blocked_reason}" if result.blocked_reason else ""
+    ui.print_(
+        "Noqlen Meta / file application: "
+        f"Item {result.item_id}; status={status}; fields={len(result.applied_fields)}; "
+        f"blockers={result.blocker_count}{reason}"
+    )
+
+
+def _render_file_sync_error(plan: FileSyncPlan, error: FileSyncApplicationError) -> None:
+    status = "uncertain" if error.state_uncertain else (
+        "committed-error" if error.committed else "failed"
+    )
+    ui.print_(
+        "Noqlen Meta / file application: "
+        f"Item {plan.item_id}; status={status}; fields=0; "
+        f"blockers={len(plan.blockers)}; reason={error}"
+    )
 
 
 class IdentityImporterSettingsError(RuntimeError):
@@ -571,6 +603,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
             raise ui.UserError("noqlenmeta: --fingerprint-missing requires --acoustid")
         if identity_enabled and identity_tags_enabled:
             raise ui.UserError("noqlenmeta: --identity and --identity-tags are mutually exclusive")
+        if identity_enabled and write_enabled:
+            raise ui.UserError("noqlenmeta: --identity cannot be used with --write")
         if write_enabled and not identity_tags_enabled and not apply_enabled:
             raise ui.UserError("noqlenmeta: --write requires --apply for ordinary metadata")
         if identity_tags_enabled and apply_enabled:
@@ -703,15 +737,21 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 for _, (item, collected) in sorted(changes_by_item.items())
             ]
             for album_plan in prepared_albums:
-                render_library_target_plan(
-                    album_plan.album,
-                    album_plan.target_plan,
-                    None,
-                    position=album_plan.position,
-                    total=album_plan.total,
+                ui.print_(
+                    "Noqlen Meta / database PREVIEW: "
+                    f"Album {album_plan.album.id}; planned="
+                    f"{len(album_plan.target_plan.source.changes)}; "
+                    f"mapped={len(album_plan.target_plan.mapped_changes)}; "
+                    f"blockers={len(album_plan.target_plan.blocked_changes)}"
                 )
             for item_plan in prepared_items:
-                render_library_track_plan(item_plan.item, item_plan.target_plan)
+                ui.print_(
+                    "Noqlen Meta / database PREVIEW: "
+                    f"Item {item_plan.item.id}; planned="
+                    f"{len(item_plan.target_plan.source.changes)}; "
+                    f"mapped={len(item_plan.target_plan.mapped_changes)}; "
+                    f"blockers={len(item_plan.target_plan.blocked_changes)}"
+                )
             for file_plan in file_plans:
                 ui.print_(
                     "Noqlen Meta / file plan: "
@@ -749,40 +789,81 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 else None
             )
 
-        file_results = (
-            tuple(apply_file_sync_plan(lib, file_plan) for file_plan in file_plans)
-            if write_enabled
-            else ()
-        )
-
         for album_plan, application_result in zip(
             prepared_albums, album_results, strict=True
         ):
             if write_enabled:
-                continue
-            render_library_target_plan(
-                album_plan.album,
-                album_plan.target_plan,
-                application_result,
-                position=album_plan.position,
-                total=album_plan.total,
-            )
-        if not write_enabled:
-            for item_plan, application_result in zip(
-                prepared_items, item_results, strict=True
-            ):
+                assert application_result is not None
+                status = (
+                    "blocked"
+                    if application_result.is_blocked
+                    else "partial"
+                    if application_result.is_partial_application
+                    else "stored"
+                    if application_result.stored
+                    else "no-op"
+                )
+                ui.print_(
+                    "Noqlen Meta / database application: "
+                    f"Album {album_plan.album.id}; status={status}; "
+                    f"fields={len(application_result.applied_changes)}"
+                )
+            else:
+                render_library_target_plan(
+                    album_plan.album,
+                    album_plan.target_plan,
+                    application_result,
+                    position=album_plan.position,
+                    total=album_plan.total,
+                )
+        for item_plan, application_result in zip(
+            prepared_items, item_results, strict=True
+        ):
+            if write_enabled:
+                assert application_result is not None
+                status = (
+                    "blocked"
+                    if application_result.is_blocked
+                    else "partial"
+                    if application_result.is_partial_application
+                    else "stored"
+                    if application_result.stored
+                    else "no-op"
+                )
+                ui.print_(
+                    "Noqlen Meta / database application: "
+                    f"Item {item_plan.item.id}; status={status}; "
+                    f"fields={len(application_result.applied_changes)}"
+                )
+            else:
                 render_library_track_plan(
                     item_plan.item,
                     item_plan.target_plan,
                     application_result,
                 )
-        for result in file_results:
-            status = "committed" if result.committed else "blocked"
-            ui.print_(
-                "Noqlen Meta / file application: "
-                f"Item {result.item_id}; status={status}; "
-                f"fields={len(result.applied_fields)}"
-            )
+
+        if write_enabled:
+            earlier_changes_committed = False
+            for file_plan in file_plans:
+                try:
+                    result = apply_file_sync_plan(lib, file_plan)
+                except FileSyncApplicationError as error:
+                    _render_file_sync_error(file_plan, error)
+                    if earlier_changes_committed:
+                        raise FileSyncApplicationError(
+                            "ordinary file synchronization stopped after earlier file "
+                            f"changes were committed: {error}",
+                            committed=True,
+                            state_uncertain=error.state_uncertain,
+                            recovery_artifact_retained=(
+                                error.recovery_artifact_retained
+                            ),
+                        ) from error
+                    raise
+                _render_file_sync_result(result)
+                earlier_changes_committed = (
+                    earlier_changes_committed or result.committed
+                )
 
     def _command_identity_tags(
         self, lib: Library, opts: object, args: list[str]
