@@ -1,7 +1,8 @@
-from beetsplug.noqlenmeta.domain import MetadataCandidate
+from beetsplug.noqlenmeta.domain import MetadataCandidate, SemanticEvidenceBundle
 from beetsplug.noqlenmeta.genre_evidence import GenreEvidenceKind
 from beetsplug.noqlenmeta.genre_pipeline import (
     genre_evidence_from_release_candidates,
+    genre_evidence_from_semantic_bundles,
     resolve_release_genre_decision,
 )
 from beetsplug.noqlenmeta.genre_resolution import GenreSettings
@@ -157,3 +158,23 @@ def test_disabled_genres_field_produces_no_specialized_decision() -> None:
         )
         is None
     )
+
+
+def test_semantic_bundles_preserve_track_release_and_artist_genre_scopes() -> None:
+    from beetsplug.noqlenmeta.genre_evidence import GenreEvidence
+
+    rows = tuple(
+        GenreEvidence(
+            "K-pop",
+            "musicbrainz",
+            scope,
+            GenreEvidenceKind.GENRE,
+            0.99,
+            scope.value,
+        )
+        for scope in ProviderScope
+    )
+    result = genre_evidence_from_semantic_bundles(
+        tuple(SemanticEvidenceBundle(genres=(row,)) for row in rows)
+    )
+    assert result == rows
