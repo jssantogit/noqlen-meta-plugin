@@ -189,6 +189,26 @@ def _current_track_values(getter: Callable[[str], object]) -> dict[str, Metadata
         text = _optional_text(value)
         if text is not None:
             values[field] = text
+
+    for field in (
+        "moods",
+        "lyrics_languages",
+        "artist_countries",
+        "artist_areas",
+        "artist_languages",
+    ):
+        multi_value = _text_tuple(getter(field))
+        if multi_value:
+            values[field] = multi_value
+
+    bpm = getter("bpm")
+    if (
+        not isinstance(bpm, bool)
+        and isinstance(bpm, (int, float))
+        and isfinite(bpm)
+        and bpm > 0
+    ):
+        values["bpm"] = float(bpm)
     return values
 
 
@@ -201,6 +221,12 @@ def _optional_text(value: object) -> str | None:
         return None
     value = value.strip()
     return value or None
+
+
+def _text_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(text for item in value if (text := _optional_text(item)) is not None)
 
 
 def _positive_duration(value: object) -> float | None:

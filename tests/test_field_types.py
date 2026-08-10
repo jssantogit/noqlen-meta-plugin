@@ -2,6 +2,7 @@ import pytest
 from beets import plugins
 from beets.dbcore import types
 from beets.library import Album, Library
+from beets.util import cached_classproperty
 
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
 
@@ -10,6 +11,7 @@ from beetsplug.noqlenmeta import NoqlenMetaPlugin
 def loaded_plugin(monkeypatch: pytest.MonkeyPatch) -> NoqlenMetaPlugin:
     plugin = NoqlenMetaPlugin()
     monkeypatch.setattr(plugins, "_instances", [plugin])
+    monkeypatch.delitem(cached_classproperty.cache, (Album, "_types"), raising=False)
     return plugin
 
 
