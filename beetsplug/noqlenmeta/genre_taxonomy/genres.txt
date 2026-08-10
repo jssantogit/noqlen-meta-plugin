@@ -78,7 +78,7 @@ Andean New Age
 Anglican Chant
 Animal Sounds
 Anti-Folk
-Aor
+AOR
 Apala
 Appalachian Folk
 Aquacrunk
@@ -99,7 +99,7 @@ Art Song
 Artcore
 Ashkenazi Cantorial Music
 Asian Rock
-Asmr
+ASMR
 Assiko
 Atmospheric Black Metal
 Atmospheric Drum and Bass
@@ -285,7 +285,7 @@ Bytebeat
 Byzantine Chant
 Bélé
 Bérite Club
-C-Pop
+C-pop
 C86
 Ca Trù
 Cabaret
@@ -533,7 +533,7 @@ Dark Plugg
 Dark Psytrance
 Dark Wave
 Darkcore
-Darkcore Edm
+Darkcore EDM
 Darkstep
 Darksynth
 Data Sonification
@@ -631,15 +631,15 @@ Dungeon Sound
 Dungeon Synth
 Duranguense
 Dutch House
-Eai
+EAI
 Early Hardstyle
 East Coast Hip Hop
 Eastern-Style Polka
 Easy Listening
 Easycore
-Ebm
+EBM
 Eccojams
-Edm
+EDM
 Electric Blues
 Electric Texas Blues
 Electro
@@ -840,7 +840,7 @@ Glam Punk
 Glam Rock
 Glitch
 Glitch Hop
-Glitch Hop Edm
+Glitch Hop EDM
 Glitch Pop
 Gnawa
 Go-Go
@@ -875,7 +875,7 @@ Guaguancó
 Guajira
 Guangdong Yinyue
 Guaracha
-Guaracha Edm
+Guaracha EDM
 Guaracha Santiagueña
 Guarania
 Guayla
@@ -907,7 +907,7 @@ Hard Beat
 Hard Bop
 Hard Drum
 Hard House
-Hard Nrg
+Hard NRG
 Hard Renaissance
 Hard Rock
 Hard Techno
@@ -935,7 +935,7 @@ Heavy Psych
 Heikyoku
 Henan Opera
 Hexd
-Hi-Nrg
+Hi-NRG
 Hi-Tech
 Hi-Tech Full-On
 Highlife
@@ -972,7 +972,7 @@ Hyphy
 Hypnagogic Pop
 Hát Tuồng
 Iavnana
-Idm
+IDM
 Idol Kayō
 Illbient
 Impressionism
@@ -1013,7 +1013,7 @@ Izlan
 Izvorna Bosanska Muzika
 J-Core
 J-Euro
-J-Pop
+J-pop
 J-Rock
 Jackin House
 Jaipongan
@@ -1428,7 +1428,7 @@ Nuevo Cancionero
 Nuevo Flamenco
 Nuevo Tango
 Nustyle
-Nwobhm
+NWOBHM
 Nyū Myūjikku
 Néo-Trad
 Nóta
@@ -1614,7 +1614,7 @@ Purple Sound
 Puxa
 Pásztordal
 Pìobaireachd
-Q-Pop
+Q-pop
 Qaraami
 Qasidah Modern
 Qawwali
@@ -1922,7 +1922,7 @@ Synthwave
 Séga
 Séga Tambour
 Sōkyoku
-T-Pop
+T-pop
 Taarab
 Tajaraste
 Takamba
@@ -2018,7 +2018,7 @@ Trance Metal
 Trancestep
 Trap
 Trap Dancehall
-Trap Edm
+Trap EDM
 Trap Latino
 Trap Metal
 Trap Shaabi
@@ -2057,13 +2057,13 @@ Twoubadou
 Tân Cổ Giao Duyên
 Uaajeerneq
 Udigrudi
-Uk Drill
-Uk Funky
-Uk Garage
-Uk Hardcore
-Uk Jackin
-Uk Street Soul
-Uk82
+UK Drill
+UK Funky
+UK Garage
+UK Hardcore
+UK Jackin
+UK Street Soul
+UK82
 Unakesa
 Underground Hip Hop
 Unyago
@@ -2073,11 +2073,11 @@ Urban Contemporary Gospel
 Urban Cowboy
 Urtiin Duu
 Urumi Melam
-Us Power Metal
+US Power Metal
 Utopian Virtual
 Uyghur Muqam
 Uzun Hava
-V-Pop
+V-pop
 Vaigat
 Valaam Chant
 Vallenato

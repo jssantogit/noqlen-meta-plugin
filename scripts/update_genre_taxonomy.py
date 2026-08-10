@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import unicodedata
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -12,13 +13,46 @@ USER_AGENT = "NoqlenMeta/1.0.0 (https://github.com/jssantogit/noqlen-meta-plugin
 TIMEOUT_SECONDS = 30.0
 MAX_RESPONSE_BYTES = 2_000_000
 TARGET = Path(__file__).parents[1] / "beetsplug/noqlenmeta/genre_taxonomy/genres.txt"
+_WHITESPACE = re.compile(r"\s+")
+_TOKEN_CASING = {
+    "aor": "AOR",
+    "asmr": "ASMR",
+    "eai": "EAI",
+    "ebm": "EBM",
+    "edm": "EDM",
+    "idm": "IDM",
+    "nrg": "NRG",
+    "nwobhm": "NWOBHM",
+    "r&b": "R&B",
+    "uk": "UK",
+    "uk82": "UK82",
+    "us": "US",
+}
+_LOWERCASE_WORDS = frozenset({"and", "of", "the"})
+
+
+def _display_token(token: str) -> str:
+    folded = token.casefold()
+    if folded in _TOKEN_CASING:
+        return _TOKEN_CASING[folded]
+
+    segments = token.split("-")
+    if len(segments) == 2 and len(segments[0]) == 1 and segments[1].casefold() == "pop":
+        return f"{segments[0].upper()}-pop"
+    return "-".join(
+        _TOKEN_CASING.get(segment.casefold(), segment.title()) for segment in segments
+    )
 
 
 def _canonical_name(value: str) -> str:
-    name = unicodedata.normalize("NFKC", value).strip().title()
-    for word in ("And", "Of", "The"):
-        name = name.replace(f" {word} ", f" {word.lower()} ")
-    return name.replace("K-Pop", "K-pop")
+    normalized = _WHITESPACE.sub(" ", unicodedata.normalize("NFKC", value).strip())
+    words = normalized.split(" ") if normalized else []
+    return " ".join(
+        word.casefold()
+        if index and word.casefold() in _LOWERCASE_WORDS
+        else _display_token(word)
+        for index, word in enumerate(words)
+    )
 
 
 def _normalized_snapshot(body: bytes) -> bytes:
