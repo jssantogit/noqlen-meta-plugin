@@ -10,7 +10,7 @@ from math import isfinite
 from types import MappingProxyType
 
 from beetsplug.noqlenmeta.domain import MetadataCandidate, MetadataValue
-from beetsplug.noqlenmeta.providers.specs import BUILTIN_PROVIDER_SPECS, DISCOGS_SPEC
+from beetsplug.noqlenmeta.providers.specs import BUILTIN_PROVIDER_NAMES, DISCOGS_SPEC
 
 
 def _name(value: object, label: str) -> str:
@@ -165,7 +165,7 @@ def default_resolution_policy() -> ResolutionPolicy:
             )
             for field, authority in _DEFAULT_AUTHORITY.items()
         },
-        providers={name: False for name in BUILTIN_PROVIDER_SPECS},
+        providers={name: False for name in BUILTIN_PROVIDER_NAMES},
     )
 
 

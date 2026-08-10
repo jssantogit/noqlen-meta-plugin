@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
 from beetsplug.noqlenmeta.domain import (
+    ArtistEnrichmentContext,
     MetadataCandidate,
     ReleaseEnrichmentContext,
     TrackEnrichmentContext,
@@ -45,4 +46,18 @@ class TrackMetadataProvider(Protocol):
         self, context: TrackEnrichmentContext
     ) -> Sequence[MetadataCandidate]:
         """Return normalized field candidates for an identified track."""
+        ...
+
+
+@runtime_checkable
+class ArtistMetadataProvider(Protocol):
+    """Synchronous contract for a normalized artist metadata provider."""
+
+    name: str
+    supported_fields: frozenset[str]
+
+    def get_candidates(
+        self, context: ArtistEnrichmentContext
+    ) -> Sequence[MetadataCandidate]:
+        """Return normalized field candidates for an identified artist."""
         ...

@@ -114,7 +114,7 @@ from beetsplug.noqlenmeta.orchestration import (
 )
 from beetsplug.noqlenmeta.providers import ProviderError
 from beetsplug.noqlenmeta.providers.specs import (
-    BUILTIN_PROVIDER_SPECS,
+    BUILTIN_PROVIDER_NAMES,
     BUILTIN_RELEASE_PROVIDER_SPECS,
     BUILTIN_TRACK_PROVIDER_SPECS,
     DISCOGS_SPEC,
@@ -903,7 +903,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         }
         provider_settings = {
             provider: self.config["providers"][provider]["enabled"].get(bool)
-            for provider in BUILTIN_PROVIDER_SPECS
+            for provider in BUILTIN_PROVIDER_NAMES
         }
         try:
             resolution_config = self.config["resolution"]

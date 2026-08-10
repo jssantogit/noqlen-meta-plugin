@@ -98,6 +98,37 @@ class ReleaseEnrichmentContext:
 
 
 @dataclass(frozen=True, slots=True)
+class ArtistEnrichmentContext:
+    """Identity and credit context for one artist."""
+
+    name: str
+    sort_name: str | None = None
+    credit_name: str | None = None
+    credit_index: int | None = None
+    external_ids: tuple[ExternalIdentifier, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "name", _text(self.name, "artist name"))
+        object.__setattr__(
+            self, "sort_name", _optional_text(self.sort_name, "artist sort name")
+        )
+        object.__setattr__(
+            self, "credit_name", _optional_text(self.credit_name, "artist credit name")
+        )
+        if self.credit_index is not None and (
+            isinstance(self.credit_index, bool)
+            or not isinstance(self.credit_index, int)
+            or self.credit_index <= 0
+        ):
+            raise ValueError("credit index must be a positive integer")
+
+        external_ids = tuple(self.external_ids)
+        if not all(isinstance(identifier, ExternalIdentifier) for identifier in external_ids):
+            raise TypeError("external_ids must contain ExternalIdentifier values")
+        object.__setattr__(self, "external_ids", external_ids)
+
+
+@dataclass(frozen=True, slots=True)
 class TrackEnrichmentContext:
     """Identity and provider input for a track already identified by beets."""
 
