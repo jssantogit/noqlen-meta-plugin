@@ -3,8 +3,9 @@
 Noqlen Meta is a beets plugin for multi-provider metadata enrichment and
 MusicBrainz identity tools. beets remains the matcher and library manager:
 Noqlen enriches releases and tracks that beets has already selected, and it
-offers separate workflows to audit MusicBrainz identity and synchronize four
-confirmed MusicBrainz IDs to audio-file tags.
+offers separate workflows to audit MusicBrainz identity, use AcoustID as
+recording-level identity evidence, and synchronize four confirmed MusicBrainz
+IDs to audio-file tags.
 
 Noqlen previews by default. Database changes require `--apply`; specialized
 identity-tag file replacement requires `--identity-tags --write`. There is no
@@ -16,9 +17,13 @@ identity-tag file replacement requires `--identity-tags --write`. There is no
 - Add selected-track plain lyrics from LRCLIB during import.
 - Preview or apply ordinary enrichment to albums already in a beets library.
 - Audit and repair release, release-group, recording, and release-track MBIDs.
-- Synchronize those four coherent database MBIDs to supported audio files.
-- Keep provider lookup, database application, and file writing separately
-  authorized.
+- Use decisive AcoustID recording evidence to filter incompatible MusicBrainz
+  identity candidates without changing structural scores or thresholds.
+- Preview or apply standalone existing-library AcoustID evidence, including
+  explicit calculation of missing fingerprints when requested.
+- Synchronize four coherent database MBIDs to supported audio files.
+- Keep provider lookup, database application, fingerprint calculation, and file
+  writing separately authorized.
 
 Noqlen does not rematch ordinary enrichment targets. It does not call
 Navidrome APIs; Navidrome is a possible consumer of resulting file tags.
@@ -51,6 +56,10 @@ Discogs search needs the optional client:
 ```bash
 pip install "beets-noqlenmeta[discogs]"
 ```
+
+No extra Python dependency is required for AcoustID lookup or stored-fingerprint
+reuse. Explicit missing-fingerprint calculation uses an external `fpcalc`
+executable (Chromaprint), configurable through `noqlenmeta.acoustid.fpcalc`.
 
 Enable the plugin in the beets `config.yaml`:
 
@@ -119,14 +128,54 @@ review fields unchanged. Partial is not force: it never accepts ambiguity,
 lowers confidence, bypasses stale-state checks, or applies identity/file work
 partially.
 
+## AcoustID Evidence
+
+Standalone AcoustID mode operates on complete existing-library Albums and
+standalone Items. Preview is the default:
+
+```bash
+beet nm --acoustid title:"Example Track"
+```
+
+A valid stored fingerprint can be reused. Missing fingerprints are calculated
+only with explicit standalone authority:
+
+```bash
+beet nm --acoustid --fingerprint-missing title:"Example Track"
+```
+
+`--apply` remains a separate database permission and can change only
+`acoustid_id` and `acoustid_fingerprint`. It never writes audio files.
+
+When `acoustid.enabled` and `acoustid.use_for_identity` are enabled, the
+existing-library `--identity` command may use decisive AcoustID recording
+evidence to remove incompatible MusicBrainz candidates. AcoustID does not add
+score, lower thresholds, or directly supply release/release-group/release-track
+identity. `--identity` never calculates a missing fingerprint, even when
+standalone calculation is configured.
+
+The AcoustID API key is environment-only:
+
+```text
+NOQLENMETA_ACOUSTID_API_KEY
+```
+
+Chromaprint is the fingerprint algorithm/tooling family; `fpcalc` is the local
+Chromaprint executable used for explicit calculation; AcoustID is the recording
+lookup service. Native beets `chroma` remains responsible for importer acoustic
+matching and fingerprint submission. Noqlen's AcoustID feature is an
+existing-library evidence workflow and does not replace `chroma`.
+
 ## Commands And Write Boundaries
 
 | Command | Purpose | Network | Database | Audio files |
 | --- | --- | --- | --- | --- |
 | `beet nm QUERY` | Ordinary preview | Enabled providers | No | No |
 | `beet nm --apply QUERY` | Ordinary application | Enabled providers | Ordinary album metadata | No |
-| `beet nm --identity QUERY` | Identity audit | MusicBrainz | No | No |
-| `beet nm --identity --apply QUERY` | Identity repair | MusicBrainz | Four MBID columns | No |
+| `beet nm --identity QUERY` | Identity audit | MusicBrainz + optional AcoustID lookup | No | No |
+| `beet nm --identity --apply QUERY` | Identity repair | MusicBrainz + optional AcoustID lookup | Four MBID columns | No |
+| `beet nm --acoustid QUERY` | AcoustID preview | Configured AcoustID lookup | No | No |
+| `beet nm --acoustid --apply QUERY` | AcoustID database application | Configured AcoustID lookup | Two AcoustID columns | No |
 | `beet nm --identity-tags QUERY` | Identity-tag preview | No | No | No |
 | `beet nm --identity-tags --write QUERY` | Four-MBID synchronization | No | Operational `mtime` only | Four MBID tags |
 | `beet write QUERY` | Native beets tag sync | No | Operational state | Generic beets fields |
@@ -139,9 +188,10 @@ beets](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/site-docs/refe
 
 ## Providers
 
-All providers are disabled by default.
+All ordinary metadata providers are disabled by default. AcoustID is a separate
+recording-evidence subsystem, not an ordinary provider.
 
-| Provider | Current scope | Current contribution |
+| Provider/source | Current scope | Current contribution |
 | --- | --- | --- |
 | Discogs | Releases | Genres, styles, labels, catalog numbers, barcodes, country, year, media, format descriptions |
 | MusicBrainz enrichment | Releases with an exact release MBID | Labels, catalog numbers, barcode, country, year, media |
@@ -149,6 +199,7 @@ All providers are disabled by default.
 | iTunes | Releases | Album genre and release year |
 | LRCLIB | Importer-selected tracks | Plain lyrics; synchronized lyrics preview as blocked |
 | MusicBrainz identity source | Separate identity modes | Four MusicBrainz identity fields |
+| AcoustID evidence | Existing-library identity/standalone mode | Recording compatibility evidence and two AcoustID database fields |
 
 Discogs direct-ID lookup can work without credentials; search requires the
 optional client and generally a token. Set the token in the
@@ -177,7 +228,7 @@ Identity-tag round trips are tested with:
 The identity-tag filesystem workflow requires proven no-atime, no-follow, and
 same-directory atomic-replacement guarantees. Unsupported operating systems,
 filesystems, or files block before replacement. This narrower limitation does
-not imply that ordinary database enrichment is Linux-only.
+not imply that ordinary or AcoustID database workflows are Linux-only.
 
 ## beets And Navidrome
 
@@ -185,17 +236,21 @@ The beets database is information managed privately by beets. Audio-file tags
 are metadata stored inside media files. Navidrome normally scans those files;
 it does not normally read the private beets database.
 
-Therefore `beet nm --apply` alone does not update what Navidrome sees. Use
-native `beet write` for generic beets database-to-file synchronization, or use
-`beet nm --identity-tags --write` only for the specialized four-MBID workflow.
-Then let Navidrome rescan according to its own configuration.
+Therefore `beet nm --apply` or `beet nm --acoustid --apply` alone does not
+update what Navidrome sees. Use native `beet write` for generic beets
+database-to-file synchronization, or use `beet nm --identity-tags --write` only
+for the specialized four-MBID workflow. Then let Navidrome rescan according to
+its own configuration.
 
 ## Compatibility
 
 - Python 3.10 through 3.14 (`>=3.10,<3.15`) are supported and covered by the
   release CI matrix. Version 1.0.0 does not claim Python 3.15 support.
 - beets 2.12 or later within the 2.x series is required.
-- Ordinary enrichment and database identity operations are Python/beets based.
+- Ordinary enrichment, AcoustID, and database identity operations are
+  Python/beets based.
+- Explicit AcoustID fingerprint calculation additionally requires a compatible
+  `fpcalc` executable; stored-fingerprint reuse and lookup do not.
 - Identity-tag replacement is supported only where its filesystem guarantees
   can be proven at runtime.
 - Navidrome compatibility describes a file-tag workflow, not a direct API
