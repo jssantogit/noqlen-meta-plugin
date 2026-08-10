@@ -297,14 +297,62 @@ def test_every_standalone_target_is_planned_before_one_application_call(
             },
         )()
 
+    def preview(result):
+        events.append(f"preview:{result}")
+        return result
+
     monkeypatch.setattr(plugin_module, "plan_acoustid_target", plan)
     monkeypatch.setattr(plugin_module, "apply_acoustid_results", apply)
-    monkeypatch.setattr(plugin_module, "render_acoustid_preview", lambda result: result)
+    monkeypatch.setattr(plugin_module, "render_acoustid_preview", preview)
     monkeypatch.setattr(plugin_module.ui, "print_", lambda value: None)
 
     invoke(plugin, library, ["--acoustid", "--apply", "--all"])
 
-    assert events == ["plan:a", "plan:b", "apply:result:a,result:b"]
+    assert events == [
+        "plan:a",
+        "plan:b",
+        "preview:result:a",
+        "preview:result:b",
+        "apply:result:a,result:b",
+    ]
+
+
+def test_standalone_previews_are_rendered_before_application_error(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    plugin = NoqlenMetaPlugin()
+    configure(plugin, lookup=False)
+    events = []
+    monkeypatch.setattr(plugin_module, "select_acoustid_targets", lambda *args: ("a", "b"))
+    monkeypatch.setattr(plugin_module, "AcoustIDLookupService", lambda settings: object())
+
+    def plan(target, *args):
+        events.append(f"plan:{target}")
+        return f"result:{target}"
+
+    def preview(result):
+        events.append(f"preview:{result}")
+        return result
+
+    def apply(lib, results):
+        events.append(f"apply:{','.join(results)}")
+        raise RuntimeError("application blocked")
+
+    monkeypatch.setattr(plugin_module, "plan_acoustid_target", plan)
+    monkeypatch.setattr(plugin_module, "render_acoustid_preview", preview)
+    monkeypatch.setattr(plugin_module, "apply_acoustid_results", apply)
+    monkeypatch.setattr(plugin_module.ui, "print_", lambda value: None)
+
+    with pytest.raises(RuntimeError, match="application blocked"):
+        invoke(plugin, library, ["--acoustid", "--apply", "--all"])
+
+    assert events == [
+        "plan:a",
+        "plan:b",
+        "preview:result:a",
+        "preview:result:b",
+        "apply:result:a,result:b",
+    ]
 
 
 def test_identity_decisive_lookup_filters_runner_up_without_acoustid_writes(

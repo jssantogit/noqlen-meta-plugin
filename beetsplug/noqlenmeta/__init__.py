@@ -885,9 +885,9 @@ class NoqlenMetaPlugin(BeetsPlugin):
             )
             for target in targets
         )
-        application_result = apply_acoustid_results(lib, results) if apply_enabled else None
         for result in results:
             ui.print_(render_acoustid_preview(result))
+        application_result = apply_acoustid_results(lib, results) if apply_enabled else None
         if application_result is not None:
             ui.print_(
                 "AcoustID application: "
