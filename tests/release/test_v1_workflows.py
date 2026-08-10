@@ -6,10 +6,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from beets import config, ui
+from beets import config, plugins, ui
 from beets.autotag.hooks import AlbumInfo
 from beets.importer.actions import Action
-from beets.library import Item, Library
+from beets.library import Album, Item, Library
+from beets.util import cached_classproperty
 from mediafile import MediaFile
 
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
@@ -108,6 +109,8 @@ def test_existing_library_preview_strict_and_partial_are_database_only(
     library = Library(str(tmp_path / "library.db"), set_music_dir=False)
     album = _album(library, media_path)
     plugin = _configured_plugin(importer_apply=True)
+    monkeypatch.setattr(plugins, "_instances", [plugin])
+    monkeypatch.delitem(cached_classproperty.cache, (Album, "_types"), raising=False)
     candidates = (
         MetadataCandidate("genres", ("Ambient",), "discogs", 0.95, "1"),
         MetadataCandidate("year", 2026, "discogs", 0.95, "1"),
@@ -128,10 +131,10 @@ def test_existing_library_preview_strict_and_partial_are_database_only(
     )
     monkeypatch.setattr(plugin, "_discogs_candidates", lambda *args: partial_candidates)
     _invoke(plugin, library, ["--apply", "album:Release"])
-    assert album.get_fresh_from_db().style == ""
+    assert album.get_fresh_from_db().get("styles", None) is None
     _invoke(plugin, library, ["--apply", "--partial", "album:Release"])
     fresh = album.get_fresh_from_db()
-    assert fresh.style == "Downtempo"
+    assert fresh["styles"] == ["Downtempo"]
     assert fresh.year == 2020
     assert _digest(media_path) == before_file
 

@@ -37,6 +37,12 @@ from beetsplug.noqlenmeta.domain import (
     TrackEnrichmentContext,
 )
 from beetsplug.noqlenmeta.field_types import ALBUM_FIELD_TYPES, ITEM_FIELD_TYPES
+from beetsplug.noqlenmeta.file_sync import (
+    FileSyncPlan,
+    apply_file_sync_plan,
+    plan_file_sync,
+    verify_file_sync_plan,
+)
 from beetsplug.noqlenmeta.identity import (
     AcoustIDRecordingExpectations,
     BeetsMusicBrainzIdentitySource,
@@ -539,8 +545,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
             raise ui.UserError("noqlenmeta: --fingerprint-missing requires --acoustid")
         if identity_enabled and identity_tags_enabled:
             raise ui.UserError("noqlenmeta: --identity and --identity-tags are mutually exclusive")
-        if write_enabled and not identity_tags_enabled:
-            raise ui.UserError("noqlenmeta: --write requires --identity-tags")
+        if write_enabled and not identity_tags_enabled and not apply_enabled:
+            raise ui.UserError("noqlenmeta: --write requires --apply for ordinary metadata")
         if identity_tags_enabled and apply_enabled:
             raise ui.UserError("noqlenmeta: --identity-tags cannot be used with --apply")
         if identity_tags_enabled and partial_enabled:
@@ -602,20 +608,71 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 )
             )
 
+        file_plans: list[FileSyncPlan] = []
+        if write_enabled:
+            for album_plan in prepared:
+                target_plan = album_plan.target_plan
+                changes = (
+                    tuple(change.source for change in target_plan.mapped_changes)
+                    if application_mode is LibraryApplicationMode.PARTIAL
+                    or not target_plan.requires_review
+                    else ()
+                )
+                for item in album_plan.album.items():
+                    file_plans.append(plan_file_sync(item, changes))
+            for album_plan in prepared:
+                render_library_target_plan(
+                    album_plan.album,
+                    album_plan.target_plan,
+                    None,
+                    position=album_plan.position,
+                    total=album_plan.total,
+                )
+            for file_plan in file_plans:
+                ui.print_(
+                    "Noqlen Meta / file plan: "
+                    f"Item {file_plan.item_id}; changes={len(file_plan.changes)}; "
+                    f"blockers={len(file_plan.blockers)}"
+                )
+            for file_plan in file_plans:
+                verify_file_sync_plan(lib, file_plan)
+
+        application_results: list[LibraryApplicationResult | None] = []
         for album_plan in prepared:
-            application_result: LibraryApplicationResult | None = None
-            if apply_enabled:
-                application_result = apply_library_target_plan(
+            application_results.append(
+                apply_library_target_plan(
                     album_plan.album,
                     album_plan.target_plan,
                     mode=application_mode,
                 )
+                if apply_enabled
+                else None
+            )
+
+        file_results = (
+            tuple(apply_file_sync_plan(lib, file_plan) for file_plan in file_plans)
+            if write_enabled
+            else ()
+        )
+
+        for album_plan, application_result in zip(
+            prepared, application_results, strict=True
+        ):
+            if write_enabled:
+                continue
             render_library_target_plan(
                 album_plan.album,
                 album_plan.target_plan,
                 application_result,
                 position=album_plan.position,
                 total=album_plan.total,
+            )
+        for result in file_results:
+            status = "committed" if result.committed else "blocked"
+            ui.print_(
+                "Noqlen Meta / file application: "
+                f"Item {result.item_id}; status={status}; "
+                f"fields={len(result.applied_fields)}"
             )
 
     def _command_identity_tags(
