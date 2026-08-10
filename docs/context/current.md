@@ -1,77 +1,78 @@
 # Current Context
 
+This file is an optional working snapshot, not a mandatory workflow gate. Use
+repository state, relevant code/tests, and durable docs as the source of truth;
+refresh this file only when an ongoing body of work genuinely benefits from it.
+
 ## Project
 
-Noqlen Meta — multi-provider metadata enrichment and MusicBrainz identity tools for beets.
+Noqlen Meta — multi-provider metadata enrichment and MusicBrainz identity tools
+for beets.
 
-Profile: `core-lib`.
+Released baseline: `1.0.0`.
 
-## Active State
+Current `main` baseline before this workflow retrofit:
 
-Block 029 — AcoustID recording-level identity evidence — has completed product implementation.
+```text
+68f32073debd87090a44212b0d203c54954e4e19
+```
 
-Current `main` baseline:
+## Completed work
+
+Block 029 — AcoustID recording-level identity evidence — is closed.
+
+Product implementation was squash-merged in PR #19 as:
 
 ```text
 c5eabf80bbbe0f661aaa8867a78b3ebb83f0b3e3
 ```
 
-Version 1.0.0 remains the released baseline. Block 029 is intended for the 1.1.0 release family; no version bump, tag, or publication has been made.
+The final documentation/release-readiness closure was squash-merged in PR #20
+as `68f32073...` after CI run 78 passed all repository jobs, including strict
+documentation build.
 
-## Normative References
+The historical Block 029 contracts, ADR 0025, stage briefs, and completion
+records remain useful references for that feature. They do not define a
+mandatory stage structure for future work.
 
-1. `docs/specs/029-acoustid-identity-evidence/contracts.md`
-2. `docs/adr/0025-acoustid-recording-evidence.md`
-3. `docs/specs/029-acoustid-identity-evidence/stage-05-completion.md`
+## Next product direction
 
-## Delivered Block 029
+The next intended initiative is a major Noqlen Meta v2 enrichment expansion,
+rather than publishing the completed AcoustID work as a standalone 1.1.0
+feature release.
 
-The integrated AcoustID feature now provides:
+Candidate v2 capabilities currently include:
 
-- complete existing-library Album/singleton selection and exact refresh;
-- valid stored fingerprint reuse and explicitly authorized bounded `fpcalc` generation in standalone mode;
-- generated-source stability snapshots;
-- bounded HTTPS `recordingids` lookup with strict parsing, privacy, pacing, caching, and no retry;
-- decisive/ambiguous/no-match/unavailable recording evidence;
-- exact standalone planning, path-free/fingerprint-free preview, and verified database-only application of `acoustid_id` / `acoustid_fingerprint`;
-- decisive-recording compatibility filtering over already-evaluated MusicBrainz release candidates without score or assignment changes;
-- optional AcoustID evidence in existing-library `--identity`, with missing-fingerprint generation explicitly forbidden;
-- standalone `--acoustid` / `--fingerprint-missing` command handling;
-- the frozen public `acoustid` configuration subtree.
+- cover art;
+- moods;
+- BPM;
+- broader/better style representation;
+- track/song language;
+- artist country/origin.
 
-## Safety Boundaries
+These are product goals, not frozen architecture. Provider authority, storage
+representation, Album/Item/artist ownership, local analysis boundaries, and
+write semantics still need deliberate design before implementation where those
+decisions are hard to reverse.
 
-AcoustID remains recording-level evidence rather than a generic provider. It does not:
+## Workflow
 
-- add structural score or relax MusicBrainz gates;
-- select a release occurrence by itself;
-- write MusicBrainz fields directly;
-- write audio files;
-- submit fingerprints;
-- generate missing fingerprints during `--identity`;
-- replace native beets `chroma` importer behavior.
-
-## Final Validation
-
-Stage 05 PR #19 was reviewed at head:
+Noqlen Meta now follows Noqlen Playbook V2.2:
 
 ```text
-9b76ff87b14440ddc576a0f0d84277ee8c8d5d23
+Inspect -> Implement -> Verify -> Review
 ```
 
-CI run 74 passed Python 3.10-3.14, beets 2.12.0 and latest `<3`, docs, package validation, full offline tests, lint, and hygiene before squash merge to `c5eabf80...`.
+Future work should not create stages, completion records, specs, handoffs,
+Tool Mode declarations, context levels, or formal audits merely because a task
+is large or long-running.
 
-## Current Work
+Use a durable change brief only when planning materially changes what is built,
+where it belongs, or implementation order. Use an ADR only for architectural
+decisions that are meaningfully hard to reverse. Split implementation when it
+improves feedback, independent execution, isolation, or reviewability — not as
+ceremony.
 
-Only Block 029 completion/release readiness remains:
-
-- completion record and context synchronization;
-- release notes/public-doc final alignment;
-- documentation-only completion PR CI;
-- later decision on 1.1.0 version bump, tag, and publication.
-
-There is no Stage 06 and no remaining Block 029 product implementation stage.
-
-## Tool Boundary
-
-Repository changes made from the project chat remain documentation-only. Any future product implementation belongs to a new explicitly defined block rather than extending Block 029 implicitly.
+`docs/context/handoff.md` is updated only when work is interrupted, transferred,
+externally blocked, or otherwise cannot be resumed safely from repository state
+alone.
