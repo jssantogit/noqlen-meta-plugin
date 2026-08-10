@@ -17,6 +17,7 @@ def test_default_config_is_fresh_and_complete() -> None:
     first["fields"]["genres"] = False
 
     assert second["fields"]["genres"] is True
+    assert second["genres"] == {"num_genres": 1, "promote_styles": True}
     assert second["providers"]["discogs"]["user_token"] == ""
     assert second["fields"]["moods"] is True
     assert "mood" not in second["fields"]

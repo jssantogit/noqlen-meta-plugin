@@ -123,6 +123,36 @@ fields:
 Field settings do not control identity importer, identity library, or
 identity-tag commands, whose four fields are fixed.
 
+## Genre Classification
+
+`noqlenmeta.fields.genres` remains the enable/disable switch for the field.
+The separate settings below tune classification only; they do not enable a
+provider or grant write authority.
+
+### `noqlenmeta.genres.num_genres`
+
+- Type: integer. Default: `1`. Accepted range: `1` through `10`.
+- Effect: limits the number of independently evidenced resolved genres.
+- Interaction: the default favors one specific trustworthy result. Higher
+  values do not add broad parents implicitly.
+
+### `noqlenmeta.genres.promote_styles`
+
+- Type: boolean. Default: `true`. Accepted: `true`, `false`.
+- Effect: allows a Discogs style recognized by the packaged Noqlen taxonomy to
+  participate in genre classification.
+- Interaction: a promoted value remains independently present in `styles`.
+
+Noqlen Meta packages its own MusicBrainz-derived genre taxonomy and does not
+require the LastGenre plugin. Classification does not download taxonomy data
+during ordinary execution.
+
+```yaml
+genres:
+  num_genres: 1
+  promote_styles: true
+```
+
 ## Provider Controls
 
 Every `enabled` key is boolean, accepts `true`/`false`, and grants no write
@@ -180,7 +210,7 @@ no write permission.
 
 ```yaml
 authority:
-  genres: [discogs, lastfm, itunes]
+  genres: [musicbrainz, discogs, lastfm, itunes]
 ```
 
 ### `noqlenmeta.resolution.min_confidence`

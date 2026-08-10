@@ -103,6 +103,45 @@ def test_invalid_local_analysis_is_rejected_before_selection(
         invoke(plugin, library, ["--all"])
 
 
+@pytest.mark.parametrize("num_genres", [0, 11])
+def test_invalid_genre_count_is_rejected_before_provider_work(
+    num_genres: int, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    library = Library(str(tmp_path / "library.db"), set_music_dir=False)
+    library.add_album(
+        [
+            Item(
+                path=b"synthetic.flac",
+                albumartist="Synthetic Artist",
+                album="Synthetic Album",
+                artist="Synthetic Artist",
+                title="Synthetic Track",
+            )
+        ]
+    )
+    plugin = NoqlenMetaPlugin()
+    plugin.config["genres"]["num_genres"].set(num_genres)
+    plugin.config["providers"]["discogs"]["enabled"].set(True)
+    monkeypatch.setattr(
+        plugin,
+        "_discogs_candidates",
+        lambda *args: pytest.fail("invalid genre config reached provider work"),
+    )
+
+    with pytest.raises(ui.UserError, match="invalid genres configuration"):
+        invoke(plugin, library, ["--all"])
+
+
+def test_genre_settings_accept_three_and_reject_non_boolean_promotion() -> None:
+    plugin = NoqlenMetaPlugin()
+    plugin.config["genres"]["num_genres"].set(3)
+    assert plugin._genre_settings().num_genres == 3
+
+    plugin.config["genres"]["promote_styles"].set("true")
+    with pytest.raises(ui.UserError, match="invalid genres configuration"):
+        plugin._genre_settings()
+
+
 def test_ordinary_apply_write_updates_database_and_real_media_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

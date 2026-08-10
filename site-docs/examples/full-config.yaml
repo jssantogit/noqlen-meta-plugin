@@ -46,6 +46,10 @@ noqlenmeta:
     synced_lyrics: false
     cover: true
 
+  genres:
+    num_genres: 1
+    promote_styles: true
+
   providers:
     discogs:
       enabled: false
