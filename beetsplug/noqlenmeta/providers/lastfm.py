@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import re
 import time
 from collections.abc import Callable, Mapping, Sequence
-from functools import cache
 from http.client import HTTPException
 from json import JSONDecodeError
-from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
@@ -18,6 +15,11 @@ from urllib.request import Request, urlopen
 import beets.plugins
 
 from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
+from beetsplug.noqlenmeta.genre_taxonomy import (
+    DEFAULT_GENRE_TAXONOMY,
+    GenreSemanticCategory,
+    GenreTaxonomy,
+)
 from beetsplug.noqlenmeta.providers.base import ProviderError
 from beetsplug.noqlenmeta.providers.specs import LASTFM_SPEC
 
@@ -39,33 +41,6 @@ _EXTERNAL_ERRORS = (
     UnicodeDecodeError,
     KeyError,
 )
-
-
-@cache
-def load_beets_genre_vocabulary() -> frozenset[str]:
-    """Load beets' packaged LastGenre vocabulary without importing LastGenre."""
-    try:
-        spec = importlib.util.find_spec("beetsplug.lastgenre")
-    except (ImportError, AttributeError, ValueError):
-        spec = None
-    locations = tuple(spec.submodule_search_locations or ()) if spec is not None else ()
-    if not locations:
-        raise ProviderError("beets LastGenre genre vocabulary is unavailable")
-
-    resource = Path(locations[0]) / "genres.txt"
-    try:
-        lines = resource.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeError):
-        raise ProviderError("beets LastGenre genre vocabulary is unavailable") from None
-
-    genres = frozenset(
-        line.casefold()
-        for raw_line in lines
-        if (line := raw_line.strip()) and not line.startswith("#")
-    )
-    if not genres:
-        raise ProviderError("beets LastGenre genre vocabulary is unavailable")
-    return genres
 
 
 class _LastFmTransport:
@@ -121,7 +96,7 @@ class LastFmProvider:
         self,
         *,
         fetch_top_tags: Callable[[str, str], Mapping[str, object]] | None = None,
-        genre_vocabulary: frozenset[str] | None = None,
+        taxonomy: GenreTaxonomy = DEFAULT_GENRE_TAXONOMY,
         transport: _LastFmTransport | None = None,
     ) -> None:
         if fetch_top_tags is not None and transport is not None:
@@ -129,7 +104,9 @@ class LastFmProvider:
         self._fetch_top_tags = fetch_top_tags or (
             transport or _LastFmTransport()
         ).fetch_top_tags
-        self._genre_vocabulary = genre_vocabulary
+        if not isinstance(taxonomy, GenreTaxonomy):
+            raise TypeError("taxonomy must be a GenreTaxonomy")
+        self._taxonomy = taxonomy
         self._cache: dict[tuple[str, str], tuple[MetadataCandidate, ...]] = {}
 
     def get_candidates(
@@ -180,9 +157,6 @@ class LastFmProvider:
         if not isinstance(tags, Sequence) or isinstance(tags, (str, bytes)):
             raise ProviderError("Last.fm API response is invalid")
 
-        vocabulary = self._genre_vocabulary
-        if vocabulary is None:
-            vocabulary = load_beets_genre_vocabulary()
         accepted: list[str] = []
         seen: set[str] = set()
         for entry in tags:
@@ -190,17 +164,19 @@ class LastFmProvider:
                 continue
             name = _optional_tag_name(entry.get("name"))
             weight = _tag_weight(entry.get("count"))
-            folded = name.casefold()
+            classification = self._taxonomy.classify(name) if name else None
+            folded = classification.canonical_name.casefold() if classification else ""
             if (
                 not name
                 or weight is None
                 or weight < _MIN_TAG_WEIGHT
-                or folded not in vocabulary
+                or classification is None
+                or classification.category is not GenreSemanticCategory.GENRE
                 or folded in seen
             ):
                 continue
             seen.add(folded)
-            accepted.append(name)
+            accepted.append(classification.canonical_name)
             if len(accepted) == _MAX_GENRES:
                 break
 
