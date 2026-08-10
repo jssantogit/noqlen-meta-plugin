@@ -48,6 +48,8 @@ from beetsplug.noqlenmeta.file_sync import (
     plan_file_sync,
     verify_file_sync_plan,
 )
+from beetsplug.noqlenmeta.genre_pipeline import resolve_release_genre_decision
+from beetsplug.noqlenmeta.genre_resolution import GenreSettings
 from beetsplug.noqlenmeta.identity import (
     AcoustIDRecordingExpectations,
     BeetsMusicBrainzIdentitySource,
@@ -1189,6 +1191,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
             )
 
     def _resolution_policy(self) -> ResolutionPolicy:
+        self._genre_settings()
         try:
             validate_local_analysis_config(self.config["local_analysis"].get(dict))
         except (confuse.ConfigError, ValueError) as error:
@@ -1216,6 +1219,17 @@ class NoqlenMetaPlugin(BeetsPlugin):
         except (confuse.ConfigError, ResolutionSettingsError) as error:
             raise ui.UserError(
                 f"noqlenmeta: invalid resolution configuration: {error}"
+            ) from None
+
+    def _genre_settings(self) -> GenreSettings:
+        try:
+            return GenreSettings(
+                num_genres=self.config["genres"]["num_genres"].get(int),
+                promote_styles=self.config["genres"]["promote_styles"].get(bool),
+            )
+        except (confuse.ConfigError, TypeError, ValueError) as error:
+            raise ui.UserError(
+                f"noqlenmeta: invalid genres configuration: {error}"
             ) from None
 
     @staticmethod
@@ -1306,7 +1320,22 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 )
             )
 
-        return build_change_plan(resolve_metadata(current_values, candidates, policy))
+        ordinary_candidates = tuple(
+            candidate for candidate in candidates if candidate.field != "genres"
+        )
+        ordinary_decisions = resolve_metadata(
+            current_values, ordinary_candidates, policy
+        )
+        genre_decision = resolve_release_genre_decision(
+            current_values.get("genres"),
+            candidates,
+            policy=policy,
+            settings=self._genre_settings(),
+        )
+        decisions = ordinary_decisions + (
+            (genre_decision,) if genre_decision is not None else ()
+        )
+        return build_change_plan(tuple(sorted(decisions, key=lambda decision: decision.field)))
 
     def _collect_provider_candidates(
         self,

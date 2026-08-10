@@ -52,6 +52,10 @@ def default_config() -> dict[str, Any]:
             "synced_lyrics": False,
             "cover": True,
         },
+        "genres": {
+            "num_genres": 1,
+            "promote_styles": True,
+        },
         "providers": {
             "discogs": {
                 "enabled": False,

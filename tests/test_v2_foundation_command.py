@@ -2,8 +2,9 @@ import shutil
 from pathlib import Path
 
 import pytest
-from beets import config, ui
-from beets.library import Item, Library
+from beets import config, plugins, ui
+from beets.library import Album, Item, Library
+from beets.util import cached_classproperty
 from mediafile import MediaFile
 
 import beetsplug.noqlenmeta as plugin_module
@@ -122,6 +123,7 @@ def test_ordinary_apply_write_updates_database_and_real_media_file(
     plugin = NoqlenMetaPlugin()
     plugin.config.set(
         {
+            "genres": {"num_genres": 2, "promote_styles": True},
             "providers": {
                 "discogs": {"enabled": True, "user_token": "synthetic-token"},
                 "musicbrainz": {"enabled": False},
@@ -149,6 +151,54 @@ def test_ordinary_apply_write_updates_database_and_real_media_file(
     assert any("database PREVIEW" in line and "planned" in line for line in output)
     assert any("database application" in line and "status=stored" in line for line in output)
     assert any("status=committed-complete" in line for line in output)
+
+
+def test_existing_library_release_uses_specific_promoted_style(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plugin = NoqlenMetaPlugin()
+    monkeypatch.setattr(plugins, "_instances", [plugin])
+    monkeypatch.delitem(cached_classproperty.cache, (Album, "_types"), raising=False)
+    library = Library(str(tmp_path / "library.db"), set_music_dir=False)
+    album = library.add_album(
+        [
+            Item(
+                path=str(tmp_path / "track.flac").encode(),
+                albumartist="Synthetic Artist",
+                album="Synthetic Album",
+                artist="Synthetic Artist",
+                title="Synthetic Track",
+            )
+        ]
+    )
+    plugin.config.set(
+        {
+            "genres": {"num_genres": 1, "promote_styles": True},
+            "providers": {
+                "discogs": {"enabled": True, "user_token": "synthetic-token"},
+                "musicbrainz": {"enabled": False},
+                "lastfm": {"enabled": False},
+                "itunes": {"enabled": False, "storefront": "us"},
+                "lrclib": {"enabled": False},
+            },
+        }
+    )
+    monkeypatch.setattr(
+        plugin,
+        "_discogs_candidates",
+        lambda *args: (
+            MetadataCandidate("genres", ("Rock",), "discogs", 0.95, "1"),
+            MetadataCandidate(
+                "styles", ("Technical Death Metal",), "discogs", 0.95, "1"
+            ),
+        ),
+    )
+
+    invoke(plugin, library, ["--apply", "--all"])
+
+    fresh = library.get_album(album.id)
+    assert fresh.genres == ["Technical Death Metal"]
+    assert fresh["styles"] == ["Technical Death Metal"]
 
 
 def test_existing_library_item_reuses_track_candidate_collection(

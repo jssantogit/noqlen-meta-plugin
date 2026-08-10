@@ -100,6 +100,34 @@ def test_importer_runs_only_for_selected_apply_tasks() -> None:
         assert eligible_album_info(task) is None
 
 
+def test_selected_import_release_uses_specific_promoted_style(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    info = AlbumInfo([], artist="Example Artist", album="Example Album")
+    task = SimpleNamespace(
+        is_album=True,
+        choice_flag=Action.APPLY,
+        match=SimpleNamespace(info=info),
+    )
+    plugin = _configured_plugin(importer_apply=True)
+    plugin.config["genres"].set({"num_genres": 1, "promote_styles": True})
+    monkeypatch.setattr(
+        plugin,
+        "_discogs_candidates",
+        lambda *args: (
+            MetadataCandidate("genres", ("Rock",), "discogs", 0.95, "1"),
+            MetadataCandidate(
+                "styles", ("Technical Death Metal",), "discogs", 0.95, "1"
+            ),
+        ),
+    )
+
+    plugin._import_task_choice(None, task)
+
+    assert info.genres == ["Technical Death Metal"]
+    assert info["styles"] == ["Technical Death Metal"]
+
+
 def test_existing_library_preview_strict_and_partial_are_database_only(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
