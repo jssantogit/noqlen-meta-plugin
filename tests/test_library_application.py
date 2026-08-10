@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from beets.library import Album, Item, Library
+from beets.util import cached_classproperty
 
 import beetsplug.noqlenmeta.library_application as application_module
 from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
@@ -148,6 +149,7 @@ def test_styles_persist_losslessly(
     from beetsplug.noqlenmeta import NoqlenMetaPlugin
 
     monkeypatch.setattr(plugins, "_instances", [NoqlenMetaPlugin()])
+    monkeypatch.delitem(cached_classproperty.cache, (Album, "_types"), raising=False)
     album = add_album(library)
 
     result = apply_library_target_plan(

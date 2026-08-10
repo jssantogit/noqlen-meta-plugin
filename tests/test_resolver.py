@@ -59,8 +59,8 @@ def test_policy_distinguishes_known_and_enabled_fields() -> None:
     resolution_policy = default_resolution_policy()
 
     assert resolution_policy.is_field_enabled("genres")
-    assert "mood" in resolution_policy.field_rules
-    assert not resolution_policy.is_field_enabled("mood")
+    assert "moods" in resolution_policy.field_rules
+    assert not resolution_policy.is_field_enabled("moods")
     assert not resolution_policy.is_field_enabled("unknown")
 
 

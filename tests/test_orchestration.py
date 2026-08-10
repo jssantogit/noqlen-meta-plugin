@@ -53,7 +53,7 @@ def policy(
         (MUSICBRAINZ_SPEC, "styles", ("musicbrainz",), False),
         (LASTFM_SPEC, "genres", ("discogs", "lastfm", "itunes"), True),
         (LASTFM_SPEC, "styles", ("lastfm",), False),
-        (LASTFM_SPEC, "mood", ("lastfm",), False),
+        (LASTFM_SPEC, "moods", ("lastfm",), False),
         (LRCLIB_SPEC, "lyrics", ("local", "lrclib"), True),
         (LRCLIB_SPEC, "synced_lyrics", ("lrclib",), True),
         (LRCLIB_SPEC, "genres", ("lrclib",), False),

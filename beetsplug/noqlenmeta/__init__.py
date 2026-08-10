@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 import confuse
 from beets import ui
 from beets.autotag import AlbumMatch, TrackMatch
-from beets.library import Album, Library
+from beets.library import Album, Item, Library
 from beets.plugins import BeetsPlugin
 from beets.ui import Subcommand
 
@@ -28,8 +28,11 @@ from beetsplug.noqlenmeta.beets_application import (
     parse_application_mode,
 )
 from beetsplug.noqlenmeta.beets_mapping import map_change_plan_to_beets
-from beetsplug.noqlenmeta.changeplan import ChangePlan, build_change_plan
-from beetsplug.noqlenmeta.configuration import default_config
+from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange, build_change_plan
+from beetsplug.noqlenmeta.configuration import (
+    default_config,
+    validate_local_analysis_config,
+)
 from beetsplug.noqlenmeta.domain import (
     MetadataCandidate,
     MetadataValue,
@@ -112,9 +115,15 @@ from beetsplug.noqlenmeta.library_integration import (
     render_library_target_plan,
 )
 from beetsplug.noqlenmeta.library_mapping import (
+    LibraryTargetChange,
     LibraryTargetPlan,
     map_change_plan_to_library_album,
 )
+from beetsplug.noqlenmeta.library_track_application import (
+    LibraryTrackApplicationResult,
+    apply_library_track_plan,
+)
+from beetsplug.noqlenmeta.library_track_preview import render_library_track_plan
 from beetsplug.noqlenmeta.orchestration import (
     provider_can_contribute,
     validate_provider_candidates,
@@ -140,12 +149,16 @@ from beetsplug.noqlenmeta.track_application import (
 )
 from beetsplug.noqlenmeta.track_integration import (
     SelectedImportTrack,
+    context_from_library_item,
     context_from_selected_import_track,
+    current_values_from_library_item,
     selected_import_tracks,
 )
+from beetsplug.noqlenmeta.track_mapping import TrackTargetChange, TrackTargetPlan
 from beetsplug.noqlenmeta.track_planning import (
     ImportTrackPlanningResult,
     build_import_track_planning_result,
+    build_track_planning_result,
 )
 from beetsplug.noqlenmeta.track_preview import (
     render_import_track_plan,
@@ -170,6 +183,16 @@ class LibraryAlbumPlan:
 
     album: Album
     target_plan: LibraryTargetPlan
+    position: int
+    total: int
+
+
+@dataclass(frozen=True, slots=True)
+class LibraryItemPlan:
+    """One prepared command plan retained until every Item is planned."""
+
+    item: Item
+    target_plan: TrackTargetPlan
     position: int
     total: int
 
@@ -250,7 +273,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
             dest="apply",
             action="store_true",
             default=False,
-            help="apply ordinary metadata or identity repair to the database; never writes files",
+            help="apply ordinary metadata or identity repair to the database",
         )
         self._command.parser.add_option(
             "--partial",
@@ -264,7 +287,10 @@ class NoqlenMetaPlugin(BeetsPlugin):
             dest="write",
             action="store_true",
             default=False,
-            help="with --identity-tags, replace eligible files after verified tag synchronization",
+            help=(
+                "authorize verified ordinary file sync with --apply, or legacy "
+                "identity sync with --identity-tags"
+            ),
         )
         self._command.func = self._command_noqlenmeta
 
@@ -560,7 +586,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         if acoustid_enabled:
             self._command_acoustid(lib, opts, args)
             return
-        all_albums = bool(getattr(opts, "all", False))
+        all_targets = bool(getattr(opts, "all", False))
         if partial_enabled and not apply_enabled:
             raise ui.UserError("noqlenmeta: --partial requires --apply")
         application_mode = (
@@ -569,22 +595,26 @@ class NoqlenMetaPlugin(BeetsPlugin):
             else LibraryApplicationMode.STRICT
         )
         has_query = any(isinstance(argument, str) and argument.strip() for argument in args)
-        if not has_query and not all_albums:
-            raise ui.UserError("noqlenmeta: provide an album query or use --all")
-        if args and all_albums:
-            raise ui.UserError("noqlenmeta: use an album query or --all, not both")
+        if not has_query and not all_targets:
+            raise ui.UserError("noqlenmeta: provide a query or use --all")
+        if args and all_targets:
+            raise ui.UserError("noqlenmeta: use a query or --all, not both")
 
         policy = self._resolution_policy()
-        if not self._has_contributing_release_provider(policy):
+        release_can_contribute = self._has_contributing_release_provider(policy)
+        track_can_contribute = self._has_contributing_track_provider(policy)
+        if not release_can_contribute and not track_can_contribute:
             ui.print_("Noqlen Meta: no enabled provider can contribute to the configured fields")
             return
 
-        albums = tuple(lib.albums(args if args else None))
-        if not albums:
-            ui.print_("Noqlen Meta: no albums matched")
+        query = args if args else None
+        albums = tuple(lib.albums(query)) if release_can_contribute else ()
+        items = tuple(lib.items(query)) if track_can_contribute else ()
+        if not albums and not items:
+            ui.print_("Noqlen Meta: no albums or items matched")
             return
 
-        prepared: list[LibraryAlbumPlan] = []
+        prepared_albums: list[LibraryAlbumPlan] = []
         total = len(albums)
         for position, album in enumerate(albums, 1):
             context = context_from_library_album(album)
@@ -599,7 +629,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 current_values_from_library_album(album),
                 policy,
             )
-            prepared.append(
+            prepared_albums.append(
                 LibraryAlbumPlan(
                     album,
                     map_change_plan_to_library_album(change_plan),
@@ -608,19 +638,71 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 )
             )
 
+        prepared_items: list[LibraryItemPlan] = []
+        item_total = len(items)
+        for position, item in enumerate(items, 1):
+            context = context_from_library_item(item)
+            if context is None:
+                ui.print_(
+                    f"Noqlen Meta: [{position}/{item_total}] Item has no usable "
+                    "artist/title identity; skipped"
+                )
+                continue
+            planning = build_track_planning_result(
+                context,
+                current_values_from_library_item(item),
+                candidates=self._collect_track_candidates(context, policy),
+                policy=policy,
+            )
+            prepared_items.append(
+                LibraryItemPlan(item, planning.target_plan, position, item_total)
+            )
+
         file_plans: list[FileSyncPlan] = []
         if write_enabled:
-            for album_plan in prepared:
+            changes_by_item: dict[int, tuple[Item, dict[str, PlannedChange]]] = {}
+
+            def add_file_changes(
+                item: Item,
+                changes: Sequence[LibraryTargetChange | TrackTargetChange],
+            ) -> None:
+                if not isinstance(item.id, int):
+                    raise ui.UserError("noqlenmeta: ordinary file target is not persisted")
+                target_item, collected = changes_by_item.setdefault(item.id, (item, {}))
+                if target_item.path != item.path:
+                    raise ui.UserError("noqlenmeta: conflicting ordinary file targets")
+                for value in changes:
+                    source = value.source
+                    previous = collected.get(source.field)
+                    if previous is not None and previous.after != source.after:
+                        raise ui.UserError(
+                            "noqlenmeta: conflicting ordinary file values for one Item"
+                        )
+                    collected[source.field] = source
+
+            for album_plan in prepared_albums:
                 target_plan = album_plan.target_plan
                 changes = (
-                    tuple(change.source for change in target_plan.mapped_changes)
+                    target_plan.mapped_changes
                     if application_mode is LibraryApplicationMode.PARTIAL
                     or not target_plan.requires_review
                     else ()
                 )
                 for item in album_plan.album.items():
-                    file_plans.append(plan_file_sync(item, changes))
-            for album_plan in prepared:
+                    add_file_changes(item, changes)
+            for item_plan in prepared_items:
+                target_plan = item_plan.target_plan
+                changes = (
+                    target_plan.mapped_changes
+                    if partial_enabled or not target_plan.requires_review
+                    else ()
+                )
+                add_file_changes(item_plan.item, changes)
+            file_plans = [
+                plan_file_sync(item, tuple(collected.values()))
+                for _, (item, collected) in sorted(changes_by_item.items())
+            ]
+            for album_plan in prepared_albums:
                 render_library_target_plan(
                     album_plan.album,
                     album_plan.target_plan,
@@ -628,6 +710,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     position=album_plan.position,
                     total=album_plan.total,
                 )
+            for item_plan in prepared_items:
+                render_library_track_plan(item_plan.item, item_plan.target_plan)
             for file_plan in file_plans:
                 ui.print_(
                     "Noqlen Meta / file plan: "
@@ -637,13 +721,29 @@ class NoqlenMetaPlugin(BeetsPlugin):
             for file_plan in file_plans:
                 verify_file_sync_plan(lib, file_plan)
 
-        application_results: list[LibraryApplicationResult | None] = []
-        for album_plan in prepared:
-            application_results.append(
+        album_results: list[LibraryApplicationResult | None] = []
+        for album_plan in prepared_albums:
+            album_results.append(
                 apply_library_target_plan(
                     album_plan.album,
                     album_plan.target_plan,
                     mode=application_mode,
+                )
+                if apply_enabled
+                else None
+            )
+        track_mode = (
+            TrackApplicationMode.PARTIAL
+            if partial_enabled
+            else TrackApplicationMode.STRICT
+        )
+        item_results: list[LibraryTrackApplicationResult | None] = []
+        for item_plan in prepared_items:
+            item_results.append(
+                apply_library_track_plan(
+                    item_plan.item,
+                    item_plan.target_plan,
+                    mode=track_mode,
                 )
                 if apply_enabled
                 else None
@@ -656,7 +756,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         )
 
         for album_plan, application_result in zip(
-            prepared, application_results, strict=True
+            prepared_albums, album_results, strict=True
         ):
             if write_enabled:
                 continue
@@ -667,6 +767,15 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 position=album_plan.position,
                 total=album_plan.total,
             )
+        if not write_enabled:
+            for item_plan, application_result in zip(
+                prepared_items, item_results, strict=True
+            ):
+                render_library_track_plan(
+                    item_plan.item,
+                    item_plan.target_plan,
+                    application_result,
+                )
         for result in file_results:
             status = "committed" if result.committed else "blocked"
             ui.print_(
@@ -962,6 +1071,10 @@ class NoqlenMetaPlugin(BeetsPlugin):
             )
 
     def _resolution_policy(self) -> ResolutionPolicy:
+        try:
+            validate_local_analysis_config(self.config["local_analysis"].get(dict))
+        except (confuse.ConfigError, ValueError) as error:
+            raise ui.UserError("noqlenmeta: invalid local_analysis configuration") from error
         field_settings = {
             field: self.config["fields"][field].get(bool) for field in _FIELD_DEFAULTS
         }
@@ -1009,6 +1122,19 @@ class NoqlenMetaPlugin(BeetsPlugin):
         from_scratch: bool,
         policy: ResolutionPolicy,
     ) -> ImportTrackPlanningResult:
+        return build_import_track_planning_result(
+            selected,
+            context,
+            from_scratch=from_scratch,
+            candidates=self._collect_track_candidates(context, policy),
+            policy=policy,
+        )
+
+    def _collect_track_candidates(
+        self,
+        context: TrackEnrichmentContext,
+        policy: ResolutionPolicy,
+    ) -> tuple[MetadataCandidate, ...]:
         candidates: list[MetadataCandidate] = []
         if provider_can_contribute(policy, LRCLIB_SPEC):
             candidates.extend(
@@ -1017,13 +1143,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     lambda: self._lrclib_candidates(context),
                 )
             )
-        return build_import_track_planning_result(
-            selected,
-            context,
-            from_scratch=from_scratch,
-            candidates=candidates,
-            policy=policy,
-        )
+        return tuple(candidates)
 
     def _build_change_plan_for_release(
         self,

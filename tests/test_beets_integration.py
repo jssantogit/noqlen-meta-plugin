@@ -41,7 +41,7 @@ DISCOGS_FIELDS = (
     "media",
     "format_descriptions",
 )
-FUTURE_FIELDS = ("mood", "lyrics", "synced_lyrics", "cover")
+DISABLED_V2_FIELDS = ("artist_areas", "lyrics", "synced_lyrics")
 
 
 @pytest.fixture(autouse=True)
@@ -131,10 +131,15 @@ def test_configuration_defaults_and_redacts_user_token() -> None:
     assert plugin.config["apply"].get(bool) is False
     assert plugin.config["apply_mode"].as_str() == "strict"
     assert all(plugin.config["fields"][field].get(bool) for field in DISCOGS_FIELDS)
-    assert all(not plugin.config["fields"][field].get(bool) for field in FUTURE_FIELDS)
+    assert all(
+        not plugin.config["fields"][field].get(bool) for field in DISABLED_V2_FIELDS
+    )
+    assert plugin.config["fields"]["moods"].get(bool) is True
+    assert plugin.config["fields"]["bpm"].get(bool) is True
+    assert plugin.config["fields"]["cover"].get(bool) is True
     assert plugin.config["providers"]["discogs"]["enabled"].get(bool) is False
     assert plugin.config["providers"]["discogs"]["user_token"].redact is True
-    assert plugin.config["providers"]["musicbrainz"]["enabled"].get(bool) is False
+    assert plugin.config["providers"]["musicbrainz"]["enabled"].get(bool) is True
     assert plugin.config["providers"]["lastfm"]["enabled"].get(bool) is False
     assert plugin.config["providers"]["itunes"]["enabled"].get(bool) is False
     assert plugin.config["providers"]["itunes"]["storefront"].as_str() == "us"
@@ -314,11 +319,11 @@ def test_settings_only_override_known_policy_enablement() -> None:
 
 
 def test_settings_can_enable_provider_and_future_field_without_granting_authority() -> None:
-    policy = resolution_policy_from_settings({"mood": True}, {"discogs": True})
+    policy = resolution_policy_from_settings({"moods": True}, {"discogs": True})
 
     assert policy.is_provider_enabled("discogs")
-    assert policy.is_field_enabled("mood")
-    assert policy.authority_rank("mood", "discogs") is None
+    assert policy.is_field_enabled("moods")
+    assert policy.authority_rank("moods", "discogs") is None
 
 
 def test_policy_provider_map_includes_all_production_providers_disabled_by_default() -> None:
@@ -346,7 +351,10 @@ def test_actual_plugin_policy_accepts_enabled_lrclib_and_custom_authority() -> N
     plugin = NoqlenMetaPlugin()
     plugin.config.set(
         {
-            "providers": {"lrclib": {"enabled": True}},
+            "providers": {
+                "lrclib": {"enabled": True},
+                "musicbrainz": {"enabled": False},
+            },
             "fields": {"lyrics": True, "synced_lyrics": True},
             "resolution": {"authority": {"lyrics": ["lrclib"]}},
         }
@@ -513,7 +521,7 @@ def test_enabled_provider_is_not_invoked_when_no_authoritative_field_is_enabled(
     )
     plugin = NoqlenMetaPlugin()
     configure_enabled(plugin, fields={field: False for field in DISCOGS_FIELDS})
-    plugin.config["fields"]["mood"].set(True)
+    plugin.config["fields"]["moods"].set(True)
 
     plugin._import_task_choice(None, import_task(album_info()))
 
@@ -537,7 +545,7 @@ def test_itunes_is_not_invoked_when_only_styles_can_be_enriched(
     plugin._import_task_choice(None, import_task(album_info()))
 
 
-@pytest.mark.parametrize("field", ["styles", "mood"])
+@pytest.mark.parametrize("field", ["styles", "moods"])
 def test_lastfm_is_not_invoked_for_future_classification_fields(
     monkeypatch: pytest.MonkeyPatch, field: str
 ) -> None:
@@ -549,7 +557,7 @@ def test_lastfm_is_not_invoked_for_future_classification_fields(
     plugin = NoqlenMetaPlugin()
     configure_enabled(
         plugin,
-        fields={known: known == field for known in (*DISCOGS_FIELDS, "mood")},
+        fields={known: known == field for known in (*DISCOGS_FIELDS, "moods")},
         discogs=False,
         lastfm=True,
     )

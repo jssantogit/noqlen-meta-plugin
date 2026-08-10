@@ -155,13 +155,13 @@ def test_no_query_fails_before_provider_or_library_work(
     )
     lib = SimpleNamespace(albums=lambda query: pytest.fail("library queried without consent"))
 
-    with pytest.raises(ui.UserError, match="provide an album query or use --all"):
+    with pytest.raises(ui.UserError, match="provide a query or use --all"):
         invoke(plugin, lib, [])
 
-    with pytest.raises(ui.UserError, match="provide an album query or use --all"):
+    with pytest.raises(ui.UserError, match="provide a query or use --all"):
         invoke(plugin, lib, ["   "])
 
-    with pytest.raises(ui.UserError, match="provide an album query or use --all"):
+    with pytest.raises(ui.UserError, match="provide a query or use --all"):
         invoke(plugin, lib, ["--apply"])
 
 
@@ -183,6 +183,7 @@ def test_all_is_allowed_and_query_plus_all_is_rejected(
 def test_no_useful_provider_avoids_library_query(monkeypatch: pytest.MonkeyPatch) -> None:
     output: list[str] = []
     plugin = NoqlenMetaPlugin()
+    plugin.config["providers"]["musicbrainz"]["enabled"].set(False)
     monkeypatch.setattr(plugin_module.ui, "print_", output.append)
     lib = SimpleNamespace(albums=lambda query: pytest.fail("library must not be queried"))
 
@@ -193,7 +194,7 @@ def test_no_useful_provider_avoids_library_query(monkeypatch: pytest.MonkeyPatch
     ]
 
 
-def test_album_cli_does_not_execute_lrclib_when_it_is_only_provider(
+def test_track_only_provider_skips_album_selection_and_queries_items(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -204,7 +205,8 @@ def test_album_cli_does_not_execute_lrclib_when_it_is_only_provider(
     configure_enabled(plugin, discogs=False, lrclib=True)
     plugin.config["fields"]["lyrics"].set(True)
     lib = SimpleNamespace(
-        albums=lambda query: pytest.fail("track-only provider must not query albums")
+        albums=lambda query: pytest.fail("track-only provider must not query albums"),
+        items=lambda query: (),
     )
 
     invoke(plugin, lib, ["--all"])
@@ -244,7 +246,7 @@ def test_no_match_reports_without_provider_call(
 
     invoke(plugin, library, ["album:Missing"])
 
-    assert output == ["Noqlen Meta: no albums matched"]
+    assert output == ["Noqlen Meta: no albums or items matched"]
 
 
 def test_library_album_adapters_preserve_canonical_shapes_without_splitting() -> None:

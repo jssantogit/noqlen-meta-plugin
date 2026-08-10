@@ -36,17 +36,22 @@ noqlenmeta:
     year: true
     media: true
     format_descriptions: true
-    mood: false
+    moods: true
+    bpm: true
+    lyrics_languages: true
+    artist_countries: true
+    artist_areas: false
+    artist_languages: true
     lyrics: false
     synced_lyrics: false
-    cover: false
+    cover: true
 
   providers:
     discogs:
       enabled: false
       user_token: ""
     musicbrainz:
-      enabled: false
+      enabled: true
     lastfm:
       enabled: false
     itunes:
@@ -59,3 +64,10 @@ noqlenmeta:
     authority: {}
     min_confidence: {}
     preserve_existing: {}
+
+  local_analysis:
+    bpm:
+      enabled: true
+      mode: fallback
+    mood:
+      enabled: false
