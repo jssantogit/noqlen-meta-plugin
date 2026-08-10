@@ -10,9 +10,13 @@ from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_TRACK_PROVIDER_SPECS,
     DISCOGS_SPEC,
     ITUNES_SPEC,
+    LASTFM_ARTIST_SPEC,
     LASTFM_SPEC,
+    LASTFM_TRACK_SPEC,
     LRCLIB_SPEC,
+    MUSICBRAINZ_ARTIST_SPEC,
     MUSICBRAINZ_SPEC,
+    MUSICBRAINZ_TRACK_SPEC,
     ProviderScope,
     ProviderSpec,
 )
@@ -46,14 +50,23 @@ def test_musicbrainz_spec_describes_exact_current_adapter_capabilities() -> None
     assert MUSICBRAINZ_SPEC.name == "musicbrainz"
     assert MUSICBRAINZ_SPEC.display_name == "MusicBrainz"
     assert MUSICBRAINZ_SPEC.supported_fields == frozenset(
-        {"labels", "catalog_numbers", "barcodes", "country", "year", "media"}
+        {
+            "labels",
+            "catalog_numbers",
+            "barcodes",
+            "country",
+            "year",
+            "media",
+            "genres",
+            "moods",
+        }
     )
 
 
 def test_lastfm_spec_describes_exact_current_adapter_capabilities() -> None:
     assert LASTFM_SPEC.name == "lastfm"
     assert LASTFM_SPEC.display_name == "Last.fm"
-    assert LASTFM_SPEC.supported_fields == frozenset({"genres"})
+    assert LASTFM_SPEC.supported_fields == frozenset({"genres", "styles", "moods"})
 
 
 def test_lrclib_spec_describes_exact_track_adapter_capabilities() -> None:
@@ -74,7 +87,11 @@ def test_builtin_provider_mapping_is_immutable() -> None:
     assert dict(BUILTIN_PROVIDER_SPECS) == {
         ("discogs", ProviderScope.RELEASE): DISCOGS_SPEC,
         ("musicbrainz", ProviderScope.RELEASE): MUSICBRAINZ_SPEC,
+        ("musicbrainz", ProviderScope.TRACK): MUSICBRAINZ_TRACK_SPEC,
+        ("musicbrainz", ProviderScope.ARTIST): MUSICBRAINZ_ARTIST_SPEC,
         ("lastfm", ProviderScope.RELEASE): LASTFM_SPEC,
+        ("lastfm", ProviderScope.TRACK): LASTFM_TRACK_SPEC,
+        ("lastfm", ProviderScope.ARTIST): LASTFM_ARTIST_SPEC,
         ("itunes", ProviderScope.RELEASE): ITUNES_SPEC,
         ("lrclib", ProviderScope.TRACK): LRCLIB_SPEC,
     }
@@ -92,8 +109,15 @@ def test_builtin_provider_scopes_and_filtered_registries_are_explicit() -> None:
         "lastfm": LASTFM_SPEC,
         "itunes": ITUNES_SPEC,
     }
-    assert dict(BUILTIN_TRACK_PROVIDER_SPECS) == {"lrclib": LRCLIB_SPEC}
-    assert dict(BUILTIN_ARTIST_PROVIDER_SPECS) == {}
+    assert dict(BUILTIN_TRACK_PROVIDER_SPECS) == {
+        "musicbrainz": MUSICBRAINZ_TRACK_SPEC,
+        "lastfm": LASTFM_TRACK_SPEC,
+        "lrclib": LRCLIB_SPEC,
+    }
+    assert dict(BUILTIN_ARTIST_PROVIDER_SPECS) == {
+        "musicbrainz": MUSICBRAINZ_ARTIST_SPEC,
+        "lastfm": LASTFM_ARTIST_SPEC,
+    }
     assert ProviderScope.ARTIST.value == "artist"
     with pytest.raises(TypeError):
         BUILTIN_RELEASE_PROVIDER_SPECS["other"] = ITUNES_SPEC  # type: ignore[index]
@@ -122,6 +146,18 @@ def test_provider_registry_keys_same_provider_name_by_scope() -> None:
     assert registry[("musicbrainz", ProviderScope.RELEASE)] is MUSICBRAINZ_SPEC
     assert registry[("musicbrainz", ProviderScope.ARTIST)] is artist_spec
     assert (MUSICBRAINZ_SPEC.name, ProviderScope.RELEASE) in BUILTIN_PROVIDER_SPECS
+
+
+def test_semantic_multi_scope_capabilities_are_explicit() -> None:
+    assert MUSICBRAINZ_TRACK_SPEC.supported_fields == frozenset(
+        {"genres", "moods", "lyrics_languages"}
+    )
+    assert MUSICBRAINZ_ARTIST_SPEC.supported_fields == frozenset(
+        {"genres", "moods", "artist_countries", "artist_areas"}
+    )
+    for spec in (LASTFM_TRACK_SPEC, LASTFM_SPEC, LASTFM_ARTIST_SPEC):
+        assert spec.supported_fields == frozenset({"genres", "styles", "moods"})
+    assert "artist_languages" not in MUSICBRAINZ_ARTIST_SPEC.supported_fields
 
 
 def test_provider_spec_rejects_arbitrary_scope_strings() -> None:

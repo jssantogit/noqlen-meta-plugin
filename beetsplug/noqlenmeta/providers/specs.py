@@ -83,16 +83,48 @@ MUSICBRAINZ_SPEC = ProviderSpec(
             "country",
             "year",
             "media",
+            "genres",
+            "moods",
         }
     ),
     scope=ProviderScope.RELEASE,
 )
 
+MUSICBRAINZ_TRACK_SPEC = ProviderSpec(
+    name="musicbrainz",
+    display_name="MusicBrainz",
+    supported_fields=frozenset({"genres", "moods", "lyrics_languages"}),
+    scope=ProviderScope.TRACK,
+)
+
+MUSICBRAINZ_ARTIST_SPEC = ProviderSpec(
+    name="musicbrainz",
+    display_name="MusicBrainz",
+    supported_fields=frozenset(
+        {"genres", "moods", "artist_countries", "artist_areas"}
+    ),
+    scope=ProviderScope.ARTIST,
+)
+
 LASTFM_SPEC = ProviderSpec(
     name="lastfm",
     display_name="Last.fm",
-    supported_fields=frozenset({"genres"}),
+    supported_fields=frozenset({"genres", "styles", "moods"}),
     scope=ProviderScope.RELEASE,
+)
+
+LASTFM_TRACK_SPEC = ProviderSpec(
+    name="lastfm",
+    display_name="Last.fm",
+    supported_fields=frozenset({"genres", "styles", "moods"}),
+    scope=ProviderScope.TRACK,
+)
+
+LASTFM_ARTIST_SPEC = ProviderSpec(
+    name="lastfm",
+    display_name="Last.fm",
+    supported_fields=frozenset({"genres", "styles", "moods"}),
+    scope=ProviderScope.ARTIST,
 )
 
 ITUNES_SPEC = ProviderSpec(
@@ -113,7 +145,11 @@ ProviderKey: TypeAlias = tuple[str, ProviderScope]
 _BUILTIN_PROVIDER_CAPABILITIES = (
     DISCOGS_SPEC,
     MUSICBRAINZ_SPEC,
+    MUSICBRAINZ_TRACK_SPEC,
+    MUSICBRAINZ_ARTIST_SPEC,
     LASTFM_SPEC,
+    LASTFM_TRACK_SPEC,
+    LASTFM_ARTIST_SPEC,
     ITUNES_SPEC,
     LRCLIB_SPEC,
 )
