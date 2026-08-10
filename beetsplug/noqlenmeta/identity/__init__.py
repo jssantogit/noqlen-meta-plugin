@@ -1,3 +1,8 @@
+from .acoustid_compatibility import (
+    AcoustIDRecordingExpectations,
+    IdentityAcoustIDCompatibility,
+    filter_identity_evaluations_by_acoustid,
+)
 from .assignment import (
     IdentityAssignmentResult,
     IdentityTrackAssignment,
@@ -8,6 +13,7 @@ from .assignment import (
 from .audit import (
     IdentityAuditResult,
     MusicBrainzIdentitySource,
+    audit_identity_candidate_evaluations,
     audit_musicbrainz_identity,
     audit_with_musicbrainz_source,
 )
@@ -121,12 +127,14 @@ from .tag_sync import (
 
 __all__ = [
     "BeetsMusicBrainzIdentitySource",
+    "AcoustIDRecordingExpectations",
     "BlockedIdentityTagFile",
     "IdentityAlbumContext",
     "IdentityAssignmentResult",
     "IdentityAuditError",
     "IdentityAuditPolicy",
     "IdentityAuditResult",
+    "IdentityAcoustIDCompatibility",
     "IdentityCandidateEvaluation",
     "IdentityFieldFinding",
     "IdentityFieldStatus",
@@ -183,12 +191,14 @@ __all__ = [
     "all_library_identity_targets",
     "assign_identity_tracks",
     "audit_musicbrainz_identity",
+    "audit_identity_candidate_evaluations",
     "audit_selected_import_identity",
     "audit_library_identity_target",
     "audit_with_musicbrainz_source",
     "canonical_mbid",
     "evaluate_identity_candidate",
     "exact_snapshot_from_library_target",
+    "filter_identity_evaluations_by_acoustid",
     "identity_context_from_selected_import",
     "identity_context_from_library_target",
     "identity_tag_field_status",

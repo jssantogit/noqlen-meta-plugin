@@ -17,6 +17,8 @@ beet nm [OPTIONS] [QUERY]
 | `beet nm --apply --partial QUERY` | Enabled enrichment providers | Safe ordinary fields | No |
 | `beet nm --identity QUERY` | MusicBrainz identity source | No | No |
 | `beet nm --identity --apply QUERY` | MusicBrainz identity source | Four MBID columns | No |
+| `beet nm --acoustid QUERY` | Configured AcoustID lookup | No | No |
+| `beet nm --acoustid --apply QUERY` | Configured AcoustID lookup | AcoustID columns | No |
 | `beet nm --identity-tags QUERY` | No | No | No |
 | `beet nm --identity-tags --write QUERY` | No | Operational `mtime` only | Four MBID tags |
 
@@ -28,9 +30,9 @@ Ordinary mode uses a native beets **Album query** and returns Albums only:
 beet nm album:"Example Album"
 ```
 
-`--identity` and `--identity-tags` use a native beets **Item query**. Matching
-one track expands to its complete Album, while a standalone singleton Item is
-supported as one target:
+`--identity`, `--acoustid`, and `--identity-tags` use a native beets **Item
+query**. Matching one track expands to its complete Album, while a standalone
+singleton Item is supported as one target:
 
 ```bash
 beet nm --identity title:"Example Track"
@@ -61,7 +63,7 @@ beet nm --identity --all
 - Ordinary mode: strict database application; provider network enabled.
 - Identity mode: coherent four-MBID database repair; MusicBrainz network enabled.
 - File effect: none in every mode.
-- Valid with: ordinary mode, `--partial`, or `--identity`.
+- Valid with: ordinary mode, `--partial`, `--identity`, or `--acoustid`.
 - Invalid with: `--identity-tags`.
 - Common block: ordinary `REVIEW`/mapping blocker, or identity ambiguity.
 
@@ -93,11 +95,11 @@ identity, or file guards.
 - Type: boolean mode flag; default off.
 - Query: native Item query required unless `--all` is used.
 - Selection: complete Albums plus standalone Items.
-- Network: MusicBrainz identity source only.
+- Network: MusicBrainz identity source, plus optional configured AcoustID lookup.
 - Database: preview is read-only; `--apply` repairs four MBID columns.
 - Files: never read or written for tags.
 - Valid with: `--apply` or `--all`.
-- Invalid with: `--identity-tags` or `--partial`.
+- Invalid with: `--identity-tags`, `--acoustid`, or `--partial`.
 - Common block: candidate evidence is ambiguous, weak, incomplete, or stale.
 
 ```bash
@@ -106,6 +108,35 @@ beet nm --identity --apply album:"Example Album"
 
 Importer `identity.*` settings and `providers.musicbrainz.enabled` do not
 authorize or disable this command mode.
+
+## `--acoustid`
+
+- Type: boolean mode flag; default off.
+- Query: native Item query required unless `--all` is used.
+- Selection: complete Albums plus standalone Items.
+- Network: bounded AcoustID lookup when enabled and fingerprint material exists.
+- Database: preview is read-only; `--apply` changes only `acoustid_id` and `acoustid_fingerprint`.
+- Files: never written.
+- Valid with: `--fingerprint-missing`, `--apply`, or `--all`.
+- Invalid with: `--identity`, `--identity-tags`, `--write`, or `--partial`.
+
+```bash
+beet nm --acoustid title:"Example Track"
+```
+
+The explicit standalone mode is authorized even when
+`noqlenmeta.acoustid.enabled` is false. Preview is the default.
+
+## `--fingerprint-missing`
+
+- Type: boolean permission flag; default off.
+- Mode: requires `--acoustid`.
+- Effect: permits local fingerprint calculation for selected Items lacking a valid stored fingerprint.
+- Database: grants no write permission; `--apply` remains required.
+- Files: read for fingerprint calculation but never written.
+
+`--identity` never calculates a missing fingerprint, including when
+`noqlenmeta.acoustid.compute_missing` is true.
 
 ## `--identity-tags`
 
@@ -145,6 +176,11 @@ beet nm --identity-tags --write album:"Example Album"
 | `--partial` without `--apply` | `--partial requires --apply` |
 | `--write` without `--identity-tags` | `--write requires --identity-tags` |
 | `--identity --identity-tags` | modes are mutually exclusive |
+| `--acoustid --identity` | AcoustID and identity are mutually exclusive |
+| `--acoustid --identity-tags` | AcoustID and identity tags are mutually exclusive |
+| `--acoustid --write` | AcoustID cannot use file-write authority |
+| `--acoustid --partial` | AcoustID has no partial mode |
+| `--fingerprint-missing` without `--acoustid` | fingerprint permission requires AcoustID mode |
 | `--identity-tags --apply` | identity tags cannot use apply |
 | `--identity-tags --partial` | identity tags cannot use partial |
 | `--identity --partial` | identity cannot use partial |

@@ -23,7 +23,8 @@ def select_acoustid_targets(
     if type(library) is not Library:
         raise TypeError("AcoustID selection requires a supported Library")
     return tuple(
-        _convert_target(target) for target in select_library_identity_targets(library, query)
+        acoustid_target_from_library_identity(target)
+        for target in select_library_identity_targets(library, query)
     )
 
 
@@ -47,10 +48,14 @@ def refresh_acoustid_target(
     ):
         raise ValueError("AcoustID refresh source is inconsistent")
     fresh = refresh_library_identity_target(library, source)
-    return _convert_target(fresh)
+    return acoustid_target_from_library_identity(fresh)
 
 
-def _convert_target(selected: SelectedLibraryIdentityTarget) -> SelectedAcoustIDTarget:
+def acoustid_target_from_library_identity(
+    selected: SelectedLibraryIdentityTarget,
+) -> SelectedAcoustIDTarget:
+    if type(selected) is not SelectedLibraryIdentityTarget:
+        raise TypeError("AcoustID conversion requires a library identity target")
     kind = (
         AcoustIDLibraryTargetKind.ALBUM
         if selected.kind is LibraryIdentityTargetKind.ALBUM

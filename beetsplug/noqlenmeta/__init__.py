@@ -10,6 +10,18 @@ from beets.library import Album, Library
 from beets.plugins import BeetsPlugin
 from beets.ui import Subcommand
 
+from beetsplug.noqlenmeta.acoustid import (
+    AcoustIDLookupService,
+    AcoustIDSettings,
+    FingerprintBackend,
+    FpcalcFingerprintBackend,
+    acoustid_target_from_library_identity,
+    apply_acoustid_results,
+    plan_acoustid_target,
+    prepare_fingerprint,
+    render_acoustid_preview,
+    select_acoustid_targets,
+)
 from beetsplug.noqlenmeta.beets_application import (
     BeetsApplicationMode,
     apply_beets_target_plan,
@@ -25,15 +37,18 @@ from beetsplug.noqlenmeta.domain import (
     TrackEnrichmentContext,
 )
 from beetsplug.noqlenmeta.identity import (
+    AcoustIDRecordingExpectations,
     BeetsMusicBrainzIdentitySource,
     IdentityImportApplicationResult,
     IdentitySourceError,
     ImportIdentityAuditResult,
     MusicBrainzIdentitySource,
     apply_import_identity_plan,
+    audit_identity_candidate_evaluations,
     audit_with_musicbrainz_source,
     identity_context_from_selected_import,
     map_identity_audit_to_import_targets,
+    rank_identity_candidates,
     selected_import_identity,
 )
 from beetsplug.noqlenmeta.identity.importer_preview import (
@@ -44,7 +59,6 @@ from beetsplug.noqlenmeta.identity.library import (
     LibraryIdentityAuditResult,
     LibraryIdentityContextResult,
     SelectedLibraryIdentityTarget,
-    audit_library_identity_target,
     exact_snapshot_from_library_target,
     identity_context_from_library_target,
     refresh_library_identity_target,
@@ -135,6 +149,10 @@ _FIELD_DEFAULTS = default_config()["fields"]
 _RESOLUTION_SECTIONS = frozenset({"authority", "min_confidence", "preserve_existing"})
 
 
+def _identity_backend_forbidden() -> FingerprintBackend:
+    raise RuntimeError("fingerprint generation is forbidden during identity audit")
+
+
 class IdentityImporterSettingsError(RuntimeError):
     """Raised before provider work when importer identity settings are unsafe."""
 
@@ -192,6 +210,20 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 "preview synchronization of MusicBrainz identity from the database "
                 "to media-file tags"
             ),
+        )
+        self._command.parser.add_option(
+            "--acoustid",
+            dest="acoustid",
+            action="store_true",
+            default=False,
+            help="preview or apply existing-library AcoustID database evidence",
+        )
+        self._command.parser.add_option(
+            "--fingerprint-missing",
+            dest="fingerprint_missing",
+            action="store_true",
+            default=False,
+            help="with --acoustid, permit calculation of missing fingerprints",
         )
         self._command.parser.add_option(
             "--all",
@@ -424,6 +456,13 @@ class NoqlenMetaPlugin(BeetsPlugin):
             self._musicbrainz_identity_source = BeetsMusicBrainzIdentitySource()
         return self._musicbrainz_identity_source
 
+    def _acoustid_settings(self) -> AcoustIDSettings:
+        try:
+            values = self.config["acoustid"].get(dict)
+            return AcoustIDSettings.from_mapping(values)
+        except (confuse.ConfigError, ValueError) as error:
+            raise ui.UserError("noqlenmeta: invalid AcoustID configuration") from error
+
     def _log_identity_application_result(
         self, result: IdentityImportApplicationResult
     ) -> None:
@@ -476,9 +515,21 @@ class NoqlenMetaPlugin(BeetsPlugin):
     def _command_noqlenmeta(self, lib: Library, opts: object, args: list[str]) -> None:
         identity_enabled = bool(getattr(opts, "identity", False))
         identity_tags_enabled = bool(getattr(opts, "identity_tags", False))
+        acoustid_enabled = bool(getattr(opts, "acoustid", False))
+        fingerprint_missing = bool(getattr(opts, "fingerprint_missing", False))
         write_enabled = bool(getattr(opts, "write", False))
         apply_enabled = bool(getattr(opts, "apply", False))
         partial_enabled = bool(getattr(opts, "partial", False))
+        if acoustid_enabled and identity_enabled:
+            raise ui.UserError("noqlenmeta: --acoustid cannot be used with --identity")
+        if acoustid_enabled and identity_tags_enabled:
+            raise ui.UserError("noqlenmeta: --acoustid cannot be used with --identity-tags")
+        if acoustid_enabled and write_enabled:
+            raise ui.UserError("noqlenmeta: --acoustid cannot be used with --write")
+        if acoustid_enabled and partial_enabled:
+            raise ui.UserError("noqlenmeta: --acoustid cannot be used with --partial")
+        if fingerprint_missing and not acoustid_enabled:
+            raise ui.UserError("noqlenmeta: --fingerprint-missing requires --acoustid")
         if identity_enabled and identity_tags_enabled:
             raise ui.UserError("noqlenmeta: --identity and --identity-tags are mutually exclusive")
         if write_enabled and not identity_tags_enabled:
@@ -492,6 +543,9 @@ class NoqlenMetaPlugin(BeetsPlugin):
             return
         if identity_tags_enabled:
             self._command_identity_tags(lib, opts, args)
+            return
+        if acoustid_enabled:
+            self._command_acoustid(lib, opts, args)
             return
         all_albums = bool(getattr(opts, "all", False))
         if partial_enabled and not apply_enabled:
@@ -630,6 +684,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         if args and all_items:
             raise ui.UserError("noqlenmeta: use an Item query or --all with --identity, not both")
 
+        acoustid_settings = self._acoustid_settings()
         targets = select_library_identity_targets(lib, args if args else None)
         if not targets:
             ui.print_("Noqlen MusicBrainz identity: no Items matched")
@@ -637,6 +692,11 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
         context_results = tuple(identity_context_from_library_target(target) for target in targets)
         source = self._identity_source() if any(context_results) else None
+        acoustid_lookup = (
+            AcoustIDLookupService(acoustid_settings)
+            if acoustid_settings.enabled and acoustid_settings.use_for_identity
+            else None
+        )
         prepared: list[PreparedLibraryIdentityPlan] = []
         total = len(targets)
         for position, (target, context_result) in enumerate(
@@ -651,7 +711,21 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 continue
             assert source is not None
             try:
-                result = audit_library_identity_target(target, source)
+                candidates = source.candidates_for(context_result.context)
+                evaluations = rank_identity_candidates(context_result.context, candidates)
+                expectations = (
+                    self._identity_acoustid_expectations(
+                        target, acoustid_settings, acoustid_lookup
+                    )
+                    if acoustid_lookup is not None and evaluations
+                    else None
+                )
+                audit = audit_identity_candidate_evaluations(
+                    context_result.context,
+                    evaluations,
+                    acoustid_expectations=expectations,
+                )
+                result = LibraryIdentityAuditResult(context_result, audit)
             except IdentitySourceError:
                 prepared.append(
                     PreparedLibraryIdentityPlan(
@@ -755,6 +829,72 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 apply_requested=False,
                 position=record.position,
                 total=record.total,
+            )
+
+    def _identity_acoustid_expectations(
+        self,
+        selected: SelectedLibraryIdentityTarget,
+        settings: AcoustIDSettings,
+        lookup_service: AcoustIDLookupService,
+    ) -> AcoustIDRecordingExpectations:
+        target = acoustid_target_from_library_identity(selected)
+        identity_settings = replace(settings, compute_missing=False)
+        evidence = []
+        for item in target.items:
+            preparation = prepare_fingerprint(
+                item,
+                identity_settings,
+                False,
+                _identity_backend_forbidden,
+            )
+            if preparation.material is not None:
+                evidence.append(lookup_service.lookup(preparation.material))
+        return AcoustIDRecordingExpectations.from_evidence(tuple(evidence))
+
+    def _command_acoustid(self, lib: Library, opts: object, args: list[str]) -> None:
+        all_items = bool(getattr(opts, "all", False))
+        apply_enabled = bool(getattr(opts, "apply", False))
+        fingerprint_missing = bool(getattr(opts, "fingerprint_missing", False))
+        has_query = any(isinstance(argument, str) and argument.strip() for argument in args)
+        if not has_query and not all_items:
+            raise ui.UserError("noqlenmeta: --acoustid requires an Item query or --all")
+        if args and all_items:
+            raise ui.UserError("noqlenmeta: use an Item query or --all with --acoustid, not both")
+
+        settings = self._acoustid_settings()
+        targets = select_acoustid_targets(lib, args if args else None)
+        if not targets:
+            ui.print_("Noqlen AcoustID: no Items matched")
+            return
+        lookup_service = AcoustIDLookupService(settings)
+        backend: FingerprintBackend | None = None
+
+        def backend_factory() -> FingerprintBackend:
+            nonlocal backend
+            if backend is None:
+                backend = FpcalcFingerprintBackend.from_settings(settings)
+            return backend
+
+        results = tuple(
+            plan_acoustid_target(
+                target,
+                settings,
+                fingerprint_missing,
+                backend_factory,
+                lookup_service,
+            )
+            for target in targets
+        )
+        for result in results:
+            ui.print_(render_acoustid_preview(result))
+        application_result = apply_acoustid_results(lib, results) if apply_enabled else None
+        if application_result is not None:
+            ui.print_(
+                "AcoustID application: "
+                f"targets={application_result.target_count} "
+                f"changed_targets={application_result.changed_target_count} "
+                f"changed_items={application_result.changed_item_count} "
+                f"fields={application_result.applied_field_count}"
             )
 
     def _resolution_policy(self) -> ResolutionPolicy:

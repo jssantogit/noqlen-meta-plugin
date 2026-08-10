@@ -4,6 +4,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
+from .acoustid_compatibility import (
+    AcoustIDRecordingExpectations,
+    IdentityAcoustIDCompatibility,
+    filter_identity_evaluations_by_acoustid,
+)
 from .domain import (
     IdentityAlbumContext,
     IdentityAuditPolicy,
@@ -34,6 +39,7 @@ class IdentityAuditResult:
     selected_evaluation: IdentityCandidateEvaluation | None
     field_findings: tuple[IdentityFieldFinding, ...]
     repair_ready: bool
+    acoustid_compatibility: IdentityAcoustIDCompatibility | None = None
 
     @property
     def has_conflicts(self) -> bool:
@@ -57,29 +63,96 @@ def audit_musicbrainz_identity(
     candidates: Sequence[MusicBrainzReleaseIdentity],
     *,
     policy: IdentityAuditPolicy = DEFAULT_IDENTITY_AUDIT_POLICY,
+    acoustid_expectations: AcoustIDRecordingExpectations | None = None,
 ) -> IdentityAuditResult:
     candidate_tuple = tuple(candidates)
     if any(not isinstance(candidate, MusicBrainzReleaseIdentity) for candidate in candidate_tuple):
         raise TypeError("candidates must be MusicBrainzReleaseIdentity values")
-    evaluations = rank_identity_candidates(context, candidate_tuple)
-    if not evaluations:
-        return _ambiguous(context, evaluations, "no_candidates")
+    return audit_identity_candidate_evaluations(
+        context,
+        rank_identity_candidates(context, candidate_tuple),
+        policy=policy,
+        acoustid_expectations=acoustid_expectations,
+    )
+
+
+def audit_identity_candidate_evaluations(
+    context: IdentityAlbumContext,
+    evaluations: tuple[IdentityCandidateEvaluation, ...],
+    *,
+    policy: IdentityAuditPolicy = DEFAULT_IDENTITY_AUDIT_POLICY,
+    acoustid_expectations: AcoustIDRecordingExpectations | None = None,
+) -> IdentityAuditResult:
+    structural_evaluations = tuple(evaluations)
+    if any(
+        type(evaluation) is not IdentityCandidateEvaluation
+        for evaluation in structural_evaluations
+    ):
+        raise TypeError("evaluations must be IdentityCandidateEvaluation values")
+    if not structural_evaluations:
+        return _ambiguous(context, structural_evaluations, "no_candidates")
+    compatibility = None
+    evaluations = structural_evaluations
+    if acoustid_expectations is not None and acoustid_expectations.entries:
+        compatibility = filter_identity_evaluations_by_acoustid(
+            structural_evaluations,
+            acoustid_expectations,
+            local_keys=tuple(track.local_key for track in context.tracks),
+        )
+        evaluations = compatibility.compatible_evaluations
+        if not evaluations:
+            return _ambiguous(
+                context,
+                evaluations,
+                "acoustid_recording_conflict",
+                acoustid_compatibility=compatibility,
+            )
     top = evaluations[0]
     singleton = len(context.tracks) == 1
     minimum_score = policy.singleton_minimum_score if singleton else policy.minimum_score
     minimum_margin = policy.singleton_minimum_margin if singleton else policy.minimum_margin
     if top.score.total < minimum_score:
-        return _ambiguous(context, evaluations, "below_minimum_score")
+        return _ambiguous(
+            context,
+            evaluations,
+            "below_minimum_score",
+            acoustid_compatibility=compatibility,
+        )
     if not _candidate_identity_is_safe(top.candidate):
-        return _ambiguous(context, evaluations, "invalid_candidate_identity")
+        return _ambiguous(
+            context,
+            evaluations,
+            "invalid_candidate_identity",
+            acoustid_compatibility=compatibility,
+        )
     if policy.require_all_local_tracks_assigned and top.assignment.unmatched_local_keys:
-        return _ambiguous(context, evaluations, "unmatched_local_tracks")
+        return _ambiguous(
+            context,
+            evaluations,
+            "unmatched_local_tracks",
+            acoustid_compatibility=compatibility,
+        )
     if top.assignment.ambiguous:
-        return _ambiguous(context, evaluations, "ambiguous_track_assignment")
+        return _ambiguous(
+            context,
+            evaluations,
+            "ambiguous_track_assignment",
+            acoustid_compatibility=compatibility,
+        )
     if any(item.pair_score < policy.minimum_pair_score for item in top.assignment.assignments):
-        return _ambiguous(context, evaluations, "weak_track_assignment")
+        return _ambiguous(
+            context,
+            evaluations,
+            "weak_track_assignment",
+            acoustid_compatibility=compatibility,
+        )
     if len(evaluations) > 1 and top.score.total - evaluations[1].score.total < minimum_margin:
-        return _ambiguous(context, evaluations, "insufficient_margin")
+        return _ambiguous(
+            context,
+            evaluations,
+            "insufficient_margin",
+            acoustid_compatibility=compatibility,
+        )
     findings = _identity_findings(context, top)
     if any(item.status is IdentityFieldStatus.CONFLICT for item in findings):
         verdict = IdentityVerdict.CONFLICT
@@ -103,6 +176,7 @@ def audit_musicbrainz_identity(
             and not top.assignment.unmatched_local_keys
             and len(top.assignment.assignments) == len(context.tracks)
         ),
+        acoustid_compatibility=compatibility,
     )
 
 
@@ -111,14 +185,22 @@ def audit_with_musicbrainz_source(
     source: MusicBrainzIdentitySource,
     *,
     policy: IdentityAuditPolicy = DEFAULT_IDENTITY_AUDIT_POLICY,
+    acoustid_expectations: AcoustIDRecordingExpectations | None = None,
 ) -> IdentityAuditResult:
-    return audit_musicbrainz_identity(context, source.candidates_for(context), policy=policy)
+    return audit_musicbrainz_identity(
+        context,
+        source.candidates_for(context),
+        policy=policy,
+        acoustid_expectations=acoustid_expectations,
+    )
 
 
 def _ambiguous(
     context: IdentityAlbumContext,
     evaluations: tuple[IdentityCandidateEvaluation, ...],
     reason: str,
+    *,
+    acoustid_compatibility: IdentityAcoustIDCompatibility | None = None,
 ) -> IdentityAuditResult:
     return IdentityAuditResult(
         verdict=IdentityVerdict.AMBIGUOUS,
@@ -129,6 +211,7 @@ def _ambiguous(
         selected_evaluation=None,
         field_findings=(),
         repair_ready=False,
+        acoustid_compatibility=acoustid_compatibility,
     )
 
 
