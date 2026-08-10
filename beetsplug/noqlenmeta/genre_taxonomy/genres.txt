@@ -203,7 +203,7 @@ Bitpop
 Black 'N' Roll
 Black Ambient
 Black Metal
-Black Midi
+Black MIDI
 Black Noise
 Blackened Crust
 Blackened Death Metal
@@ -364,7 +364,7 @@ Chicago Polka
 Chicago Soul
 Chicano Rap
 Chicha
-Children'S Music
+Children's Music
 Chilena
 Chillout
 Chillstep
@@ -721,7 +721,7 @@ Flamenco Pop
 Flashcore
 Flex Dance Music
 Florida Breaks
-Fm Synthesis
+FM Synthesis
 Folk
 Folk Metal
 Folk Pop
@@ -1077,7 +1077,7 @@ Kai
 Kakawin
 Kalattut
 Kalindula
-Kalon'Ny Fahiny
+Kalon'ny Fahiny
 Kan Ha Diskan
 Kaneka
 Kankyō Ongaku
@@ -1267,7 +1267,7 @@ Midwest Emo
 Miejski Folk
 Military Cadence
 Milonga
-Min'Yō
+Min'yō
 Minatory
 Mincecore
 Minimal Drum and Bass
@@ -1304,7 +1304,7 @@ Motown
 Moutya
 Movimiento Alterado
 Mozarabic Chant
-Mpb
+MPB
 Muak
 Mugham
 Mugithi
@@ -1320,7 +1320,7 @@ Musique Concrète
 Musique Concrète Instrumentale
 Muzika Mizrahit
 Muzika Yehudit Mekorit
-Muzikat Dika'On
+Muzikat Dika'on
 Muziki Wa Dansi
 Mélodie
 Méringue
@@ -1452,7 +1452,7 @@ Opera Seria
 Opera-Ballet
 Operatic Pop
 Operetta
-Opm
+OPM
 Opéra Comique
 Oratorio
 Orchestral
@@ -1710,7 +1710,7 @@ Russian Romance
 Rustic Stomp
 Ryūkōka
 Rōkyoku
-Sa'Idi
+Sa'idi
 Sacred Harp
 Sacred Steel
 Saeta
@@ -1777,7 +1777,7 @@ Sevillanas
 Sexy Drill
 Shaabi
 Shabad Kirtan
-Shan'Ge
+Shan'ge
 Shangaan Electro
 Shanto
 Shashmaqam
@@ -1946,7 +1946,7 @@ Tarawangsa
 Tarraxinha
 Tassa
 Tassu
-Tbm
+TBM
 Tchinkoumé
 Tearout
 Tearout Brostep
@@ -2149,7 +2149,7 @@ Yanyue
 Yaraví
 Yayue
 Yodeling
-Ytpmv
+YTPMV
 Yu-Mex
 Yue Opera
 Yukar
@@ -2181,4 +2181,4 @@ Zydeco
 Étude
 Özgün Müzik
 Čalgija
-ʻŌteʻA
+ʻŌteʻa

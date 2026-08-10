@@ -20,15 +20,38 @@ _TOKEN_CASING = {
     "eai": "EAI",
     "ebm": "EBM",
     "edm": "EDM",
+    "fm": "FM",
     "idm": "IDM",
+    "midi": "MIDI",
+    "mpb": "MPB",
     "nrg": "NRG",
     "nwobhm": "NWOBHM",
+    "opm": "OPM",
     "r&b": "R&B",
+    "tbm": "TBM",
     "uk": "UK",
     "uk82": "UK82",
     "us": "US",
+    "ytpmv": "YTPMV",
 }
 _LOWERCASE_WORDS = frozenset({"and", "of", "the"})
+_APOSTROPHES = "'’ʻ"
+
+
+def _title_segment(segment: str) -> str:
+    if len(segment) == 3 and segment[0] in _APOSTROPHES and segment[-1] == segment[0]:
+        return f"{segment[0]}{segment[1].upper()}{segment[-1]}"
+    if segment and segment[0] in _APOSTROPHES:
+        return f"{segment[0]}{_title_segment(segment[1:])}"
+
+    for apostrophe in _APOSTROPHES:
+        if apostrophe not in segment:
+            continue
+        prefix, suffix = segment.split(apostrophe, 1)
+        prefix = prefix.capitalize()
+        suffix = suffix.capitalize() if len(prefix) == 1 else suffix.lower()
+        return f"{prefix}{apostrophe}{suffix}"
+    return segment.capitalize()
 
 
 def _display_token(token: str) -> str:
@@ -40,7 +63,8 @@ def _display_token(token: str) -> str:
     if len(segments) == 2 and len(segments[0]) == 1 and segments[1].casefold() == "pop":
         return f"{segments[0].upper()}-pop"
     return "-".join(
-        _TOKEN_CASING.get(segment.casefold(), segment.title()) for segment in segments
+        _TOKEN_CASING.get(segment.casefold(), _title_segment(segment))
+        for segment in segments
     )
 
 
