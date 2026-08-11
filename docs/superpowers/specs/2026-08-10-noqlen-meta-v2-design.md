@@ -149,13 +149,9 @@ The first v2 cut does not require local ML mood classification. The local-analys
 
 ### BPM evidence
 
-BPM is hybrid by design:
+The approved Artwork + Audio design is authoritative for initial-v2 BPM sourcing. There is no external BPM provider in the first v2 release. Librosa is the only local BPM backend, and local BPM analysis is optional and disabled by default.
 
-- credible provider observations may contribute BPM without local analysis;
-- local audio analysis is the fallback when provider evidence is missing or insufficient;
-- when local and external BPM evidence conflict materially, local analysis is the preferred authority.
-
-A specific external BPM service is not a hard dependency of the v2 architecture. Provider BPM support is admitted only when a durable, permitted source exists; absence of such a source must not weaken the local-analysis path or force adoption of a fragile API.
+`TempoObservation` keeps the resolution and persistence boundary open to future evidence sources, but no provider observation or multi-source conflict policy is implemented for this release.
 
 ## 4. Artwork pipeline
 
@@ -410,8 +406,8 @@ The architecture is implemented as three coherent product changes rather than on
 
 - add Cover Art Archive artwork candidates and selection;
 - bounded artwork download, validation, sidecar application, and embedding under `--write`;
-- add provider BPM observations where a durable supported source is available;
-- add the optional `[audio]` local BPM backend and local-authority conflict policy;
+- add the optional `[audio]` Librosa BPM backend, disabled by default;
+- preserve the `TempoObservation` boundary for future sources without implementing an external BPM provider;
 - verify actual database, file-tag, and embedded-art outcomes.
 
 After these changes, perform one integrated release-readiness pass. Local ML mood analysis is explicitly outside the critical path of the first v2 release; its boundary exists so it can be added later without redesigning the core.
@@ -423,7 +419,7 @@ The v2 architecture is successful when:
 1. a base installation can enrich useful metadata with safe zero-credential sources without another beets plugin;
 2. releases, tracks, and artist-derived metadata use one resolver/change-plan philosophy;
 3. styles and moods remain multivalued without silent data loss;
-4. BPM can use external evidence and optionally local analysis, with local analysis preferred on material conflict;
+4. optional BPM analysis uses the lazy local Librosa backend, disabled by default, with no external BPM provider in the first v2 release;
 5. artwork can be selected, downloaded, validated, saved, and optionally embedded by Noqlen Meta itself;
 6. `--apply` remains database-first while `--write` is the explicit general authority for audio-file mutation;
 7. import and existing-library workflows provide equivalent enrichment semantics;
