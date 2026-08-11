@@ -268,10 +268,23 @@ providers:
   lastfm:
     enabled: false
 
+artwork:
+  size: original
+  replace_existing: false
+
+bpm:
+  round: false
+  recalculate_existing: false
+  octave_normalization: false
+  octave_range:
+    min: 70
+    max: 180
+
 local_analysis:
   bpm:
-    enabled: true
-    mode: fallback
+    enabled: false
+    analysis_mode: full
+    window_seconds: 90
   mood:
     enabled: false
 ```
@@ -283,12 +296,10 @@ An illustrative authority direction is:
 ```yaml
 resolution:
   authority:
-    bpm: [local]
     styles: [discogs, lastfm, musicbrainz]
     moods: [lastfm, musicbrainz, local]
     lyrics_languages: [musicbrainz]
     artist_countries: [musicbrainz]
-    cover: [coverartarchive, itunes, discogs]
 ```
 
 Provider lists are filtered by actually implemented capability. A provider named in a default authority list must not be contacted unless the provider is enabled and supports that field.
@@ -318,9 +329,9 @@ TempoObservation
 └── backend
 ```
 
-If local BPM analysis is enabled but the optional backend is unavailable, that capability reports unavailable and ordinary enrichment continues. If provider BPM evidence exists, it may still resolve normally. If no BPM evidence exists, the preview reports that BPM could not be enriched; the command does not fail solely because the optional audio extra is absent.
+If local BPM analysis is enabled but Librosa is unavailable, that capability reports unavailable and ordinary enrichment continues. There is no external BPM provider in this implementation. If no BPM evidence exists, the preview reports that BPM could not be enriched; the command does not fail solely because the optional audio extra is absent.
 
-The exact audio-analysis library is an implementation choice constrained by maintained Python support, acceptable install weight, lazy loading, deterministic tests, and compatibility with the project's supported Python range. The architecture must not depend on Librosa-specific objects or APIs.
+Librosa is the initial optional backend and remains isolated behind `TempoAnalyzer`; the core architecture does not expose Librosa-specific objects or APIs.
 
 ## 9. Failure behavior
 

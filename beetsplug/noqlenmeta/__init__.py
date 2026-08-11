@@ -1,11 +1,13 @@
 """Noqlen Meta beets plugin."""
 
+import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 
 import confuse
 from beets import ui
 from beets.autotag import AlbumMatch, TrackMatch
+from beets.dbcore import types as db_types
 from beets.library import Album, Item, Library
 from beets.plugins import BeetsPlugin
 from beets.ui import Subcommand
@@ -23,6 +25,21 @@ from beetsplug.noqlenmeta.acoustid import (
     render_acoustid_preview,
     select_acoustid_targets,
 )
+from beetsplug.noqlenmeta.artwork import (
+    ArtworkContext,
+    ArtworkLookupResult,
+    ArtworkPlan,
+    ArtworkSettings,
+    artwork_context_from_album,
+    artwork_context_requires_lookup,
+    artwork_settings_from_config,
+    plan_artwork_context,
+    resolve_caa_artwork,
+)
+from beetsplug.noqlenmeta.artwork_application import (
+    ArtworkApplicationResult,
+    apply_artwork_plan,
+)
 from beetsplug.noqlenmeta.beets_application import (
     BeetsApplicationMode,
     apply_beets_target_plan,
@@ -32,6 +49,8 @@ from beetsplug.noqlenmeta.beets_mapping import map_change_plan_to_beets
 from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange, build_change_plan
 from beetsplug.noqlenmeta.configuration import (
     default_config,
+    validate_artwork_config,
+    validate_bpm_config,
     validate_local_analysis_config,
 )
 from beetsplug.noqlenmeta.domain import (
@@ -139,6 +158,7 @@ from beetsplug.noqlenmeta.orchestration import (
 )
 from beetsplug.noqlenmeta.provider_cache import CommandEntityCache
 from beetsplug.noqlenmeta.providers import ProviderError
+from beetsplug.noqlenmeta.providers.coverartarchive import CoverArtArchiveClient
 from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_NAMES,
     BUILTIN_RELEASE_PROVIDER_SPECS,
@@ -149,7 +169,12 @@ from beetsplug.noqlenmeta.providers.specs import (
     MUSICBRAINZ_SPEC,
     ProviderSpec,
 )
-from beetsplug.noqlenmeta.resolver import ResolutionPolicy, resolve_metadata
+from beetsplug.noqlenmeta.resolver import (
+    FieldDecision,
+    ResolutionAction,
+    ResolutionPolicy,
+    resolve_metadata,
+)
 from beetsplug.noqlenmeta.semantic_enrichment import (
     SemanticEnrichmentResult,
     SemanticFieldOutcome,
@@ -158,6 +183,16 @@ from beetsplug.noqlenmeta.semantic_enrichment import (
 )
 from beetsplug.noqlenmeta.semantic_media import SEMANTIC_MEDIA_FIELDS
 from beetsplug.noqlenmeta.semantic_resolution import MoodSettings
+from beetsplug.noqlenmeta.tempo import (
+    BpmPlanningResult,
+    BpmSettings,
+    LibrosaTempoAnalyzer,
+    LocalBpmSettings,
+    TempoAnalyzer,
+    bpm_settings_from_config,
+    local_bpm_settings_from_config,
+    plan_bpm,
+)
 from beetsplug.noqlenmeta.track_application import (
     TrackApplicationMode,
     TrackApplicationResult,
@@ -171,11 +206,17 @@ from beetsplug.noqlenmeta.track_integration import (
     current_values_from_library_item,
     selected_import_tracks,
 )
-from beetsplug.noqlenmeta.track_mapping import TrackTargetChange, TrackTargetPlan
+from beetsplug.noqlenmeta.track_mapping import (
+    TrackTargetChange,
+    TrackTargetPlan,
+    map_change_plan_to_track_info,
+)
 from beetsplug.noqlenmeta.track_planning import (
     ImportTrackPlanningResult,
+    TrackPlanningResult,
     build_import_track_planning_result,
     build_track_planning_result,
+    effective_current_values_for_import_track,
 )
 from beetsplug.noqlenmeta.track_preview import (
     render_import_track_plan,
@@ -184,6 +225,14 @@ from beetsplug.noqlenmeta.track_preview import (
 
 _FIELD_DEFAULTS = default_config()["fields"]
 _RESOLUTION_SECTIONS = frozenset({"authority", "min_confidence", "preserve_existing"})
+
+
+class _CanonicalBpmFloat(db_types.Float):
+    # Keep beets' existing schema affinity while preserving non-integral values.
+    sql = db_types.INTEGER.sql
+
+
+_CANONICAL_BPM_FLOAT = _CanonicalBpmFloat()
 
 
 def _identity_backend_forbidden() -> FingerprintBackend:
@@ -226,6 +275,53 @@ def _render_file_sync_error(plan: FileSyncPlan, error: FileSyncApplicationError)
     )
 
 
+def _bpm_candidate(result: BpmPlanningResult) -> MetadataCandidate:
+    if result.canonical_bpm is None:
+        raise ValueError("BPM planning result has no canonical value")
+    provider = result.observation.backend if result.observation is not None else "library"
+    return MetadataCandidate(
+        "bpm",
+        result.canonical_bpm,
+        provider,
+        1.0,
+        "local-analysis" if result.observation is not None else "database",
+    )
+
+
+def _change_plan_with_bpm(
+    decisions: Sequence[FieldDecision],
+    original: ChangePlan,
+    result: BpmPlanningResult,
+) -> tuple[tuple[FieldDecision, ...], ChangePlan]:
+    if (
+        result.outcome != "RESOLVED"
+        or result.observation is None
+        or result.canonical_bpm is None
+    ):
+        return tuple(decisions), original
+    candidate = _bpm_candidate(result)
+    action = (
+        ResolutionAction.KEEP
+        if result.current_bpm == result.canonical_bpm
+        else ResolutionAction.PROPOSE
+    )
+    bpm_decision = FieldDecision(
+        "bpm",
+        result.current_bpm,
+        candidate,
+        action,
+        result.reason or "resolved local BPM analysis",
+    )
+    merged = tuple(
+        sorted(
+            tuple(decision for decision in decisions if decision.field != "bpm")
+            + (bpm_decision,),
+            key=lambda decision: decision.field,
+        )
+    )
+    return merged, build_change_plan(merged)
+
+
 class IdentityImporterSettingsError(RuntimeError):
     """Raised before provider work when importer identity settings are unsafe."""
 
@@ -250,6 +346,7 @@ class LibraryItemPlan:
     position: int
     total: int
     semantic_outcomes: Mapping[str, SemanticFieldOutcome]
+    bpm_result: BpmPlanningResult | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,6 +366,15 @@ class PreparedLibraryIdentityPlan:
     total: int
 
 
+@dataclass(frozen=True, slots=True)
+class PreparedImportArtwork:
+    key: tuple[str, str, str, int]
+    lookup: ArtworkLookupResult | None
+    settings: ArtworkSettings
+    local_source: bytes | None
+    write_enabled: bool
+
+
 class NoqlenMetaPlugin(BeetsPlugin):
     """Entry point loaded by beets as the ``noqlenmeta`` plugin."""
 
@@ -280,6 +386,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
     def __init__(self) -> None:
         super().__init__()
+        Item._fields["bpm"] = _CANONICAL_BPM_FLOAT
         for field, descriptor in SEMANTIC_MEDIA_FIELDS.items():
             if field not in MediaFile.fields():
                 self.add_media_field(field, descriptor)
@@ -293,7 +400,13 @@ class NoqlenMetaPlugin(BeetsPlugin):
         self._musicbrainz_semantic_client = None
         self._semantic_cache = CommandEntityCache()
         self._musicbrainz_identity_source: MusicBrainzIdentitySource | None = None
+        self._coverartarchive_client: CoverArtArchiveClient | None = None
+        self._tempo_analyzer: TempoAnalyzer | None = None
+        self._pending_import_artwork: dict[
+            tuple[str, str, str, int], list[PreparedImportArtwork]
+        ] = {}
         self.register_listener("import_task_choice", self._import_task_choice)
+        self.register_listener("album_imported", self._album_imported)
         self._command = Subcommand(
             "noqlenmeta",
             help="preview or apply metadata and MusicBrainz identity workflows",
@@ -383,6 +496,12 @@ class NoqlenMetaPlugin(BeetsPlugin):
             track_application_mode = parse_track_application_mode(raw_mode)
 
         policy = self._resolution_policy()
+        local_bpm_settings = self._local_bpm_settings()
+        import_artwork = self._prepare_import_artwork(session, task, album_info)
+        if import_artwork is not None and apply_enabled:
+            self._pending_import_artwork.setdefault(import_artwork.key, []).append(
+                import_artwork
+            )
         album_semantic_enabled = policy.is_provider_enabled("musicbrainz") and any(
             policy.is_field_enabled(field)
             for field in ("artist_countries", "artist_areas", "artist_languages")
@@ -394,7 +513,10 @@ class NoqlenMetaPlugin(BeetsPlugin):
         preview_enabled = self.config["preview"].get(bool)
         track_can_contribute = (
             bool(selected_tracks)
-            and self._has_contributing_track_provider(policy)
+            and (
+                self._has_contributing_track_provider(policy)
+                or policy.is_field_enabled("bpm") and local_bpm_settings.enabled
+            )
             and (preview_enabled or apply_enabled)
         )
         identity_can_execute = (
@@ -402,7 +524,12 @@ class NoqlenMetaPlugin(BeetsPlugin):
             and (identity_preview or identity_apply)
             and selected_identity is not None
         )
-        if not release_can_contribute and not track_can_contribute and not identity_can_execute:
+        if (
+            not release_can_contribute
+            and not track_can_contribute
+            and not identity_can_execute
+            and import_artwork is None
+        ):
             return
 
         match = getattr(task, "match", None)
@@ -508,6 +635,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     context,
                     from_scratch=from_scratch,
                     policy=policy,
+                    local_bpm_settings=local_bpm_settings,
                 )
                 track_application_result = None
                 if apply_enabled:
@@ -697,14 +825,21 @@ class NoqlenMetaPlugin(BeetsPlugin):
             raise ui.UserError("noqlenmeta: use a query or --all, not both")
 
         policy = self._resolution_policy()
-        release_can_contribute = self._has_contributing_release_provider(policy) or (
+        bpm_settings = self._bpm_settings()
+        local_bpm_settings = self._local_bpm_settings()
+        ordinary_release_can_contribute = self._has_contributing_release_provider(policy) or (
             policy.is_provider_enabled("musicbrainz")
             and any(
                 policy.is_field_enabled(field)
                 for field in ("artist_countries", "artist_areas", "artist_languages")
             )
         )
-        track_can_contribute = self._has_contributing_track_provider(policy)
+        artwork_enabled = self.config["fields"]["cover"].get(bool)
+        release_can_contribute = ordinary_release_can_contribute or artwork_enabled
+        track_can_contribute = self._has_contributing_track_provider(policy) or (
+            policy.is_field_enabled("bpm")
+            and (local_bpm_settings.enabled or write_enabled)
+        )
         if not release_can_contribute and not track_can_contribute:
             ui.print_("Noqlen Meta: no enabled provider can contribute to the configured fields")
             return
@@ -717,8 +852,39 @@ class NoqlenMetaPlugin(BeetsPlugin):
             return
 
         prepared_albums: list[LibraryAlbumPlan] = []
+        prepared_artwork: list[tuple[Album, ArtworkPlan]] = []
+        artwork_settings = self._artwork_settings()
         total = len(albums)
         for position, album in enumerate(albums, 1):
+            if artwork_enabled:
+                album_items = tuple(album.items())
+                try:
+                    artwork_context = artwork_context_from_album(album, album_items)
+                    artwork_lookup = self._resolve_album_artwork(
+                        artwork_context, artwork_settings
+                    )
+                    artwork_plan = plan_artwork_context(
+                        artwork_context,
+                        artwork_lookup,
+                        artwork_settings,
+                        write_enabled=write_enabled,
+                    )
+                except ValueError as error:
+                    artwork_plan = ArtworkPlan(
+                        album.id,
+                        "BLOCKED",
+                        None,
+                        None,
+                        (),
+                        None,
+                        (),
+                        artwork_settings.replace_existing,
+                        str(error),
+                    )
+                prepared_artwork.append((album, artwork_plan))
+                self._render_artwork_plan(artwork_plan)
+            if not ordinary_release_can_contribute:
+                continue
             context = context_from_library_album(album)
             if context is None:
                 ui.print_(
@@ -793,13 +959,23 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     for candidate in track_candidates
                     if candidate.field != "genres"
                 )
+            current_values = current_values_from_library_item(item)
+            bpm_result = plan_bpm(
+                path=item.path,
+                existing_bpm=current_values.get("bpm"),
+                field_enabled=policy.is_field_enabled("bpm"),
+                bpm_settings=bpm_settings,
+                local_settings=local_bpm_settings,
+                analyzer=self._bpm_analyzer(local_bpm_settings),
+            )
             planning = build_track_planning_result(
                 context,
-                current_values_from_library_item(item),
+                current_values,
                 candidates=track_candidates,
                 policy=policy,
                 semantic_outcomes=track_enrichment.outcomes,
             )
+            planning = self._integrate_library_bpm(planning, bpm_result)
             prepared_items.append(
                 LibraryItemPlan(
                     item,
@@ -807,6 +983,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     position,
                     item_total,
                     planning.semantic_outcomes,
+                    bpm_result,
                 )
             )
 
@@ -832,6 +1009,19 @@ class NoqlenMetaPlugin(BeetsPlugin):
                         )
                     collected[source.field] = source
 
+            def add_file_change(item: Item, source: PlannedChange) -> None:
+                if not isinstance(item.id, int):
+                    raise ui.UserError("noqlenmeta: ordinary file target is not persisted")
+                target_item, collected = changes_by_item.setdefault(item.id, (item, {}))
+                if target_item.path != item.path:
+                    raise ui.UserError("noqlenmeta: conflicting ordinary file targets")
+                previous = collected.get(source.field)
+                if previous is not None and previous.after != source.after:
+                    raise ui.UserError(
+                        "noqlenmeta: conflicting ordinary file values for one Item"
+                    )
+                collected[source.field] = source
+
             for album_plan in prepared_albums:
                 target_plan = album_plan.target_plan
                 changes = (
@@ -850,6 +1040,10 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     else ()
                 )
                 add_file_changes(item_plan.item, changes)
+                if item_plan.bpm_result is not None:
+                    bpm_file_change = self._bpm_file_change(item_plan.bpm_result)
+                    if bpm_file_change is not None:
+                        add_file_change(item_plan.item, bpm_file_change)
             file_plans = [
                 plan_file_sync(item, tuple(collected.values()))
                 for _, (item, collected) in sorted(changes_by_item.items())
@@ -935,6 +1129,13 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 or application_result is not None
                 and application_result.stored
             )
+
+        if apply_enabled:
+            for artwork_album, artwork_plan in prepared_artwork:
+                artwork_result = self._apply_artwork_plan(
+                    lib, artwork_album, artwork_plan
+                )
+                self._render_artwork_application_result(artwork_result)
 
         for album_plan, application_result in zip(
             prepared_albums, album_results, strict=True
@@ -1307,6 +1508,11 @@ class NoqlenMetaPlugin(BeetsPlugin):
             validate_local_analysis_config(self.config["local_analysis"].get(dict))
         except (confuse.ConfigError, ValueError) as error:
             raise ui.UserError("noqlenmeta: invalid local_analysis configuration") from error
+        try:
+            validate_artwork_config(self.config["artwork"].get(dict))
+            validate_bpm_config(self.config["bpm"].get(dict))
+        except (confuse.ConfigError, ValueError) as error:
+            raise ui.UserError("noqlenmeta: invalid enrichment configuration") from error
         field_settings = {
             field: self.config["fields"][field].get(bool) for field in _FIELD_DEFAULTS
         }
@@ -1352,6 +1558,241 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 f"noqlenmeta: invalid moods configuration: {error}"
             ) from None
 
+    def _artwork_settings(self) -> ArtworkSettings:
+        try:
+            return artwork_settings_from_config(self.config["artwork"].get(dict))
+        except (confuse.ConfigError, ValueError) as error:
+            raise ui.UserError(f"noqlenmeta: invalid artwork configuration: {error}") from None
+
+    def _prepare_import_artwork(
+        self, session: object, task: object, album_info: object | None
+    ) -> PreparedImportArtwork | None:
+        if album_info is None or not self.config["fields"]["cover"].get(bool):
+            return None
+        release_mbid = str(getattr(album_info, "mb_albumid", None) or "").strip()
+        release_group_mbid = str(
+            getattr(album_info, "mb_releasegroupid", None) or ""
+        ).strip() or None
+        items = tuple(getattr(task, "items", ()) or ())
+        item_paths = tuple(
+            item.path
+            for item in items
+            if isinstance(item, Item) and isinstance(item.path, bytes) and item.path
+        )
+        local_sidecars = tuple(
+            destination
+            for directory in sorted({os.path.dirname(path) for path in item_paths})
+            if os.path.exists(destination := os.path.join(directory, b"cover.jpg"))
+        )
+        if not release_mbid and not local_sidecars:
+            return None
+        settings = self._artwork_settings()
+        has_embedded = False
+        try:
+            has_embedded = any(MediaFile(os.fsdecode(path)).images for path in item_paths)
+        except Exception:
+            if not settings.replace_existing:
+                return None
+        local_source = (
+            local_sidecars[0]
+            if local_sidecars and not has_embedded and not settings.replace_existing
+            else None
+        )
+        lookup = None
+        if settings.replace_existing or not (local_sidecars or has_embedded):
+            if not release_mbid:
+                return None
+            context = ArtworkContext(
+                0,
+                release_mbid,
+                release_group_mbid,
+                (),
+                item_paths,
+                tuple(sorted({os.path.dirname(path) for path in item_paths})),
+                local_sidecars,
+                (),
+            )
+            lookup = self._resolve_album_artwork(context, settings)
+        key = (
+            release_mbid,
+            str(getattr(album_info, "artist", None) or "").strip(),
+            str(getattr(album_info, "album", None) or "").strip(),
+            len(items),
+        )
+        write_enabled = False
+        session_config = getattr(session, "config", None)
+        if session_config is not None:
+            try:
+                write_enabled = session_config["write"].get(bool)
+            except (confuse.ConfigError, KeyError, TypeError):
+                write_enabled = False
+        preview_plan = ArtworkPlan(
+            0,
+            (
+                lookup.outcome
+                if lookup is not None
+                else "PRESERVED"
+                if has_embedded
+                else "RESOLVED"
+            ),
+            lookup.candidate if lookup is not None else None,
+            local_source,
+            (),
+            None,
+            (),
+            settings.replace_existing,
+            (
+                lookup.reason
+                if lookup is not None
+                else "existing embedded artwork preserves the album"
+                if has_embedded
+                else "existing cover.jpg is authoritative"
+            ),
+        )
+        self._render_artwork_plan(preview_plan)
+        return PreparedImportArtwork(key, lookup, settings, local_source, write_enabled)
+
+    def _album_imported(self, lib: Library, album: Album) -> None:
+        items = tuple(album.items())
+        key = (
+            str(album.get("mb_albumid") or "").strip(),
+            str(album.albumartist or "").strip(),
+            str(album.album or "").strip(),
+            len(items),
+        )
+        pending = self._pending_import_artwork.get(key)
+        if not pending:
+            return
+        prepared = pending.pop(0)
+        if not pending:
+            self._pending_import_artwork.pop(key, None)
+        try:
+            context = artwork_context_from_album(album, items)
+            if prepared.local_source is None:
+                plan = plan_artwork_context(
+                    context,
+                    prepared.lookup,
+                    prepared.settings,
+                    write_enabled=prepared.write_enabled,
+                )
+            elif context.embedded_art_item_ids and not prepared.settings.replace_existing:
+                plan = plan_artwork_context(
+                    context,
+                    None,
+                    prepared.settings,
+                    write_enabled=prepared.write_enabled,
+                )
+            else:
+                destinations = tuple(
+                    os.path.join(directory, b"cover.jpg")
+                    for directory in context.disc_directories
+                    if os.path.join(directory, b"cover.jpg") != prepared.local_source
+                )
+                canonical = (
+                    destinations[0] if destinations else prepared.local_source
+                )
+                plan = ArtworkPlan(
+                    album.id,
+                    "RESOLVED",
+                    None,
+                    prepared.local_source,
+                    destinations,
+                    canonical,
+                    context.item_ids if prepared.write_enabled else (),
+                    False,
+                    "existing cover.jpg is authoritative",
+                )
+        except ValueError as error:
+            plan = ArtworkPlan(
+                album.id,
+                "BLOCKED",
+                None,
+                None,
+                (),
+                None,
+                (),
+                prepared.settings.replace_existing,
+                str(error),
+            )
+        result = self._apply_artwork_plan(lib, album, plan)
+        self._render_artwork_application_result(result)
+
+    def _bpm_settings(self) -> BpmSettings:
+        try:
+            return bpm_settings_from_config(self.config["bpm"].get(dict))
+        except (confuse.ConfigError, ValueError) as error:
+            raise ui.UserError(f"noqlenmeta: invalid BPM configuration: {error}") from None
+
+    def _local_bpm_settings(self) -> LocalBpmSettings:
+        try:
+            return local_bpm_settings_from_config(
+                self.config["local_analysis"]["bpm"].get(dict)
+            )
+        except (confuse.ConfigError, ValueError) as error:
+            raise ui.UserError(f"noqlenmeta: invalid local BPM configuration: {error}") from None
+
+    def _bpm_analyzer(self, settings: LocalBpmSettings) -> TempoAnalyzer | None:
+        if not settings.enabled:
+            return None
+        if self._tempo_analyzer is None:
+            self._tempo_analyzer = LibrosaTempoAnalyzer()
+        return self._tempo_analyzer
+
+    def _resolve_album_artwork(
+        self,
+        context: ArtworkContext,
+        settings: ArtworkSettings,
+    ) -> ArtworkLookupResult | None:
+        if not artwork_context_requires_lookup(context, settings):
+            return None
+        try:
+            provider_enabled = self.config["providers"]["coverartarchive"]["enabled"].get(
+                bool
+            )
+        except confuse.ConfigError as error:
+            raise ui.UserError("noqlenmeta: invalid Cover Art Archive configuration") from error
+        if not provider_enabled:
+            return None
+        if self._coverartarchive_client is None:
+            self._coverartarchive_client = CoverArtArchiveClient()
+        return resolve_caa_artwork(
+            self._coverartarchive_client,
+            release_mbid=context.release_mbid,
+            release_group_mbid=context.release_group_mbid,
+            settings=settings,
+        )
+
+    def _apply_artwork_plan(
+        self, library: Library, album: Album, plan: ArtworkPlan
+    ) -> ArtworkApplicationResult:
+        return apply_artwork_plan(library, album, plan)
+
+    @staticmethod
+    def _render_artwork_plan(plan: ArtworkPlan) -> None:
+        source = (
+            plan.candidate.source_scope
+            if plan.candidate is not None
+            else "local-cover.jpg"
+            if plan.local_source is not None
+            else "none"
+        )
+        ui.print_(
+            "Noqlen Meta / artwork plan: "
+            f"Album {plan.album_id}; outcome={plan.outcome}; source={source}; "
+            f"sidecars={len(plan.sidecar_destinations)}; embeds={len(plan.embed_item_ids)}"
+        )
+
+    @staticmethod
+    def _render_artwork_application_result(result: ArtworkApplicationResult) -> None:
+        status = "blocked" if result.blocked_reason else "committed"
+        reason = f"; reason={result.blocked_reason}" if result.blocked_reason else ""
+        ui.print_(
+            "Noqlen Meta / artwork application: "
+            f"Album {result.album_id}; status={status}; "
+            f"sidecars={len(result.committed_sidecars)}; "
+            f"embeds={len(result.embedded_item_ids)}{reason}"
+        )
+
     @staticmethod
     def _has_contributing_release_provider(policy: ResolutionPolicy) -> bool:
         return any(
@@ -1373,15 +1814,77 @@ class NoqlenMetaPlugin(BeetsPlugin):
         *,
         from_scratch: bool,
         policy: ResolutionPolicy,
+        local_bpm_settings: LocalBpmSettings,
     ) -> ImportTrackPlanningResult:
         enrichment = self._collect_track_candidates(context, policy)
-        return build_import_track_planning_result(
+        current_values = effective_current_values_for_import_track(
+            selected, from_scratch=from_scratch
+        )
+        bpm_result = plan_bpm(
+            path=selected.item.path,
+            existing_bpm=current_values.get("bpm"),
+            field_enabled=policy.is_field_enabled("bpm"),
+            bpm_settings=self._bpm_settings(),
+            local_settings=local_bpm_settings,
+            analyzer=self._bpm_analyzer(local_bpm_settings),
+        )
+        planning = build_import_track_planning_result(
             selected,
             context,
             from_scratch=from_scratch,
             candidates=enrichment.candidates,
             policy=policy,
             semantic_outcomes=enrichment.outcomes,
+        )
+        return self._integrate_import_bpm(planning, bpm_result)
+
+    @staticmethod
+    def _integrate_library_bpm(
+        planning: TrackPlanningResult, result: BpmPlanningResult
+    ) -> TrackPlanningResult:
+        decisions, change_plan = _change_plan_with_bpm(
+            planning.decisions, planning.change_plan, result
+        )
+        if change_plan is planning.change_plan:
+            return planning
+        target_plan = map_change_plan_to_track_info(change_plan)
+        return replace(
+            planning,
+            candidate_count=planning.candidate_count + 1,
+            decisions=decisions,
+            change_plan=change_plan,
+            target_plan=target_plan,
+        )
+
+    @staticmethod
+    def _integrate_import_bpm(
+        planning: ImportTrackPlanningResult, result: BpmPlanningResult
+    ) -> ImportTrackPlanningResult:
+        decisions, change_plan = _change_plan_with_bpm(
+            planning.decisions, planning.change_plan, result
+        )
+        if change_plan is planning.change_plan:
+            return planning
+        target_plan = map_change_plan_to_track_info(change_plan)
+        return replace(
+            planning,
+            candidate_count=planning.candidate_count + 1,
+            decisions=decisions,
+            change_plan=change_plan,
+            target_plan=target_plan,
+        )
+
+    @staticmethod
+    def _bpm_file_change(result: BpmPlanningResult) -> PlannedChange | None:
+        if result.canonical_bpm is None:
+            return None
+        candidate = _bpm_candidate(result)
+        return PlannedChange(
+            "bpm",
+            result.current_bpm,
+            result.canonical_bpm,
+            candidate,
+            result.reason or "approved BPM file synchronization",
         )
 
     def _collect_track_candidates(

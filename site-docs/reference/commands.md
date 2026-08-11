@@ -13,9 +13,9 @@ beet nm [OPTIONS] [QUERY]
 | Invocation | Network | beets database | Audio files |
 | --- | --- | --- | --- |
 | `beet nm QUERY` | Enabled enrichment providers | No | No |
-| `beet nm --apply QUERY` | Enabled enrichment providers | Ordinary metadata | No |
+| `beet nm --apply QUERY` | Enabled enrichment providers | Ordinary metadata and verified artwork `artpath` | Verified `cover.jpg`; no audio-file mutation |
 | `beet nm --apply --partial QUERY` | Enabled enrichment providers | Safe ordinary fields | No |
-| `beet nm --apply --write QUERY` | Enabled enrichment providers | Ordinary metadata and operational `mtime` | Supported prepared metadata tags |
+| `beet nm --apply --write QUERY` | Same prepared provider/analysis work | Ordinary metadata, artwork, and operational `mtime` | Supported metadata/BPM tags plus prepared cover embedding |
 | `beet nm --identity QUERY` | MusicBrainz identity source | No | No |
 | `beet nm --identity --apply QUERY` | MusicBrainz identity source | Four MBID columns | No |
 | `beet nm --acoustid QUERY` | Configured AcoustID lookup | No | No |
@@ -64,7 +64,7 @@ beet nm --identity --all
 - Query: required unless `--all` is used.
 - Ordinary mode: strict database application; provider network enabled.
 - Identity mode: coherent four-MBID database repair; MusicBrainz network enabled.
-- File effect: none unless ordinary mode also has `--write`.
+- File effect: verified `cover.jpg` sidecars may be written; audio files remain unchanged unless `--write` is also present.
 - Valid with: ordinary mode, `--partial`, `--write`, `--identity`, or `--acoustid`.
 - Invalid with: `--identity-tags`.
 - Common block: ordinary `REVIEW`/mapping blocker, or identity ambiguity.
@@ -161,9 +161,9 @@ beet nm --identity-tags album:"Example Album"
 - Type: boolean permission flag; default off.
 - Mode: ordinary metadata requires `--apply`; legacy identity synchronization requires `--identity-tags`.
 - Query: required unless `--all` is used.
-- Network: does not enable or expand provider work.
+- Network/analysis: does not enable or expand CAA lookup, image selection, or Librosa work.
 - Database: ordinary changes come from `--apply`; successful file replacement also updates Item `mtime`.
-- Files: verified replacement of eligible files using only the already prepared plan; legacy identity mode still writes exactly four MBID tags.
+- Files: verified replacement using only the already prepared plan, including BPM tags and one primary front image; legacy identity mode still writes exactly four MBID tags.
 - Invalid without: either ordinary `--apply` or `--identity-tags`.
 - Common block: candidate round trip or required filesystem guarantee fails.
 

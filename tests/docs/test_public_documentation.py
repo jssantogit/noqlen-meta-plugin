@@ -23,8 +23,16 @@ def test_default_config_is_fresh_and_complete() -> None:
     assert "mood" not in second["fields"]
     assert second["fields"]["artist_areas"] is False
     assert second["providers"]["musicbrainz"]["enabled"] is True
+    assert second["providers"]["coverartarchive"]["enabled"] is True
+    assert second["artwork"] == {"size": "original", "replace_existing": False}
+    assert second["bpm"] == {
+        "round": False,
+        "recalculate_existing": False,
+        "octave_normalization": False,
+        "octave_range": {"min": 70, "max": 180},
+    }
     assert second["local_analysis"] == {
-        "bpm": {"enabled": True, "mode": "fallback"},
+        "bpm": {"enabled": False, "analysis_mode": "full", "window_seconds": 90},
         "mood": {"enabled": False},
     }
 

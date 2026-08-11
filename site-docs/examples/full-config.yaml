@@ -66,6 +66,20 @@ noqlenmeta:
       storefront: us
     lrclib:
       enabled: false
+    coverartarchive:
+      enabled: true
+
+  artwork:
+    size: original
+    replace_existing: false
+
+  bpm:
+    round: false
+    recalculate_existing: false
+    octave_normalization: false
+    octave_range:
+      min: 70
+      max: 180
 
   resolution:
     authority: {}
@@ -74,7 +88,8 @@ noqlenmeta:
 
   local_analysis:
     bpm:
-      enabled: true
-      mode: fallback
+      enabled: false
+      analysis_mode: full
+      window_seconds: 90
     mood:
       enabled: false

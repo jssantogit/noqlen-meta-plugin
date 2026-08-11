@@ -130,11 +130,13 @@ def configure_enabled(
     storefront: str = "us",
     resolution: dict[str, object] | None = None,
 ) -> None:
+    configured_fields = {"cover": False}
+    configured_fields.update(fields or {})
     settings: dict[str, object] = {
         "preview": preview,
         "apply": apply,
         "genres": {"num_genres": 2, "promote_styles": True},
-        "fields": fields or {},
+        "fields": configured_fields,
         "providers": {
             "discogs": {"enabled": discogs, "user_token": TOKEN},
             "musicbrainz": {"enabled": musicbrainz},
@@ -170,6 +172,7 @@ def test_configuration_defaults_and_redacts_user_token() -> None:
     assert plugin.config["providers"]["itunes"]["enabled"].get(bool) is False
     assert plugin.config["providers"]["itunes"]["storefront"].as_str() == "us"
     assert plugin.config["providers"]["lrclib"]["enabled"].get(bool) is False
+    assert plugin.config["providers"]["coverartarchive"]["enabled"].get(bool) is True
     assert plugin.config["resolution"]["authority"].get(dict) == {}
     assert plugin.config["resolution"]["min_confidence"].get(dict) == {}
     assert plugin.config["resolution"]["preserve_existing"].get(dict) == {}

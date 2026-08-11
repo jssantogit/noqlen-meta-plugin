@@ -76,13 +76,15 @@ def test_integral_bpm_round_trips_as_canonical_float(library: Library) -> None:
     assert fresh.bpm == 126
 
 
-def test_fractional_bpm_is_rejected_before_lossy_store(library: Library) -> None:
+def test_fractional_bpm_round_trips_as_canonical_float(
+    loaded_plugin: None, library: Library
+) -> None:
     item = add_item(library)
 
-    with pytest.raises(LibraryTrackApplicationError, match="fractional value losslessly"):
-        apply_library_track_plan(item, target_plan(planned_change("bpm", 126.4)))
+    result = apply_library_track_plan(item, target_plan(planned_change("bpm", 126.4)))
 
-    assert library.get_item(item.id).bpm == 0
+    assert result.stored
+    assert library.get_item(item.id).bpm == 126.4
 
 
 def test_stale_database_state_is_rejected(library: Library) -> None:

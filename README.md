@@ -57,6 +57,12 @@ Discogs search needs the optional client:
 pip install "beets-noqlenmeta[discogs]"
 ```
 
+Opt-in local BPM analysis uses the lazy audio extra:
+
+```bash
+pip install "beets-noqlenmeta[audio]"
+```
+
 No extra Python dependency is required for AcoustID lookup or stored-fingerprint
 reuse. Explicit missing-fingerprint calculation uses an external `fpcalc`
 executable (Chromaprint), configurable through `noqlenmeta.acoustid.fpcalc`.
@@ -203,6 +209,8 @@ Last.fm are opt-in. AcoustID remains a separate recording-evidence subsystem.
 | Last.fm | Track -> Release -> Artist, opt-in | Classified genre/style/mood community tags only while requested fields remain unresolved |
 | iTunes | Releases | Album genre and release year |
 | LRCLIB | Importer-selected tracks | Plain lyrics; synchronized lyrics preview as blocked |
+| Cover Art Archive | Exact album Releases | Approved main-front artwork, with Release Group fallback only after definitive absence |
+| Local Librosa analysis | User audio, opt-in `[audio]` extra | BPM only; no external BPM provider |
 | MusicBrainz identity source | Separate identity modes | Four MusicBrainz identity fields |
 | AcoustID evidence | Existing-library identity/standalone mode | Recording compatibility evidence and two AcoustID database fields |
 
@@ -221,9 +229,11 @@ never guessed from names, language, release country, script, or place strings.
 
 Verified semantic file mappings are available for `styles`, `moods`,
 `lyrics_languages`, `artist_languages`, `artist_countries`, and `artist_areas`
-on FLAC, MP3, M4A/MP4, Ogg Vorbis, and Opus. Artwork/covers, BPM collection,
-audio analysis, synchronized lyrics, and local ML mood analysis remain outside
-this phase.
+on FLAC, MP3, M4A/MP4, Ogg Vorbis, and Opus. Album artwork uses exact approved
+CAA fronts, deterministic `cover.jpg` sidecars, and optional verified embedding.
+Local BPM analysis is disabled by default, preserves existing BPM unless
+recalculation is requested, and imports Librosa only when analysis runs.
+Synchronized lyrics and local ML mood analysis remain outside this phase.
 
 Identity-tag round trips are tested with:
 
