@@ -227,6 +227,14 @@ _FIELD_DEFAULTS = default_config()["fields"]
 _RESOLUTION_SECTIONS = frozenset({"authority", "min_confidence", "preserve_existing"})
 
 
+class _CanonicalBpmFloat(db_types.Float):
+    # Keep beets' existing schema affinity while preserving non-integral values.
+    sql = db_types.INTEGER.sql
+
+
+_CANONICAL_BPM_FLOAT = _CanonicalBpmFloat()
+
+
 def _identity_backend_forbidden() -> FingerprintBackend:
     raise RuntimeError("fingerprint generation is forbidden during identity audit")
 
@@ -378,7 +386,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
     def __init__(self) -> None:
         super().__init__()
-        Item._fields["bpm"] = db_types.FLOAT
+        Item._fields["bpm"] = _CANONICAL_BPM_FLOAT
         for field, descriptor in SEMANTIC_MEDIA_FIELDS.items():
             if field not in MediaFile.fields():
                 self.add_media_field(field, descriptor)

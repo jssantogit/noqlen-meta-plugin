@@ -1,7 +1,7 @@
 import pytest
 from beets import plugins
 from beets.dbcore import types
-from beets.library import Album, Library
+from beets.library import Album, Item, Library
 from beets.util import cached_classproperty
 
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
@@ -21,6 +21,8 @@ def test_plugin_declares_v2_multivalue_types(loaded_plugin: NoqlenMetaPlugin) ->
     assert plugin.album_types["styles"] is types.MULTI_VALUE_DSV
     assert plugin.item_types["moods"] is types.MULTI_VALUE_DSV
     assert "bpm" not in plugin.item_types
+    assert Item._fields["bpm"].normalize(126.4) == 126.4
+    assert Item._fields["bpm"].sql == types.INTEGER.sql
 
 
 def test_styles_round_trip_as_multiple_album_values(tmp_path, loaded_plugin) -> None:
