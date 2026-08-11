@@ -15,14 +15,14 @@ can be represented safely.
 | `media` | on | Discogs, MusicBrainz | Release media | None | Importer can apply one value; library mode blocks. |
 | `format_descriptions` | on | Discogs | None | None | Can be resolved/previewed but v1 blocks application. |
 | `moods` | on | None currently | Typed track list | Typed Item list | Foundation storage exists; semantic mood normalization is deferred. |
-| `bpm` | on | None currently | Numeric track target | Built-in Item BPM | No analyzer/provider is delivered yet; fractional values block where beets would round them. |
+| `bpm` | on | Optional local Librosa | Numeric track target | Float Item BPM | Existing values are preserved by default; local analysis is opt-in and failures stay track-local. |
 | `lyrics_languages` | on | None currently | Typed track list | Typed Item list | Semantic MusicBrainz lookup is deferred. |
 | `artist_countries` | on | None currently | Typed track/album list | Typed Item/Album list | Artist provider lookup is deferred. |
 | `artist_areas` | off | None currently | Typed track/album list | Typed Item/Album list | Artist provider lookup is deferred. |
 | `artist_languages` | on | None currently | Typed track/album list | Typed Item/Album list | Artist-language derivation is deferred. |
 | `lyrics` | off | LRCLIB | Selected `TrackInfo.lyrics` | Item lyrics | Importer and existing-library Items share LRCLIB resolution. |
 | `synced_lyrics` | off | LRCLIB | No lossless target | No lossless target | Previewed as blocked; synchronized lyrics/SYLT are not applied. |
-| `cover` | on | None currently | None | None | Cover Art Archive/download/embed are deferred. |
+| `cover` | on | Cover Art Archive | Album sidecar/embed | Album sidecar/embed | Exact approved main front; fixed `cover.jpg`; no singleton artwork. |
 
 Provider candidates retain structured values. If beets offers only a singular
 target and a provider offers multiple values, strict mode blocks the target;
@@ -38,3 +38,7 @@ Ordinary `--apply --write` synchronizes only currently supported MediaFile
 targets from the prepared plan. Identity workflows do not use this table or field switches. They always handle
 exactly four MusicBrainz fields: release, release group, recording, and release
 track IDs.
+
+BPM is canonical `float`. `round: true` is useful for formats whose BPM tag
+cannot preserve a fraction. Artwork remains a separate verified binary pipeline,
+not an ordinary scalar field change.

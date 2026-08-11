@@ -1,5 +1,6 @@
 """Noqlen Meta beets plugin."""
 
+import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 
@@ -357,6 +358,15 @@ class PreparedLibraryIdentityPlan:
     total: int
 
 
+@dataclass(frozen=True, slots=True)
+class PreparedImportArtwork:
+    key: tuple[str, str, str, int]
+    lookup: ArtworkLookupResult | None
+    settings: ArtworkSettings
+    local_source: bytes | None
+    write_enabled: bool
+
+
 class NoqlenMetaPlugin(BeetsPlugin):
     """Entry point loaded by beets as the ``noqlenmeta`` plugin."""
 
@@ -384,7 +394,11 @@ class NoqlenMetaPlugin(BeetsPlugin):
         self._musicbrainz_identity_source: MusicBrainzIdentitySource | None = None
         self._coverartarchive_client: CoverArtArchiveClient | None = None
         self._tempo_analyzer: TempoAnalyzer | None = None
+        self._pending_import_artwork: dict[
+            tuple[str, str, str, int], list[PreparedImportArtwork]
+        ] = {}
         self.register_listener("import_task_choice", self._import_task_choice)
+        self.register_listener("album_imported", self._album_imported)
         self._command = Subcommand(
             "noqlenmeta",
             help="preview or apply metadata and MusicBrainz identity workflows",
@@ -475,6 +489,11 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
         policy = self._resolution_policy()
         local_bpm_settings = self._local_bpm_settings()
+        import_artwork = self._prepare_import_artwork(session, task, album_info)
+        if import_artwork is not None and apply_enabled:
+            self._pending_import_artwork.setdefault(import_artwork.key, []).append(
+                import_artwork
+            )
         album_semantic_enabled = policy.is_provider_enabled("musicbrainz") and any(
             policy.is_field_enabled(field)
             for field in ("artist_countries", "artist_areas", "artist_languages")
@@ -497,7 +516,12 @@ class NoqlenMetaPlugin(BeetsPlugin):
             and (identity_preview or identity_apply)
             and selected_identity is not None
         )
-        if not release_can_contribute and not track_can_contribute and not identity_can_execute:
+        if (
+            not release_can_contribute
+            and not track_can_contribute
+            and not identity_can_execute
+            and import_artwork is None
+        ):
             return
 
         match = getattr(task, "match", None)
@@ -1531,6 +1555,159 @@ class NoqlenMetaPlugin(BeetsPlugin):
             return artwork_settings_from_config(self.config["artwork"].get(dict))
         except (confuse.ConfigError, ValueError) as error:
             raise ui.UserError(f"noqlenmeta: invalid artwork configuration: {error}") from None
+
+    def _prepare_import_artwork(
+        self, session: object, task: object, album_info: object | None
+    ) -> PreparedImportArtwork | None:
+        if album_info is None or not self.config["fields"]["cover"].get(bool):
+            return None
+        release_mbid = str(getattr(album_info, "mb_albumid", None) or "").strip()
+        release_group_mbid = str(
+            getattr(album_info, "mb_releasegroupid", None) or ""
+        ).strip() or None
+        items = tuple(getattr(task, "items", ()) or ())
+        item_paths = tuple(
+            item.path
+            for item in items
+            if isinstance(item, Item) and isinstance(item.path, bytes) and item.path
+        )
+        local_sidecars = tuple(
+            destination
+            for directory in sorted({os.path.dirname(path) for path in item_paths})
+            if os.path.exists(destination := os.path.join(directory, b"cover.jpg"))
+        )
+        if not release_mbid and not local_sidecars:
+            return None
+        settings = self._artwork_settings()
+        has_embedded = False
+        try:
+            has_embedded = any(MediaFile(os.fsdecode(path)).images for path in item_paths)
+        except Exception:
+            if not settings.replace_existing:
+                return None
+        local_source = (
+            local_sidecars[0]
+            if local_sidecars and not has_embedded and not settings.replace_existing
+            else None
+        )
+        lookup = None
+        if settings.replace_existing or not (local_sidecars or has_embedded):
+            if not release_mbid:
+                return None
+            context = ArtworkContext(
+                0,
+                release_mbid,
+                release_group_mbid,
+                (),
+                item_paths,
+                tuple(sorted({os.path.dirname(path) for path in item_paths})),
+                local_sidecars,
+                (),
+            )
+            lookup = self._resolve_album_artwork(context, settings)
+        key = (
+            release_mbid,
+            str(getattr(album_info, "artist", None) or "").strip(),
+            str(getattr(album_info, "album", None) or "").strip(),
+            len(items),
+        )
+        write_enabled = False
+        session_config = getattr(session, "config", None)
+        if session_config is not None:
+            try:
+                write_enabled = session_config["write"].get(bool)
+            except (confuse.ConfigError, KeyError, TypeError):
+                write_enabled = False
+        preview_plan = ArtworkPlan(
+            0,
+            (
+                lookup.outcome
+                if lookup is not None
+                else "PRESERVED"
+                if has_embedded
+                else "RESOLVED"
+            ),
+            lookup.candidate if lookup is not None else None,
+            local_source,
+            (),
+            None,
+            (),
+            settings.replace_existing,
+            (
+                lookup.reason
+                if lookup is not None
+                else "existing embedded artwork preserves the album"
+                if has_embedded
+                else "existing cover.jpg is authoritative"
+            ),
+        )
+        self._render_artwork_plan(preview_plan)
+        return PreparedImportArtwork(key, lookup, settings, local_source, write_enabled)
+
+    def _album_imported(self, lib: Library, album: Album) -> None:
+        items = tuple(album.items())
+        key = (
+            str(album.get("mb_albumid") or "").strip(),
+            str(album.albumartist or "").strip(),
+            str(album.album or "").strip(),
+            len(items),
+        )
+        pending = self._pending_import_artwork.get(key)
+        if not pending:
+            return
+        prepared = pending.pop(0)
+        if not pending:
+            self._pending_import_artwork.pop(key, None)
+        try:
+            context = artwork_context_from_album(album, items)
+            if prepared.local_source is None:
+                plan = plan_artwork_context(
+                    context,
+                    prepared.lookup,
+                    prepared.settings,
+                    write_enabled=prepared.write_enabled,
+                )
+            elif context.embedded_art_item_ids and not prepared.settings.replace_existing:
+                plan = plan_artwork_context(
+                    context,
+                    None,
+                    prepared.settings,
+                    write_enabled=prepared.write_enabled,
+                )
+            else:
+                destinations = tuple(
+                    os.path.join(directory, b"cover.jpg")
+                    for directory in context.disc_directories
+                    if os.path.join(directory, b"cover.jpg") != prepared.local_source
+                )
+                canonical = (
+                    destinations[0] if destinations else prepared.local_source
+                )
+                plan = ArtworkPlan(
+                    album.id,
+                    "RESOLVED",
+                    None,
+                    prepared.local_source,
+                    destinations,
+                    canonical,
+                    context.item_ids if prepared.write_enabled else (),
+                    False,
+                    "existing cover.jpg is authoritative",
+                )
+        except ValueError as error:
+            plan = ArtworkPlan(
+                album.id,
+                "BLOCKED",
+                None,
+                None,
+                (),
+                None,
+                (),
+                prepared.settings.replace_existing,
+                str(error),
+            )
+        result = self._apply_artwork_plan(lib, album, plan)
+        self._render_artwork_application_result(result)
 
     def _bpm_settings(self) -> BpmSettings:
         try:

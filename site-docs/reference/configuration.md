@@ -103,14 +103,14 @@ exist. Enabling a field does not guarantee an enabled provider can supply it.
 | `noqlenmeta.fields.media` | `true` | Release | Preview/block | Importer target exists; persistent Album target does not. |
 | `noqlenmeta.fields.format_descriptions` | `true` | Preview/block | Preview/block | Discogs can supply it; v1 has no lossless ordinary target. |
 | `noqlenmeta.fields.moods` | `true` | Typed track target | Typed Item target | Classified MusicBrainz tags; optional Last.fm corroboration/fallback. |
-| `noqlenmeta.fields.bpm` | `true` | Numeric track target | Built-in Item target | Foundation adds no provider or local analyzer. |
+| `noqlenmeta.fields.bpm` | `true` | Numeric track target | Float Item target | Enables preservation/sync and optional local Librosa analysis. |
 | `noqlenmeta.fields.lyrics_languages` | `true` | Typed track target | Typed Item target | Exact Recording -> Work lookup; stores three-letter codes. |
 | `noqlenmeta.fields.artist_countries` | `true` | Typed release/track targets | Typed Album/Item targets | Structurally derived MusicBrainz geographic identification. |
 | `noqlenmeta.fields.artist_areas` | `false` | Typed release/track targets | Typed Album/Item targets | Trustworthy MusicBrainz main area; no string inference. |
 | `noqlenmeta.fields.artist_languages` | `true` | Typed release/track targets | Typed Album/Item targets | Three-letter codes derived only from current-target Works. |
 | `noqlenmeta.fields.lyrics` | `false` | Selected tracks | Items | LRCLIB plain lyrics use shared import/library resolution. |
 | `noqlenmeta.fields.synced_lyrics` | `false` | Preview/block | Preview/block | No lossless synchronized-lyrics target is delivered. |
-| `noqlenmeta.fields.cover` | `true` | None currently | None currently | CAA/download/embed are deferred. |
+| `noqlenmeta.fields.cover` | `true` | Album artwork | Album artwork | Exact CAA front selection and deterministic `cover.jpg`. |
 
 Example:
 
@@ -179,24 +179,37 @@ tracks and existing-library Items. No provider key controls identity-tag mode.
 | `noqlenmeta.providers.itunes.enabled` | boolean | `false` | Enables album genres/year from the public search API. |
 | `noqlenmeta.providers.itunes.storefront` | string | `us` | Two ASCII letters such as `us`, `gb`, or `jp`; normalized lowercase when iTunes is used. |
 | `noqlenmeta.providers.lrclib.enabled` | boolean | `false` | Enables exact-signature selected-track lookup; no API key. |
+| `noqlenmeta.providers.coverartarchive.enabled` | boolean | `true` | Enables exact Release artwork metadata, then Release Group fallback only after definitive absence; no API key. |
 
-## Local Analysis Structure
+## Artwork And BPM
 
-- `noqlenmeta.local_analysis.bpm.enabled`: boolean, default `true`.
-- `noqlenmeta.local_analysis.bpm.mode`: string, currently `fallback`.
+- `noqlenmeta.artwork.size`: `original`, `1200`, `500`, or `250`; default `original`. Explicit thumbnail sizes are maxima and never escalate. A non-JPEG original uses CAA JPEG thumbnails in `1200 -> 500 -> 250` order.
+- `noqlenmeta.artwork.replace_existing`: boolean, default `false`. Existing `cover.jpg` or any embedded image preserves the album as curated. With replacement enabled, one selected CAA front becomes uniform across discs and tracks.
+- `noqlenmeta.bpm.round`: boolean, default `false`; rounding happens before persistence.
+- `noqlenmeta.bpm.recalculate_existing`: boolean, default `false`; existing BPM otherwise avoids analysis.
+- `noqlenmeta.bpm.octave_normalization`: boolean, default `false`; only powers of two may move BPM into the configured range.
+- `noqlenmeta.bpm.octave_range.min`: positive finite number, default `70`.
+- `noqlenmeta.bpm.octave_range.max`: positive finite number greater than `min`, default `180`.
+- `noqlenmeta.local_analysis.bpm.enabled`: boolean, default `false`.
+- `noqlenmeta.local_analysis.bpm.analysis_mode`: `full` or `window`; default `full`.
+- `noqlenmeta.local_analysis.bpm.window_seconds`: positive finite number, default `90`; window mode uses one centered window.
 - `noqlenmeta.local_analysis.mood.enabled`: boolean, default `false`.
 
-These are validated Foundation settings. They do not run analysis in this
-change: no BPM backend, `[audio]` dependency, or local mood model is included
-yet. `--write` never activates analysis.
+Install `beets-noqlenmeta[audio]` to enable the lazy Librosa backend. Local BPM
+failure is isolated to that track. There is no external BPM provider and no
+local mood model. `--write` never starts analysis or changes prepared evidence.
+
+Artwork is album-only. CAA accepts only `front: true` plus `approved: true`.
+Sidecars are always named `cover.jpg`; multidisc albums receive identical bytes
+in every real disc directory. `--apply` writes and verifies sidecars and
+`Album.artpath`; `--apply --write` additionally embeds the same bytes.
 
 Discogs remains opt-in and its structured ordered `styles` tuple takes
 precedence over community style tags. MusicBrainz and Last.fm community tags
 are persisted only after deterministic classification; unknown tags are not
 accepted. Semantic file synchronization uses custom lossless list descriptors
 for `styles`, `moods`, `lyrics_languages`, `artist_languages`,
-`artist_countries`, and `artist_areas`. Artwork and BPM collection remain
-deferred.
+`artist_countries`, and `artist_areas`.
 
 Token example without a secret value:
 

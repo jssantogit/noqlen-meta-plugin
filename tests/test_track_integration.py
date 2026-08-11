@@ -381,7 +381,7 @@ def test_current_values_from_item_are_local_and_read_only(
     assert current_values_from_library_item(item) == {
         "lyrics": "line one\nline two",
         "synced_lyrics": "[00:01.00]line one",
-        "bpm": 126.0,
+        "bpm": 126.4,
         "moods": ("Dark", "Energetic"),
     }
     assert dict(item) == snapshot

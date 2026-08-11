@@ -11,15 +11,17 @@ tag write.
 
 Noqlen importer enrichment can mutate the selected `AlbumInfo` and
 `TrackInfo`. beets later applies that selected metadata, persists import state,
-and performs its normal single write when enabled. Noqlen does not duplicate
-the importer file write.
+and performs its normal tag write when enabled. Artwork selection is also
+prepared at choice time, then Noqlen writes verified `cover.jpg` sidecars only
+after final album paths exist. When `import.write` is enabled, the same prepared
+JPEG may be embedded; this never causes another CAA lookup.
 
 | Noqlen importer `apply` | beets `import.write` | Outcome |
 | ---: | ---: | --- |
 | false | false | Preview only; no Noqlen mutation; no beets tag write. |
 | false | true | beets writes its selected metadata without Noqlen proposals. |
-| true | false | Noqlen modifies selected metadata; beets persists import state but does not write file tags. |
-| true | true | One normal beets write includes the applied Noqlen metadata. |
+| true | false | Noqlen modifies selected metadata and may create verified artwork sidecars; audio tags/embedding remain unchanged. |
+| true | true | beets writes selected metadata; Noqlen may embed the already-prepared album cover after final paths exist. |
 
 The beets importer also decides what metadata is selected:
 

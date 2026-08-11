@@ -1,5 +1,6 @@
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from beets import config
@@ -8,9 +9,11 @@ from mediafile import MediaFile
 
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.artwork import ArtworkCandidate, ArtworkLookupResult, ArtworkSize
+from beetsplug.noqlenmeta.artwork_application import apply_artwork_plan
 from beetsplug.noqlenmeta.tempo import LocalBpmSettings, TempoObservation
 
 FIXTURE = Path(__file__).parent / "fixtures" / "identity_tags" / "silence.flac"
+JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00" + b"x" * 20 + b"\xff\xd9"
 
 
 @pytest.fixture(autouse=True)
@@ -62,6 +65,29 @@ class TempoAnalyzer:
     def analyze(self, path: bytes, settings: LocalBpmSettings) -> TempoObservation:
         self.calls.append(path)
         return TempoObservation(self.bpm, "synthetic")
+
+
+class ConfigValue:
+    def __init__(self, value: bool) -> None:
+        self.value = value
+
+    def get(self, expected: type[bool]) -> bool:
+        return self.value
+
+
+class ArtworkResponse:
+    status_code = 200
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def iter_content(self, chunk_size: int) -> object:
+        return iter((JPEG,))
+
+
+class ArtworkSession:
+    def get(self, url: str, *, stream: bool, timeout: object) -> ArtworkResponse:
+        return ArtworkResponse()
 
 
 def test_write_changes_only_prepared_embed_targets_not_artwork_lookup(
@@ -208,3 +234,121 @@ def test_one_bpm_failure_does_not_block_sibling(tmp_path: Path) -> None:
     assert len(analyzer.calls) == 2
     assert library.get_item(items[0].id).bpm == 0.0
     assert library.get_item(items[1].id).bpm == 128.0
+
+
+@pytest.mark.parametrize("write_enabled", [False, True])
+def test_import_artwork_reuses_prepared_candidate_at_final_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, write_enabled: bool
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    source_paths = [source / "one.flac", source / "two.flac"]
+    for path in source_paths:
+        shutil.copy2(FIXTURE, path)
+    source_items = [
+        Item(path=bytes(path), artist="Artist", title=path.stem) for path in source_paths
+    ]
+    plugin = NoqlenMetaPlugin()
+    for field in plugin.config["fields"].keys():
+        plugin.config["fields"][field].set(field == "cover")
+    artwork = ArtworkCandidate(
+        "release",
+        "release-id",
+        None,
+        None,
+        "123",
+        "https://archive.test/123.jpg",
+        {},
+        ArtworkSize.ORIGINAL,
+        "original",
+        "https://archive.test/123.jpg",
+    )
+    lookup_calls = 0
+
+    def resolve(*args: object) -> ArtworkLookupResult:
+        nonlocal lookup_calls
+        lookup_calls += 1
+        return ArtworkLookupResult("RESOLVED", artwork)
+
+    monkeypatch.setattr(plugin, "_resolve_album_artwork", resolve)
+    monkeypatch.setattr(
+        plugin,
+        "_apply_artwork_plan",
+        lambda library, album, plan: apply_artwork_plan(
+            library, album, plan, ArtworkSession()
+        ),
+    )
+    info = SimpleNamespace(
+        mb_albumid="release-id",
+        mb_releasegroupid=None,
+        artist="Artist",
+        album="Album",
+    )
+    task = SimpleNamespace(items=source_items)
+    session = SimpleNamespace(config={"write": ConfigValue(write_enabled)})
+
+    prepared = plugin._prepare_import_artwork(session, task, info)
+
+    assert prepared is not None
+    assert prepared.lookup is not None
+    assert prepared.lookup.candidate is artwork
+    assert lookup_calls == 1
+    plugin._pending_import_artwork.setdefault(prepared.key, []).append(prepared)
+
+    library = Library(str(tmp_path / "library.db"), set_music_dir=False)
+    final_items = []
+    for index, source_path in enumerate(source_paths, 1):
+        directory = tmp_path / f"CD{index}"
+        directory.mkdir()
+        final_path = directory / source_path.name
+        shutil.copy2(source_path, final_path)
+        final_items.append(
+            Item(
+                path=bytes(final_path),
+                albumartist="Artist",
+                album="Album",
+                artist="Artist",
+                title=source_path.stem,
+                mb_albumid="release-id",
+            )
+        )
+    album = library.add_album(final_items)
+
+    plugin._album_imported(library, album)
+
+    assert lookup_calls == 1
+    sidecars = [tmp_path / "CD1" / "cover.jpg", tmp_path / "CD2" / "cover.jpg"]
+    assert [path.read_bytes() for path in sidecars] == [JPEG, JPEG]
+    assert library.get_album(album.id).artpath == bytes(sidecars[0])
+    for item in album.items():
+        images = MediaFile(Path(item.path.decode())).images
+        assert bool(images) is write_enabled
+
+
+def test_import_existing_cover_is_authoritative_without_caa(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    source_path = source / "track.flac"
+    shutil.copy2(FIXTURE, source_path)
+    (source / "cover.jpg").write_bytes(JPEG)
+    plugin = NoqlenMetaPlugin()
+    monkeypatch.setattr(
+        plugin,
+        "_resolve_album_artwork",
+        lambda *args: pytest.fail("CAA lookup replaced authoritative local artwork"),
+    )
+    prepared = plugin._prepare_import_artwork(
+        SimpleNamespace(config={"write": ConfigValue(False)}),
+        SimpleNamespace(items=[Item(path=bytes(source_path))]),
+        SimpleNamespace(
+            mb_albumid="release-id",
+            mb_releasegroupid=None,
+            artist="Artist",
+            album="Album",
+        ),
+    )
+
+    assert prepared is not None
+    assert prepared.local_source == bytes(source / "cover.jpg")

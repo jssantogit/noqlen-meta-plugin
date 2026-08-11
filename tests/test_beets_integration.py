@@ -130,11 +130,13 @@ def configure_enabled(
     storefront: str = "us",
     resolution: dict[str, object] | None = None,
 ) -> None:
+    configured_fields = {"cover": False}
+    configured_fields.update(fields or {})
     settings: dict[str, object] = {
         "preview": preview,
         "apply": apply,
         "genres": {"num_genres": 2, "promote_styles": True},
-        "fields": fields or {},
+        "fields": configured_fields,
         "providers": {
             "discogs": {"enabled": discogs, "user_token": TOKEN},
             "musicbrainz": {"enabled": musicbrainz},
