@@ -20,7 +20,6 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 C
     import tomli as tomllib
 
 EXPECTED_NAME = "beets-noqlenmeta"
-EXPECTED_VERSION = "1.0.0"
 EXPECTED_LICENSE = "MIT"
 EXPECTED_LICENSE_FILES = ["LICENSE"]
 EXPECTED_COPYRIGHT = "Copyright (c) 2026 João Pedro Rosa dos Santos"
@@ -58,6 +57,16 @@ def _wheel_metadata(path: Path) -> tuple[Message, set[str]]:
             raise ValueError("wheel must contain exactly one METADATA file")
         metadata = message_from_bytes(archive.read(metadata_names[0]))
     return metadata, names
+
+
+def _wheel_identity_failures(metadata: Message, pyproject_path: Path) -> list[str]:
+    project = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))["project"]
+    failures: list[str] = []
+    if metadata.get("Name") != EXPECTED_NAME:
+        failures.append(f"wheel name is {metadata.get('Name')!r}")
+    if metadata.get("Version") != project["version"]:
+        failures.append(f"wheel version is {metadata.get('Version')!r}")
+    return failures
 
 
 def _sdist_names(path: Path) -> set[str]:
@@ -195,10 +204,7 @@ def main() -> int:
         except (OSError, ValueError, zipfile.BadZipFile) as error:
             failures.append(f"invalid wheel: {error}")
         else:
-            if metadata.get("Name") != EXPECTED_NAME:
-                failures.append(f"wheel name is {metadata.get('Name')!r}")
-            if metadata.get("Version") != EXPECTED_VERSION:
-                failures.append(f"wheel version is {metadata.get('Version')!r}")
+            failures.extend(_wheel_identity_failures(metadata, Path("pyproject.toml")))
             failures.extend(_requires_python_failures(metadata, Path("pyproject.toml")))
             failures.extend(_wheel_license_failures(metadata, names))
             failures.extend(

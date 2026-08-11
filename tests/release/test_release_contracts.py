@@ -25,6 +25,7 @@ _SCRIPT_SPEC.loader.exec_module(_SCRIPT_MODULE)
 _requires_python_failures = _SCRIPT_MODULE._requires_python_failures
 _sdist_license_failures = _SCRIPT_MODULE._sdist_license_failures
 _source_license_failures = _SCRIPT_MODULE._source_license_failures
+_wheel_identity_failures = _SCRIPT_MODULE._wheel_identity_failures
 _wheel_license_failures = _SCRIPT_MODULE._wheel_license_failures
 
 
@@ -165,6 +166,22 @@ def test_wheel_and_sdist_license_contracts() -> None:
 
     assert _wheel_license_failures(metadata, wheel_names) == []
     assert _sdist_license_failures(sdist_names) == []
+
+
+def test_wheel_identity_uses_active_project_version(tmp_path: Path) -> None:
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        '[project]\nname = "beets-noqlenmeta"\nversion = "2.0.0"\n',
+        encoding="utf-8",
+    )
+    metadata = Message()
+    metadata["Name"] = "beets-noqlenmeta"
+    metadata["Version"] = "2.0.0"
+
+    assert _wheel_identity_failures(metadata, pyproject) == []
+
+    metadata.replace_header("Version", "1.0.0")
+    assert _wheel_identity_failures(metadata, pyproject) == ["wheel version is '1.0.0'"]
 
 
 def test_archive_license_validation_rejects_missing_or_wrong_data() -> None:
