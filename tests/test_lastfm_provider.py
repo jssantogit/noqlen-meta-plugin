@@ -26,6 +26,8 @@ from beetsplug.noqlenmeta.providers.lastfm import (
     _LastFmTransport,
 )
 from beetsplug.noqlenmeta.providers.specs import LASTFM_SPEC, ProviderScope
+from beetsplug.noqlenmeta.resolver import FieldRule, ResolutionPolicy
+from beetsplug.noqlenmeta.semantic_enrichment import collect_semantic_enrichment
 
 FIXTURES = Path(__file__).parent / "fixtures" / "lastfm"
 FAKE_KEY = "fake-test-key"
@@ -481,6 +483,33 @@ def test_release_and_artist_semantic_tags_keep_their_scopes() -> None:
     assert release.tags[0].category is SemanticCategory.MOOD
     assert artist.genres[0].scope is ProviderScope.ARTIST
     assert artist.genres[0].genre == "Alternative Metal"
+
+
+def test_production_community_style_reaches_orchestration_without_discogs() -> None:
+    payload = {
+        "toptags": {
+            "@attr": {"artist": "Gojira", "album": "From Mars to Sirius"},
+            "tag": [{"name": "Acoustic", "count": 80}],
+        }
+    }
+    lastfm = LastFmProvider(fetch_top_tags=FetchTopTags(payload))
+    policy = ResolutionPolicy(
+        field_rules={"styles": FieldRule(True, ("lastfm",))},
+        providers={"lastfm": True},
+    )
+
+    result = collect_semantic_enrichment(
+        {"styles"},
+        policy=policy,
+        lastfm_release=lambda: lastfm.get_semantic_evidence(context()),
+    )
+
+    assert len(result.candidates) == 1
+    candidate = result.candidates[0]
+    assert candidate.field == "styles"
+    assert candidate.value == ("Acoustic",)
+    assert candidate.provider == "lastfm"
+    assert result.outcomes["styles"].provenance == ("lastfm",)
 
 
 @pytest.mark.live

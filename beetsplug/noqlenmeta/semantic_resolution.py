@@ -75,6 +75,7 @@ def _filter_bundle(
             and field in fields
             and item.confidence >= min_confidence.get(field, 0.0)
         ),
+        unavailable_fields=frozenset(bundle.unavailable_fields) & set(fields),
     )
 
 

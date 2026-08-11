@@ -59,7 +59,7 @@ def test_distinct_provider_corroboration_beats_single_provider() -> None:
 def test_structured_styles_are_preserved_without_community_merging() -> None:
     community = (
         SemanticTagEvidence(
-            "Alternative Metal",
+            "Acoustic",
             SemanticCategory.STYLE,
             "lastfm",
             ProviderScope.RELEASE,
@@ -67,12 +67,12 @@ def test_structured_styles_are_preserved_without_community_merging() -> None:
             "synthetic",
             None,
             8,
-            "alternative metal",
+            "acoustic",
         ),
     )
     assert resolve_styles(
-        ("Progressive Metal", "Technical Death Metal"), community
-    ) == ("Progressive Metal", "Technical Death Metal")
+        ("Ambient", "Experimental"), community
+    ) == ("Ambient", "Experimental")
 
 
 def test_mood_limit_never_pads_missing_values() -> None:
@@ -102,7 +102,7 @@ def semantic_bundle(*fields: str) -> SemanticEvidenceBundle:
         )
     for field, category, term in (
         ("moods", SemanticCategory.MOOD, "Dreamy"),
-        ("styles", SemanticCategory.STYLE, "Alternative Metal"),
+        ("styles", SemanticCategory.STYLE, "Acoustic"),
     ):
         if field in fields:
             tags.append(
@@ -180,6 +180,20 @@ def test_fallback_reaches_artist_when_track_and_release_are_insufficient() -> No
         collect("artist", semantic_bundle("moods")),
     )
     assert calls == ["track", "release", "artist"]
+
+
+def test_fallback_filter_preserves_field_local_unavailability() -> None:
+    bundles = collect_scoped_semantic_fallback(
+        {"moods"},
+        set(),
+        lambda: SemanticEvidenceBundle(
+            unavailable_fields=frozenset({"genres", "moods"})
+        ),
+        lambda: semantic_bundle("moods"),
+        lambda: semantic_bundle(),
+    )
+
+    assert bundles[0].unavailable_fields == frozenset({"moods"})
 
 
 def test_release_beats_artist_after_ineligible_track_is_filtered() -> None:

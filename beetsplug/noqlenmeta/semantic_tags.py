@@ -18,9 +18,8 @@ def semantic_identity(text: str) -> str:
 
 _NOISE = {"seen live": "Seen Live", "spotify": "Spotify", "last.fm": "Last.fm"}
 _STYLES = {
+    "acoustic": "Acoustic",
     "alternative metal": "Alternative Metal",
-    "progressive metal": "Progressive Metal",
-    "technical death metal": "Technical Death Metal",
 }
 _MOODS = {
     "melancholy": "Melancholic",

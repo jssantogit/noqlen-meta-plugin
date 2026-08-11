@@ -28,6 +28,7 @@ WORK_TWO = "33333333-3333-4333-8333-333333333333"
 ARTIST_MBID = "44444444-4444-4444-8444-444444444444"
 SALVADOR_MBID = "55555555-5555-4555-8555-555555555555"
 BRAZIL_MBID = "66666666-6666-4666-8666-666666666666"
+FAILED_AREA_MBID = "77777777-7777-4777-8777-777777777777"
 
 
 def track_context() -> TrackEnrichmentContext:
@@ -48,9 +49,9 @@ def artist_context() -> ArtistEnrichmentContext:
 def client(
     *,
     recording: Mapping[str, object] | None = None,
-    works: Mapping[str, Mapping[str, object] | None] | None = None,
+    works: Mapping[str, Mapping[str, object] | Exception | None] | None = None,
     artist: Mapping[str, object] | None = None,
-    areas: Mapping[str, Mapping[str, object] | None] | None = None,
+    areas: Mapping[str, Mapping[str, object] | Exception | None] | None = None,
 ) -> tuple[MusicBrainzSemanticClient, dict[str, list[str]]]:
     calls: dict[str, list[str]] = {
         "recording": [],
@@ -59,10 +60,16 @@ def client(
         "area": [],
     }
 
-    def fetch(entity: str, values: Mapping[str, Mapping[str, object] | None]):
+    def fetch(
+        entity: str,
+        values: Mapping[str, Mapping[str, object] | Exception | None],
+    ):
         def inner(entity_id: str) -> Mapping[str, object] | None:
             calls[entity].append(entity_id)
-            return values.get(entity_id)
+            value = values.get(entity_id)
+            if isinstance(value, Exception):
+                raise value
+            return value
 
         return inner
 
@@ -149,6 +156,38 @@ def test_recording_genres_and_tags_keep_track_scope_and_filter_noise() -> None:
     assert [(item.canonical_term, item.category, item.scope) for item in bundle.tags] == [
         ("Dreamy", SemanticCategory.MOOD, ProviderScope.TRACK)
     ]
+
+
+def test_failed_work_retains_recording_semantics_and_successful_language() -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "genres": [{"name": "k-pop", "count": 9}],
+            "tags": [{"name": "dreamy", "count": 8}],
+            "relations": [
+                {"target-type": "work", "work": {"id": WORK_ONE}},
+                {"target-type": "work", "work": {"id": WORK_TWO}},
+            ],
+        },
+        works={
+            WORK_ONE: {"id": WORK_ONE, "languages": ["kor"]},
+            WORK_TWO: RequestException("temporary"),
+        },
+    )
+
+    bundle = MusicBrainzTrackProvider(semantic_client).get_semantic_evidence(
+        track_context()
+    )
+
+    assert [item.genre for item in bundle.genres] == ["K-pop"]
+    assert [item.canonical_term for item in bundle.tags] == ["Dreamy"]
+    assert {item.field: item.value for item in bundle.metadata} == {
+        "lyrics_languages": ("kor",)
+    }
+    assert bundle.unavailable_fields == frozenset(
+        {"lyrics_languages", "artist_languages"}
+    )
+    assert calls["work"] == [WORK_ONE, WORK_TWO]
 
 
 def test_genre_only_collection_does_not_fetch_works() -> None:
@@ -248,6 +287,90 @@ def test_specific_main_area_survives_when_country_is_unresolved() -> None:
     }
 
 
+def test_failed_area_ancestry_retains_artist_area_and_marks_only_country() -> None:
+    semantic_client, calls = client(
+        artist={
+            "id": ARTIST_MBID,
+            "genres": [{"name": "k-pop", "count": 4}],
+            "tags": [{"name": "dreamy", "count": 3}],
+            "area": {"id": SALVADOR_MBID, "name": "Salvador", "type": "City"},
+        },
+        areas={
+            SALVADOR_MBID: {
+                "id": SALVADOR_MBID,
+                "name": "Salvador",
+                "type": "City",
+                "relations": [
+                    {
+                        "target-type": "area",
+                        "type": "part of",
+                        "area": {"id": BRAZIL_MBID},
+                    }
+                ],
+            },
+            BRAZIL_MBID: RequestException("temporary"),
+        },
+    )
+
+    bundle = MusicBrainzArtistProvider(semantic_client).get_semantic_evidence(
+        artist_context()
+    )
+
+    assert {item.field: item.value for item in bundle.metadata} == {
+        "artist_areas": ("Salvador",)
+    }
+    assert [item.genre for item in bundle.genres] == ["K-pop"]
+    assert [item.canonical_term for item in bundle.tags] == ["Dreamy"]
+    assert bundle.unavailable_fields == frozenset({"artist_countries"})
+    assert calls["area"] == [SALVADOR_MBID, BRAZIL_MBID]
+
+
+def test_failed_area_branch_does_not_hide_country_from_independent_branch() -> None:
+    semantic_client, calls = client(
+        artist={
+            "id": ARTIST_MBID,
+            "area": {"id": SALVADOR_MBID, "name": "Salvador", "type": "City"},
+        },
+        areas={
+            SALVADOR_MBID: {
+                "id": SALVADOR_MBID,
+                "name": "Salvador",
+                "type": "City",
+                "relations": [
+                    {
+                        "target-type": "area",
+                        "type": "part of",
+                        "area": {"id": FAILED_AREA_MBID},
+                    },
+                    {
+                        "target-type": "area",
+                        "type": "part of",
+                        "area": {"id": BRAZIL_MBID},
+                    },
+                ],
+            },
+            FAILED_AREA_MBID: RequestException("temporary"),
+            BRAZIL_MBID: {
+                "id": BRAZIL_MBID,
+                "name": "Brazil",
+                "type": "Country",
+                "iso-3166-1-codes": ["BR"],
+            },
+        },
+    )
+
+    bundle = MusicBrainzArtistProvider(semantic_client).get_semantic_evidence(
+        artist_context()
+    )
+
+    assert {item.field: item.value for item in bundle.metadata} == {
+        "artist_areas": ("Salvador",),
+        "artist_countries": ("Brazil",),
+    }
+    assert bundle.unavailable_fields == frozenset({"artist_countries"})
+    assert calls["area"] == [SALVADOR_MBID, FAILED_AREA_MBID, BRAZIL_MBID]
+
+
 def test_begin_area_is_used_only_when_main_area_is_absent() -> None:
     semantic_client, _ = client(
         artist={
@@ -278,3 +401,59 @@ def test_response_mismatch_and_transient_failure_are_not_negative_cached() -> No
     with pytest.raises(ProviderError, match="response is invalid"):
         semantic_client.lookup_recording(RECORDING_MBID)
     assert calls == 2
+
+
+def test_failed_supporting_work_and_area_are_retried_not_negative_cached() -> None:
+    attempts = {"work": 0, "area": 0}
+
+    def fetch_work(work_id: str) -> Mapping[str, object]:
+        attempts["work"] += 1
+        if attempts["work"] == 1:
+            raise RequestException("temporary")
+        return {"id": work_id, "languages": ["kor"]}
+
+    def fetch_area(area_id: str) -> Mapping[str, object]:
+        attempts["area"] += 1
+        if attempts["area"] == 1:
+            raise RequestException("temporary")
+        return {
+            "id": area_id,
+            "name": "Brazil",
+            "type": "Country",
+            "iso-3166-1-codes": ["BR"],
+        }
+
+    semantic_client = MusicBrainzSemanticClient(
+        fetch_recording=lambda recording_id: {
+            "id": recording_id,
+            "relations": [{"target-type": "work", "work": {"id": WORK_ONE}}],
+        },
+        fetch_work=fetch_work,
+        fetch_artist=lambda artist_id: {
+            "id": artist_id,
+            "area": {"id": SALVADOR_MBID, "name": "Salvador", "type": "City"},
+        },
+        fetch_area=fetch_area,
+    )
+    track_provider = MusicBrainzTrackProvider(semantic_client)
+    artist_provider = MusicBrainzArtistProvider(semantic_client)
+
+    first_track = track_provider.get_semantic_evidence(track_context())
+    first_artist = artist_provider.get_semantic_evidence(artist_context())
+    second_track = track_provider.get_semantic_evidence(track_context())
+    second_artist = artist_provider.get_semantic_evidence(artist_context())
+
+    assert first_track.unavailable_fields == frozenset(
+        {"lyrics_languages", "artist_languages"}
+    )
+    assert first_artist.unavailable_fields == frozenset({"artist_countries"})
+    assert {item.field: item.value for item in second_track.metadata} == {
+        "lyrics_languages": ("kor",)
+    }
+    assert {item.field: item.value for item in second_artist.metadata} == {
+        "artist_areas": ("Salvador",),
+        "artist_countries": ("Brazil",),
+    }
+    assert not second_track.unavailable_fields
+    assert not second_artist.unavailable_fields
+    assert attempts == {"work": 2, "area": 2}

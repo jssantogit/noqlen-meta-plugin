@@ -16,6 +16,18 @@ if TYPE_CHECKING:
 ScalarMetadataValue: TypeAlias = str | int | float | bool
 MetadataValue: TypeAlias = ScalarMetadataValue | tuple[str, ...]
 
+_SEMANTIC_EVIDENCE_FIELDS = frozenset(
+    {
+        "genres",
+        "styles",
+        "moods",
+        "lyrics_languages",
+        "artist_languages",
+        "artist_countries",
+        "artist_areas",
+    }
+)
+
 
 class SemanticCategory(Enum):
     GENRE = "genre"
@@ -301,6 +313,7 @@ class SemanticEvidenceBundle:
     metadata: tuple[MetadataCandidate, ...] = ()
     genres: tuple[GenreEvidence, ...] = ()
     tags: tuple[SemanticTagEvidence, ...] = ()
+    unavailable_fields: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         from beetsplug.noqlenmeta.genre_evidence import GenreEvidence
@@ -314,3 +327,12 @@ class SemanticEvidenceBundle:
             if not all(isinstance(value, expected) for value in normalized):
                 raise TypeError(f"{label} contains an invalid value")
             object.__setattr__(self, label, normalized)
+        if isinstance(self.unavailable_fields, str):
+            raise TypeError("unavailable fields must be a collection of field names")
+        unavailable_fields = frozenset(self.unavailable_fields)
+        if not all(isinstance(field, str) for field in unavailable_fields):
+            raise TypeError("unavailable fields contain an invalid value")
+        unknown = unavailable_fields - _SEMANTIC_EVIDENCE_FIELDS
+        if unknown:
+            raise ValueError(f"unknown unavailable field: {sorted(unknown)[0]}")
+        object.__setattr__(self, "unavailable_fields", unavailable_fields)

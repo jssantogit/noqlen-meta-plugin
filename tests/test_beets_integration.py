@@ -1275,7 +1275,7 @@ def test_preview_is_visible_and_selected_info_remains_unchanged(
     assert TOKEN not in output[0]
 
 
-def test_importer_preview_retains_semantic_no_evidence_unavailable_and_conflict(
+def test_importer_preview_retains_semantic_no_evidence_and_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from beetsplug.noqlenmeta.providers.musicbrainz_semantic import (
@@ -1341,7 +1341,8 @@ def test_importer_preview_retains_semantic_no_evidence_unavailable_and_conflict(
     release_preview = output[0]
     assert "artist_languages: no-evidence" in release_preview
     assert "artist_areas: unavailable" in release_preview
-    assert "artist_countries: conflict" in release_preview
+    assert "artist_countries: unavailable" in release_preview
+    assert "partial semantic evidence retained" in release_preview
     assert "raw_tag" not in release_preview
 
 

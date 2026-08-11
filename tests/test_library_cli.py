@@ -29,6 +29,7 @@ from beetsplug.noqlenmeta.library_integration import (
 from beetsplug.noqlenmeta.library_mapping import LibraryMappingError
 from beetsplug.noqlenmeta.providers import ProviderError
 from beetsplug.noqlenmeta.providers.base import ProviderContractError
+from beetsplug.noqlenmeta.providers.lastfm import LastFmProvider
 from beetsplug.noqlenmeta.providers.specs import ProviderScope
 
 TOKEN = "test-personal-token"
@@ -886,6 +887,38 @@ def test_lastfm_candidate_previews_then_flows_through_existing_cli_apply(
     assert "lastfm community tag" in output[0]
     assert "application: stored in library database (1 fields)" in output[0]
     assert "file tags: unchanged" in output[0]
+
+
+def test_real_lastfm_community_style_flows_through_album_cli(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    plugin = NoqlenMetaPlugin()
+    monkeypatch.setitem(Album._types, "styles", plugin.album_types["styles"])
+    album = add_album(library)
+    lastfm = LastFmProvider(
+        fetch_top_tags=lambda artist, title: {
+            "toptags": {
+                "@attr": {"artist": artist, "album": title},
+                "tag": [{"name": "Acoustic", "count": 80}],
+            }
+        }
+    )
+    configure_enabled(plugin, discogs=False, lastfm=True)
+    plugin.config["fields"].set(
+        {field: field == "styles" for field in plugin.config["fields"]}
+    )
+    monkeypatch.setattr(
+        plugin,
+        "_lastfm_release_semantics",
+        lastfm.get_semantic_evidence,
+    )
+    monkeypatch.setattr(
+        "beetsplug.noqlenmeta.library_integration.ui.print_", lambda output: None
+    )
+
+    invoke(plugin, library, ["artist:Gojira", "--apply"])
+
+    assert library.get_album(album.id).styles == ["Acoustic"]
 
 
 def test_importer_config_does_not_authorize_cli_database_writes(

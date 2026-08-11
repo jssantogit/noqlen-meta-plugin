@@ -1479,11 +1479,22 @@ class NoqlenMetaPlugin(BeetsPlugin):
                             item for bundle in collected for item in bundle.genres
                         ),
                         tags=tuple(item for bundle in collected for item in bundle.tags),
+                        unavailable_fields=frozenset(
+                            field
+                            for bundle in collected
+                            for field in bundle.unavailable_fields
+                        )
+                        | (
+                            frozenset({"genres", "styles", "moods"})
+                            if failed
+                            else frozenset()
+                        ),
                     )
 
                 lastfm_artist = collect_lastfm_artist
             semantic = collect_semantic_enrichment(
                 semantic_fields,
+                policy=policy,
                 musicbrainz_release=musicbrainz_release,
                 musicbrainz_tracks=musicbrainz_tracks,
                 musicbrainz_artists=musicbrainz_artists,
@@ -1491,10 +1502,6 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 lastfm_release=lastfm_release,
                 lastfm_artist=lastfm_artist,
                 genre_settings=self._genre_settings(),
-                min_confidence={
-                    field: policy.confidence_threshold(field) or 0.0
-                    for field in semantic_fields
-                },
                 max_moods=self._mood_settings().max_moods,
             )
             candidates.extend(semantic.candidates)
@@ -1608,16 +1615,13 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 lastfm_release = collect_lastfm_release
             semantic = collect_semantic_enrichment(
                 release_semantic_fields,
+                policy=policy,
                 musicbrainz_release=musicbrainz_release,
                 musicbrainz_tracks=musicbrainz_tracks,
                 musicbrainz_artists=musicbrainz_artists,
                 discogs_metadata=candidates,
                 lastfm_release=lastfm_release,
                 genre_settings=self._genre_settings(),
-                min_confidence={
-                    field: policy.confidence_threshold(field) or 0.0
-                    for field in release_semantic_fields
-                },
                 max_moods=self._mood_settings().max_moods,
             )
             candidates.extend(semantic.candidates)

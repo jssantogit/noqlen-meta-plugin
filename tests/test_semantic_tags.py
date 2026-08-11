@@ -1,6 +1,10 @@
 import pytest
 
 from beetsplug.noqlenmeta.domain import SemanticCategory
+from beetsplug.noqlenmeta.genre_taxonomy import (
+    DEFAULT_GENRE_TAXONOMY,
+    GenreSemanticCategory,
+)
 from beetsplug.noqlenmeta.providers.specs import ProviderScope
 from beetsplug.noqlenmeta.semantic_tags import classify_semantic_tag
 
@@ -50,3 +54,16 @@ def test_classifier_reuses_genre_foundation_aliases() -> None:
     assert evidence is not None
     assert evidence.category is SemanticCategory.GENRE
     assert evidence.canonical_term == "Drum and Bass"
+
+
+def test_acoustic_is_taxonomy_non_genre_then_reviewed_style() -> None:
+    assert (
+        DEFAULT_GENRE_TAXONOMY.classify("Acoustic").category
+        is not GenreSemanticCategory.GENRE
+    )
+
+    evidence = classify("Acoustic")
+
+    assert evidence is not None
+    assert evidence.category is SemanticCategory.STYLE
+    assert evidence.canonical_term == "Acoustic"

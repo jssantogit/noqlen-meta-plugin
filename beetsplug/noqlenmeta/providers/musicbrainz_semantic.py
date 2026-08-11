@@ -130,9 +130,16 @@ class MusicBrainzTrackProvider:
                 scope=ProviderScope.TRACK,
             )
         languages: list[str] = []
+        unavailable_fields: set[str] = set()
         if self.enabled_fields & {"lyrics_languages", "artist_languages"}:
             for work_id in _related_ids(payload, "work"):
-                work = self.client.lookup_work(work_id)
+                try:
+                    work = self.client.lookup_work(work_id)
+                except ProviderError:
+                    unavailable_fields.update(
+                        self.enabled_fields & {"lyrics_languages", "artist_languages"}
+                    )
+                    continue
                 if work is None:
                     continue
                 for language in _work_languages(work):
@@ -149,7 +156,9 @@ class MusicBrainzTrackProvider:
                     _PUBLIC_URL.format("recording", recording_id),
                 ),
             )
-        return SemanticEvidenceBundle(metadata, genres, tags)
+        return SemanticEvidenceBundle(
+            metadata, genres, tags, frozenset(unavailable_fields)
+        )
 
 
 class MusicBrainzArtistProvider:
@@ -188,15 +197,20 @@ class MusicBrainzArtistProvider:
                 payload.get("begin-area")
             )
         fields: list[tuple[str, tuple[str, ...]]] = []
+        unavailable_fields: set[str] = set()
         if area is not None:
             area_name = _text(area.get("name"))
             if area_name:
                 fields.append(("artist_areas", (area_name,)))
-            country = (
-                self._country_for_area(area)
-                if "artist_countries" in self.enabled_fields
-                else None
-            )
+            country = None
+            if "artist_countries" in self.enabled_fields:
+                try:
+                    country, ancestry_unavailable = self._country_for_area(area)
+                except ProviderError:
+                    unavailable_fields.add("artist_countries")
+                else:
+                    if ancestry_unavailable:
+                        unavailable_fields.add("artist_countries")
             if country:
                 fields.append(("artist_countries", (country,)))
         metadata = tuple(
@@ -210,34 +224,43 @@ class MusicBrainzArtistProvider:
             )
             for field, value in fields
         )
-        return SemanticEvidenceBundle(metadata, genres, tags)
+        return SemanticEvidenceBundle(
+            metadata, genres, tags, frozenset(unavailable_fields)
+        )
 
-    def _country_for_area(self, initial_area: Mapping[str, object]) -> str | None:
+    def _country_for_area(
+        self, initial_area: Mapping[str, object]
+    ) -> tuple[str | None, bool]:
         country = _structural_country(initial_area)
         if country:
-            return country
+            return country, False
         initial_id = canonical_uuid(initial_area.get("id"))
         if initial_id is None:
-            return _structural_country(initial_area)
+            return _structural_country(initial_area), False
         pending = [initial_id]
         visited: set[str] = set()
+        unavailable = False
         while pending:
             area_id = pending.pop(0)
             if area_id in visited:
                 continue
             visited.add(area_id)
-            area = self.client.lookup_area(area_id)
+            try:
+                area = self.client.lookup_area(area_id)
+            except ProviderError:
+                unavailable = True
+                continue
             if area is None:
                 continue
             country = _structural_country(area)
             if country:
-                return country
+                return country, unavailable
             pending.extend(
                 related_id
                 for related_id in _related_ids(area, "area")
                 if related_id not in visited
             )
-        return None
+        return None, unavailable
 
 
 def semantic_tags_from_payload(
