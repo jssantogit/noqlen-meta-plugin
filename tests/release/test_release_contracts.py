@@ -272,3 +272,48 @@ def test_release_checklist_records_completed_v1_release() -> None:
     assert "[ ] PyPI project ownership established by first publication." not in checklist
     assert "[ ] `v1.0.0` tag created" not in checklist
     assert "[ ] Tag workflow builds, checks, and publishes" not in checklist
+
+
+def test_v2_release_candidate_version_is_exact() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+        "project"
+    ]
+
+    assert project["version"] == "2.0.0"
+
+
+def test_changelog_orders_unreleased_v2_and_v1() -> None:
+    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    v2 = text.split("## 2.0.0 - 2026-08-11", 1)[1].split(
+        "## 1.0.0 - 2026-08-02", 1
+    )[0]
+
+    assert "## Unreleased" in text
+    assert text.index("## Unreleased") < text.index("## 2.0.0 - 2026-08-11")
+    assert text.index("## 2.0.0 - 2026-08-11") < text.index(
+        "## 1.0.0 - 2026-08-02"
+    )
+    for phrase in (
+        "semantic enrichment",
+        "Cover Art Archive",
+        "Librosa",
+        "file synchronization",
+        "AcoustID",
+        "no force mode",
+    ):
+        assert phrase in v2
+
+
+def test_v2_release_checklist_prepares_but_does_not_publish() -> None:
+    text = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
+
+    assert "## Version 2.0.0 Release Candidate" in text
+    assert "[x] Package version is `2.0.0`." in text
+    assert "[x] Changelog contains `2.0.0 - 2026-08-11`." in text
+    for pending in (
+        "Merge the v2 release candidate into `main`.",
+        "Create `v2.0.0` tag",
+        "Publish `2.0.0` to PyPI",
+        "Verify the versioned Read the Docs 2.0.0 build",
+    ):
+        assert f"[ ] {pending}" in text
