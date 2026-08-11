@@ -49,14 +49,14 @@
 
 - [x] Package version is `2.0.0`.
 - [x] Changelog contains `2.0.0 - 2026-08-11`.
-- [ ] Public docs distinguish the prepared `2.0.0` candidate from the currently published `1.0.0` release.
+- [x] Public docs distinguish the prepared `2.0.0` candidate from the currently published `1.0.0` release.
 - [ ] Full offline test suite and Ruff pass.
 - [ ] Python 3.10 through 3.14 CI matrix passes.
 - [ ] beets 2.12.0 and latest below 3 compatibility lanes pass.
-- [ ] `[audio]` Librosa test lane passes.
-- [ ] Public documentation validation and strict MkDocs build pass.
-- [ ] Package build, strict Twine check, distribution inspection, and clean-install smoke test pass.
-- [ ] Release-readiness diff contains no unintended functional feature work.
+- [x] `[audio]` Librosa test lane passes.
+- [x] Public documentation validation and strict MkDocs build pass.
+- [x] Package build, strict Twine check, distribution inspection, and clean-install smoke test pass.
+- [x] Release-readiness diff contains no unintended functional feature work.
 
 ### Owner-Authorized Release Execution
 
