@@ -92,7 +92,7 @@ def test_invalid_local_analysis_is_rejected_before_selection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plugin = NoqlenMetaPlugin()
-    plugin.config["local_analysis"]["bpm"]["mode"].set("eager")
+    plugin.config["local_analysis"]["bpm"]["analysis_mode"].set("start")
     library = Library(":memory:", set_music_dir=False)
     monkeypatch.setattr(
         library,
