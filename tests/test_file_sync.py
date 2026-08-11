@@ -8,6 +8,7 @@ from beets.library import Item, Library
 from mediafile import MediaFile
 
 import beetsplug.noqlenmeta.file_sync as file_sync_module
+from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.changeplan import PlannedChange
 from beetsplug.noqlenmeta.domain import MetadataCandidate
 from beetsplug.noqlenmeta.file_sync import (
@@ -22,6 +23,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "identity_tags" / "silence.flac"
 
 @pytest.fixture
 def media_item(tmp_path: Path) -> tuple[Library, Item, Path]:
+    NoqlenMetaPlugin()
     path = tmp_path / "track.flac"
     shutil.copy2(FIXTURE, path)
     media = MediaFile(path)
@@ -59,10 +61,32 @@ def test_planner_maps_supported_values_without_mutating_item(media_item) -> None
 def test_planner_blocks_unsupported_multivalue_field(media_item) -> None:
     _, item, _ = media_item
 
-    plan = plan_file_sync(item, (planned_change("moods", ("Dark",)),))
+    plan = plan_file_sync(item, (planned_change("synced_lyrics", ("line",)),))
 
     assert plan.changes == ()
-    assert plan.blockers[0].canonical_field == "moods"
+    assert plan.blockers[0].canonical_field == "synced_lyrics"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("styles", ("Progressive Metal", "Technical Death Metal")),
+        ("moods", ("Melancholic", "Atmospheric")),
+        ("lyrics_languages", ("kor", "eng")),
+        ("artist_languages", ("kor", "jpn")),
+        ("artist_countries", ("South Korea", "United States")),
+        ("artist_areas", ("Seoul", "New York City")),
+    ],
+)
+def test_apply_round_trips_semantic_multivalues(media_item, field, value) -> None:
+    library, item, path = media_item
+    plan = plan_file_sync(item, (planned_change(field, value),))
+    assert plan.blockers == ()
+
+    result = apply_file_sync_plan(library, plan)
+
+    assert result.committed
+    assert tuple(getattr(MediaFile(path), field)) == value
 
 
 def test_planner_blocks_fractional_bpm_that_mediafile_would_round(media_item) -> None:
@@ -272,7 +296,7 @@ def test_mapped_change_with_blocker_reports_partial_commit(media_item) -> None:
         item,
         (
             planned_change("lyrics", "Synthetic line"),
-            planned_change("moods", ("Dark",)),
+            planned_change("format_descriptions", ("Album",)),
         ),
     )
 

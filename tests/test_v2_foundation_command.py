@@ -227,6 +227,53 @@ def test_ordinary_apply_write_updates_database_and_real_media_file(
     assert any("status=committed-complete" in line for line in output)
 
 
+def test_semantic_apply_write_updates_database_and_reopened_media_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "semantic.flac"
+    shutil.copy2(FIXTURE, path)
+    library = Library(str(tmp_path / "library.db"), set_music_dir=False)
+    item = Item(
+        path=str(path).encode(),
+        artist="Synthetic Artist",
+        title="Synthetic Track",
+    )
+    library.add(item)
+    plugin = NoqlenMetaPlugin()
+    monkeypatch.setattr(plugins, "_instances", [plugin])
+    monkeypatch.delitem(cached_classproperty.cache, (Item, "_types"), raising=False)
+    plugin.config.set(
+        {
+            "fields": {field: field == "moods" for field in plugin.config["fields"]},
+            "providers": {
+                "musicbrainz": {"enabled": True},
+                "discogs": {"enabled": False, "user_token": ""},
+                "lastfm": {"enabled": False},
+                "itunes": {"enabled": False, "storefront": "us"},
+                "lrclib": {"enabled": False},
+            },
+        }
+    )
+    calls = 0
+
+    def semantic_candidates(*args: object) -> tuple[MetadataCandidate, ...]:
+        nonlocal calls
+        calls += 1
+        return (
+            MetadataCandidate(
+                "moods", ("Melancholic", "Atmospheric"), "musicbrainz", 0.95, "42"
+            ),
+        )
+
+    monkeypatch.setattr(plugin, "_collect_track_candidates", semantic_candidates)
+
+    invoke(plugin, library, ["--apply", "--write", "--all"])
+
+    assert calls == 1
+    assert library.get_item(item.id)["moods"] == ["Melancholic", "Atmospheric"]
+    assert MediaFile(path).moods == ["Melancholic", "Atmospheric"]
+
+
 def test_existing_library_release_uses_specific_promoted_style(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -9,6 +9,7 @@ from beets.autotag import AlbumMatch, TrackMatch
 from beets.library import Album, Item, Library
 from beets.plugins import BeetsPlugin
 from beets.ui import Subcommand
+from mediafile import MediaFile
 
 from beetsplug.noqlenmeta.acoustid import (
     AcoustIDLookupService,
@@ -149,6 +150,7 @@ from beetsplug.noqlenmeta.providers.specs import (
 )
 from beetsplug.noqlenmeta.resolver import ResolutionPolicy, resolve_metadata
 from beetsplug.noqlenmeta.semantic_enrichment import collect_semantic_enrichment
+from beetsplug.noqlenmeta.semantic_media import SEMANTIC_MEDIA_FIELDS
 from beetsplug.noqlenmeta.semantic_resolution import MoodSettings
 from beetsplug.noqlenmeta.track_application import (
     TrackApplicationMode,
@@ -264,6 +266,9 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
     def __init__(self) -> None:
         super().__init__()
+        for field, descriptor in SEMANTIC_MEDIA_FIELDS.items():
+            if field not in MediaFile.fields():
+                self.add_media_field(field, descriptor)
         self.config.add(default_config())
         self.config["providers"]["discogs"]["user_token"].redact = True
         self._lastfm_provider = None
@@ -691,6 +696,14 @@ class NoqlenMetaPlugin(BeetsPlugin):
             )
 
         prepared_items: list[LibraryItemPlan] = []
+        album_genre_album_ids = {
+            album_plan.album.id
+            for album_plan in prepared_albums
+            if any(
+                change.canonical_field == "genres"
+                for change in album_plan.target_plan.mapped_changes
+            )
+        }
         item_total = len(items)
         for position, item in enumerate(items, 1):
             context = context_from_library_item(item)
@@ -700,10 +713,17 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     "artist/title identity; skipped"
                 )
                 continue
+            track_candidates = self._collect_track_candidates(context, policy)
+            if item.album_id in album_genre_album_ids:
+                track_candidates = tuple(
+                    candidate
+                    for candidate in track_candidates
+                    if candidate.field != "genres"
+                )
             planning = build_track_planning_result(
                 context,
                 current_values_from_library_item(item),
-                candidates=self._collect_track_candidates(context, policy),
+                candidates=track_candidates,
                 policy=policy,
             )
             prepared_items.append(

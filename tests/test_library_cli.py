@@ -13,7 +13,12 @@ from beets.ui import Subcommand
 import beetsplug.noqlenmeta as plugin_module
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.changeplan import ChangePlan
-from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
+from beetsplug.noqlenmeta.domain import (
+    MetadataCandidate,
+    ReleaseEnrichmentContext,
+    SemanticEvidenceBundle,
+)
+from beetsplug.noqlenmeta.genre_evidence import GenreEvidence, GenreEvidenceKind
 from beetsplug.noqlenmeta.library_integration import (
     context_from_library_album,
     current_values_from_library_album,
@@ -21,6 +26,7 @@ from beetsplug.noqlenmeta.library_integration import (
 from beetsplug.noqlenmeta.library_mapping import LibraryMappingError
 from beetsplug.noqlenmeta.providers import ProviderError
 from beetsplug.noqlenmeta.providers.base import ProviderContractError
+from beetsplug.noqlenmeta.providers.specs import ProviderScope
 
 TOKEN = "test-personal-token"
 RELEASE_MBID = "6ea45c08-3cfa-461a-aa4d-4cc404fcfa86"
@@ -95,6 +101,22 @@ def candidate(
             "lastfm": "Gojira / From Mars to Sirius",
             "itunes": "1097861387",
         }[provider],
+    )
+
+
+def lastfm_genre_bundle(*genres: str) -> SemanticEvidenceBundle:
+    return SemanticEvidenceBundle(
+        genres=tuple(
+            GenreEvidence(
+                genre,
+                "lastfm",
+                ProviderScope.RELEASE,
+                GenreEvidenceKind.COMMUNITY_TAG,
+                0.85,
+                "Gojira / From Mars to Sirius",
+            )
+            for genre in genres
+        )
     )
 
 
@@ -650,6 +672,11 @@ def test_musicbrainz_candidate_flows_through_shared_cli_plan_and_safe_apply(
         "_musicbrainz_candidates",
         lambda *args: (candidate("year", 2005, provider="musicbrainz"),),
     )
+    monkeypatch.setattr(
+        plugin,
+        "_musicbrainz_release_semantics",
+        lambda *args: SemanticEvidenceBundle(),
+    )
     monkeypatch.setattr("beetsplug.noqlenmeta.library_integration.ui.print_", output.append)
 
     invoke(plugin, library, ["artist:Gojira", "--apply"])
@@ -669,15 +696,15 @@ def test_lastfm_candidate_previews_then_flows_through_existing_cli_apply(
     plugin = NoqlenMetaPlugin()
     configure_enabled(plugin, discogs=False, lastfm=True)
     monkeypatch.setattr(
-        NoqlenMetaPlugin,
-        "_lastfm_candidates",
-        lambda *args: (
-            candidate(
-                value=("Progressive Metal", "Death Metal"),
-                confidence=0.85,
-                provider="lastfm",
-            ),
-        ),
+        plugin,
+        "_lastfm_release_semantics",
+        lambda *args: lastfm_genre_bundle("Progressive Metal", "Death Metal"),
+    )
+    monkeypatch.setattr(
+        plugin, "_lastfm_track_semantics", lambda *args: SemanticEvidenceBundle()
+    )
+    monkeypatch.setattr(
+        plugin, "_lastfm_artist_semantics", lambda *args: SemanticEvidenceBundle()
     )
     monkeypatch.setattr("beetsplug.noqlenmeta.library_integration.ui.print_", output.append)
 
