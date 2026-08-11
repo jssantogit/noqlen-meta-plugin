@@ -4,12 +4,14 @@ import pytest
 
 from beetsplug.noqlenmeta.configuration import default_config
 from beetsplug.noqlenmeta.tempo import (
+    BpmPlanningResult,
     BpmSettings,
     LocalBpmSettings,
     TempoObservation,
     bpm_settings_from_config,
     local_bpm_settings_from_config,
     normalize_bpm,
+    plan_bpm,
 )
 
 
@@ -120,3 +122,89 @@ def test_normalize_bpm_applies_only_approved_policy(
 def test_normalize_bpm_rejects_invalid_observation(raw: float) -> None:
     with pytest.raises(ValueError):
         normalize_bpm(TempoObservation(raw, "librosa"), BpmSettings())
+
+
+class Analyzer:
+    def __init__(self, result: TempoObservation | Exception) -> None:
+        self.result = result
+        self.calls = 0
+
+    def analyze(self, path: bytes, settings: LocalBpmSettings) -> TempoObservation:
+        self.calls += 1
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result
+
+
+@pytest.mark.parametrize(
+    "field_enabled,existing,bpm_settings,local_settings,outcome,calls,canonical",
+    [
+        (False, None, BpmSettings(), LocalBpmSettings(enabled=True), "NO_EVIDENCE", 0, None),
+        (True, 128.0, BpmSettings(), LocalBpmSettings(enabled=True), "PRESERVED", 0, 128.0),
+        (True, None, BpmSettings(), LocalBpmSettings(), "NO_EVIDENCE", 0, None),
+        (True, None, BpmSettings(), LocalBpmSettings(enabled=True), "RESOLVED", 1, 127.5),
+        (
+            True,
+            128.0,
+            BpmSettings(recalculate_existing=True),
+            LocalBpmSettings(enabled=True),
+            "RESOLVED",
+            1,
+            127.5,
+        ),
+        (
+            True,
+            128.0,
+            BpmSettings(recalculate_existing=True),
+            LocalBpmSettings(),
+            "PRESERVED",
+            0,
+            128.0,
+        ),
+    ],
+)
+def test_plan_bpm_preservation_and_analysis_calls(
+    field_enabled: bool,
+    existing: object,
+    bpm_settings: BpmSettings,
+    local_settings: LocalBpmSettings,
+    outcome: str,
+    calls: int,
+    canonical: float | None,
+) -> None:
+    analyzer = Analyzer(TempoObservation(127.5, "librosa"))
+
+    result = plan_bpm(
+        path=b"track.flac",
+        existing_bpm=existing,
+        field_enabled=field_enabled,
+        bpm_settings=bpm_settings,
+        local_settings=local_settings,
+        analyzer=analyzer,
+    )
+
+    assert result.outcome == outcome
+    assert result.canonical_bpm == canonical
+    assert analyzer.calls == calls
+
+
+def test_plan_bpm_unavailable_is_local() -> None:
+    analyzer = Analyzer(RuntimeError("decoder failed"))
+
+    result = plan_bpm(
+        path=b"track.flac",
+        existing_bpm=None,
+        field_enabled=True,
+        bpm_settings=BpmSettings(),
+        local_settings=LocalBpmSettings(enabled=True),
+        analyzer=analyzer,
+    )
+
+    assert result == BpmPlanningResult(
+        "UNAVAILABLE",
+        None,
+        None,
+        None,
+        "local BPM analysis is unavailable",
+    )
+    assert analyzer.calls == 1

@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 import confuse
 from beets import ui
 from beets.autotag import AlbumMatch, TrackMatch
+from beets.dbcore import types as db_types
 from beets.library import Album, Item, Library
 from beets.plugins import BeetsPlugin
 from beets.ui import Subcommand
@@ -167,7 +168,12 @@ from beetsplug.noqlenmeta.providers.specs import (
     MUSICBRAINZ_SPEC,
     ProviderSpec,
 )
-from beetsplug.noqlenmeta.resolver import ResolutionPolicy, resolve_metadata
+from beetsplug.noqlenmeta.resolver import (
+    FieldDecision,
+    ResolutionAction,
+    ResolutionPolicy,
+    resolve_metadata,
+)
 from beetsplug.noqlenmeta.semantic_enrichment import (
     SemanticEnrichmentResult,
     SemanticFieldOutcome,
@@ -176,6 +182,16 @@ from beetsplug.noqlenmeta.semantic_enrichment import (
 )
 from beetsplug.noqlenmeta.semantic_media import SEMANTIC_MEDIA_FIELDS
 from beetsplug.noqlenmeta.semantic_resolution import MoodSettings
+from beetsplug.noqlenmeta.tempo import (
+    BpmPlanningResult,
+    BpmSettings,
+    LibrosaTempoAnalyzer,
+    LocalBpmSettings,
+    TempoAnalyzer,
+    bpm_settings_from_config,
+    local_bpm_settings_from_config,
+    plan_bpm,
+)
 from beetsplug.noqlenmeta.track_application import (
     TrackApplicationMode,
     TrackApplicationResult,
@@ -189,11 +205,17 @@ from beetsplug.noqlenmeta.track_integration import (
     current_values_from_library_item,
     selected_import_tracks,
 )
-from beetsplug.noqlenmeta.track_mapping import TrackTargetChange, TrackTargetPlan
+from beetsplug.noqlenmeta.track_mapping import (
+    TrackTargetChange,
+    TrackTargetPlan,
+    map_change_plan_to_track_info,
+)
 from beetsplug.noqlenmeta.track_planning import (
     ImportTrackPlanningResult,
+    TrackPlanningResult,
     build_import_track_planning_result,
     build_track_planning_result,
+    effective_current_values_for_import_track,
 )
 from beetsplug.noqlenmeta.track_preview import (
     render_import_track_plan,
@@ -244,6 +266,53 @@ def _render_file_sync_error(plan: FileSyncPlan, error: FileSyncApplicationError)
     )
 
 
+def _bpm_candidate(result: BpmPlanningResult) -> MetadataCandidate:
+    if result.canonical_bpm is None:
+        raise ValueError("BPM planning result has no canonical value")
+    provider = result.observation.backend if result.observation is not None else "library"
+    return MetadataCandidate(
+        "bpm",
+        result.canonical_bpm,
+        provider,
+        1.0,
+        "local-analysis" if result.observation is not None else "database",
+    )
+
+
+def _change_plan_with_bpm(
+    decisions: Sequence[FieldDecision],
+    original: ChangePlan,
+    result: BpmPlanningResult,
+) -> tuple[tuple[FieldDecision, ...], ChangePlan]:
+    if (
+        result.outcome != "RESOLVED"
+        or result.observation is None
+        or result.canonical_bpm is None
+    ):
+        return tuple(decisions), original
+    candidate = _bpm_candidate(result)
+    action = (
+        ResolutionAction.KEEP
+        if result.current_bpm == result.canonical_bpm
+        else ResolutionAction.PROPOSE
+    )
+    bpm_decision = FieldDecision(
+        "bpm",
+        result.current_bpm,
+        candidate,
+        action,
+        result.reason or "resolved local BPM analysis",
+    )
+    merged = tuple(
+        sorted(
+            tuple(decision for decision in decisions if decision.field != "bpm")
+            + (bpm_decision,),
+            key=lambda decision: decision.field,
+        )
+    )
+    return merged, build_change_plan(merged)
+
+
 class IdentityImporterSettingsError(RuntimeError):
     """Raised before provider work when importer identity settings are unsafe."""
 
@@ -268,6 +337,7 @@ class LibraryItemPlan:
     position: int
     total: int
     semantic_outcomes: Mapping[str, SemanticFieldOutcome]
+    bpm_result: BpmPlanningResult | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -298,6 +368,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
     def __init__(self) -> None:
         super().__init__()
+        Item._fields["bpm"] = db_types.FLOAT
         for field, descriptor in SEMANTIC_MEDIA_FIELDS.items():
             if field not in MediaFile.fields():
                 self.add_media_field(field, descriptor)
@@ -312,6 +383,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         self._semantic_cache = CommandEntityCache()
         self._musicbrainz_identity_source: MusicBrainzIdentitySource | None = None
         self._coverartarchive_client: CoverArtArchiveClient | None = None
+        self._tempo_analyzer: TempoAnalyzer | None = None
         self.register_listener("import_task_choice", self._import_task_choice)
         self._command = Subcommand(
             "noqlenmeta",
@@ -402,6 +474,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
             track_application_mode = parse_track_application_mode(raw_mode)
 
         policy = self._resolution_policy()
+        local_bpm_settings = self._local_bpm_settings()
         album_semantic_enabled = policy.is_provider_enabled("musicbrainz") and any(
             policy.is_field_enabled(field)
             for field in ("artist_countries", "artist_areas", "artist_languages")
@@ -413,7 +486,10 @@ class NoqlenMetaPlugin(BeetsPlugin):
         preview_enabled = self.config["preview"].get(bool)
         track_can_contribute = (
             bool(selected_tracks)
-            and self._has_contributing_track_provider(policy)
+            and (
+                self._has_contributing_track_provider(policy)
+                or policy.is_field_enabled("bpm") and local_bpm_settings.enabled
+            )
             and (preview_enabled or apply_enabled)
         )
         identity_can_execute = (
@@ -527,6 +603,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     context,
                     from_scratch=from_scratch,
                     policy=policy,
+                    local_bpm_settings=local_bpm_settings,
                 )
                 track_application_result = None
                 if apply_enabled:
@@ -716,6 +793,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
             raise ui.UserError("noqlenmeta: use a query or --all, not both")
 
         policy = self._resolution_policy()
+        bpm_settings = self._bpm_settings()
+        local_bpm_settings = self._local_bpm_settings()
         ordinary_release_can_contribute = self._has_contributing_release_provider(policy) or (
             policy.is_provider_enabled("musicbrainz")
             and any(
@@ -725,7 +804,10 @@ class NoqlenMetaPlugin(BeetsPlugin):
         )
         artwork_enabled = self.config["fields"]["cover"].get(bool)
         release_can_contribute = ordinary_release_can_contribute or artwork_enabled
-        track_can_contribute = self._has_contributing_track_provider(policy)
+        track_can_contribute = self._has_contributing_track_provider(policy) or (
+            policy.is_field_enabled("bpm")
+            and (local_bpm_settings.enabled or write_enabled)
+        )
         if not release_can_contribute and not track_can_contribute:
             ui.print_("Noqlen Meta: no enabled provider can contribute to the configured fields")
             return
@@ -845,13 +927,23 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     for candidate in track_candidates
                     if candidate.field != "genres"
                 )
+            current_values = current_values_from_library_item(item)
+            bpm_result = plan_bpm(
+                path=item.path,
+                existing_bpm=current_values.get("bpm"),
+                field_enabled=policy.is_field_enabled("bpm"),
+                bpm_settings=bpm_settings,
+                local_settings=local_bpm_settings,
+                analyzer=self._bpm_analyzer(local_bpm_settings),
+            )
             planning = build_track_planning_result(
                 context,
-                current_values_from_library_item(item),
+                current_values,
                 candidates=track_candidates,
                 policy=policy,
                 semantic_outcomes=track_enrichment.outcomes,
             )
+            planning = self._integrate_library_bpm(planning, bpm_result)
             prepared_items.append(
                 LibraryItemPlan(
                     item,
@@ -859,6 +951,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     position,
                     item_total,
                     planning.semantic_outcomes,
+                    bpm_result,
                 )
             )
 
@@ -884,6 +977,19 @@ class NoqlenMetaPlugin(BeetsPlugin):
                         )
                     collected[source.field] = source
 
+            def add_file_change(item: Item, source: PlannedChange) -> None:
+                if not isinstance(item.id, int):
+                    raise ui.UserError("noqlenmeta: ordinary file target is not persisted")
+                target_item, collected = changes_by_item.setdefault(item.id, (item, {}))
+                if target_item.path != item.path:
+                    raise ui.UserError("noqlenmeta: conflicting ordinary file targets")
+                previous = collected.get(source.field)
+                if previous is not None and previous.after != source.after:
+                    raise ui.UserError(
+                        "noqlenmeta: conflicting ordinary file values for one Item"
+                    )
+                collected[source.field] = source
+
             for album_plan in prepared_albums:
                 target_plan = album_plan.target_plan
                 changes = (
@@ -902,6 +1008,10 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     else ()
                 )
                 add_file_changes(item_plan.item, changes)
+                if item_plan.bpm_result is not None:
+                    bpm_file_change = self._bpm_file_change(item_plan.bpm_result)
+                    if bpm_file_change is not None:
+                        add_file_change(item_plan.item, bpm_file_change)
             file_plans = [
                 plan_file_sync(item, tuple(collected.values()))
                 for _, (item, collected) in sorted(changes_by_item.items())
@@ -1422,6 +1532,27 @@ class NoqlenMetaPlugin(BeetsPlugin):
         except (confuse.ConfigError, ValueError) as error:
             raise ui.UserError(f"noqlenmeta: invalid artwork configuration: {error}") from None
 
+    def _bpm_settings(self) -> BpmSettings:
+        try:
+            return bpm_settings_from_config(self.config["bpm"].get(dict))
+        except (confuse.ConfigError, ValueError) as error:
+            raise ui.UserError(f"noqlenmeta: invalid BPM configuration: {error}") from None
+
+    def _local_bpm_settings(self) -> LocalBpmSettings:
+        try:
+            return local_bpm_settings_from_config(
+                self.config["local_analysis"]["bpm"].get(dict)
+            )
+        except (confuse.ConfigError, ValueError) as error:
+            raise ui.UserError(f"noqlenmeta: invalid local BPM configuration: {error}") from None
+
+    def _bpm_analyzer(self, settings: LocalBpmSettings) -> TempoAnalyzer | None:
+        if not settings.enabled:
+            return None
+        if self._tempo_analyzer is None:
+            self._tempo_analyzer = LibrosaTempoAnalyzer()
+        return self._tempo_analyzer
+
     def _resolve_album_artwork(
         self,
         context: ArtworkContext,
@@ -1498,15 +1629,77 @@ class NoqlenMetaPlugin(BeetsPlugin):
         *,
         from_scratch: bool,
         policy: ResolutionPolicy,
+        local_bpm_settings: LocalBpmSettings,
     ) -> ImportTrackPlanningResult:
         enrichment = self._collect_track_candidates(context, policy)
-        return build_import_track_planning_result(
+        current_values = effective_current_values_for_import_track(
+            selected, from_scratch=from_scratch
+        )
+        bpm_result = plan_bpm(
+            path=selected.item.path,
+            existing_bpm=current_values.get("bpm"),
+            field_enabled=policy.is_field_enabled("bpm"),
+            bpm_settings=self._bpm_settings(),
+            local_settings=local_bpm_settings,
+            analyzer=self._bpm_analyzer(local_bpm_settings),
+        )
+        planning = build_import_track_planning_result(
             selected,
             context,
             from_scratch=from_scratch,
             candidates=enrichment.candidates,
             policy=policy,
             semantic_outcomes=enrichment.outcomes,
+        )
+        return self._integrate_import_bpm(planning, bpm_result)
+
+    @staticmethod
+    def _integrate_library_bpm(
+        planning: TrackPlanningResult, result: BpmPlanningResult
+    ) -> TrackPlanningResult:
+        decisions, change_plan = _change_plan_with_bpm(
+            planning.decisions, planning.change_plan, result
+        )
+        if change_plan is planning.change_plan:
+            return planning
+        target_plan = map_change_plan_to_track_info(change_plan)
+        return replace(
+            planning,
+            candidate_count=planning.candidate_count + 1,
+            decisions=decisions,
+            change_plan=change_plan,
+            target_plan=target_plan,
+        )
+
+    @staticmethod
+    def _integrate_import_bpm(
+        planning: ImportTrackPlanningResult, result: BpmPlanningResult
+    ) -> ImportTrackPlanningResult:
+        decisions, change_plan = _change_plan_with_bpm(
+            planning.decisions, planning.change_plan, result
+        )
+        if change_plan is planning.change_plan:
+            return planning
+        target_plan = map_change_plan_to_track_info(change_plan)
+        return replace(
+            planning,
+            candidate_count=planning.candidate_count + 1,
+            decisions=decisions,
+            change_plan=change_plan,
+            target_plan=target_plan,
+        )
+
+    @staticmethod
+    def _bpm_file_change(result: BpmPlanningResult) -> PlannedChange | None:
+        if result.canonical_bpm is None:
+            return None
+        candidate = _bpm_candidate(result)
+        return PlannedChange(
+            "bpm",
+            result.current_bpm,
+            result.canonical_bpm,
+            candidate,
+            result.reason or "approved BPM file synchronization",
         )
 
     def _collect_track_candidates(

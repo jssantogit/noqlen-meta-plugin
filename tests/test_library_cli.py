@@ -74,6 +74,7 @@ def configure_enabled(
         "apply": apply,
         "apply_mode": apply_mode,
         "genres": {"num_genres": 2, "promote_styles": True},
+        "fields": {"cover": False},
         "providers": {
             "discogs": {"enabled": discogs, "user_token": TOKEN},
             "musicbrainz": {"enabled": musicbrainz},
@@ -217,6 +218,7 @@ def test_no_useful_provider_avoids_library_query(monkeypatch: pytest.MonkeyPatch
     output: list[str] = []
     plugin = NoqlenMetaPlugin()
     plugin.config["providers"]["musicbrainz"]["enabled"].set(False)
+    plugin.config["fields"]["cover"].set(False)
     monkeypatch.setattr(plugin_module.ui, "print_", output.append)
     lib = SimpleNamespace(albums=lambda query: pytest.fail("library must not be queried"))
 

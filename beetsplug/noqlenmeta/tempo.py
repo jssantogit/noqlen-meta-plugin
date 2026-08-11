@@ -38,6 +38,15 @@ class TempoObservation:
     backend: str
 
 
+@dataclass(frozen=True, slots=True)
+class BpmPlanningResult:
+    outcome: str
+    current_bpm: float | None
+    observation: TempoObservation | None
+    canonical_bpm: float | None
+    reason: str | None = None
+
+
 class TempoAnalysisUnavailable(RuntimeError):
     """Local tempo analysis could not produce trustworthy evidence."""
 
@@ -129,6 +138,57 @@ def normalize_bpm(observation: TempoObservation, settings: BpmSettings) -> float
     return value
 
 
+def plan_bpm(
+    *,
+    path: bytes,
+    existing_bpm: object,
+    field_enabled: bool,
+    bpm_settings: BpmSettings,
+    local_settings: LocalBpmSettings,
+    analyzer: TempoAnalyzer | None,
+) -> BpmPlanningResult:
+    """Prepare canonical BPM evidence without mutating database or media state."""
+    current = _existing_bpm(existing_bpm)
+    if not field_enabled:
+        return BpmPlanningResult(
+            "NO_EVIDENCE", current, None, None, "BPM field is disabled"
+        )
+    if current is not None and not bpm_settings.recalculate_existing:
+        return BpmPlanningResult(
+            "PRESERVED", current, None, current, "existing BPM is preserved"
+        )
+    if not local_settings.enabled:
+        if current is not None:
+            return BpmPlanningResult(
+                "PRESERVED",
+                current,
+                None,
+                current,
+                "local BPM recalculation is disabled",
+            )
+        return BpmPlanningResult(
+            "NO_EVIDENCE", None, None, None, "local BPM analysis is disabled"
+        )
+    if analyzer is None:
+        return BpmPlanningResult(
+            "UNAVAILABLE", current, None, None, "local BPM analysis is unavailable"
+        )
+    try:
+        observation = analyzer.analyze(path, local_settings)
+        canonical = normalize_bpm(observation, bpm_settings)
+    except Exception:
+        return BpmPlanningResult(
+            "UNAVAILABLE", current, None, None, "local BPM analysis is unavailable"
+        )
+    return BpmPlanningResult(
+        "RESOLVED",
+        current,
+        observation,
+        canonical,
+        "resolved local BPM analysis",
+    )
+
+
 def _scalar_tempo(value: object) -> float:
     if isinstance(value, Real) and not isinstance(value, bool):
         return float(value)
@@ -139,3 +199,11 @@ def _scalar_tempo(value: object) -> float:
         if isinstance(scalar, Real) and not isinstance(scalar, bool):
             return float(scalar)
     raise TempoAnalysisUnavailable("Librosa BPM analysis returned an ambiguous tempo")
+
+
+def _existing_bpm(value: object) -> float | None:
+    if isinstance(value, Real) and not isinstance(value, bool):
+        bpm = float(value)
+        if math.isfinite(bpm) and bpm > 0:
+            return bpm
+    return None
