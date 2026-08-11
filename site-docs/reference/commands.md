@@ -191,4 +191,4 @@ beet nm --apply --write album:"Example Album"
 | no query and no `--all` | mode-specific query requirement |
 
 Invalid combinations fail before provider, library-selection, or file work.
-Noqlen v1 has no `--force`.
+Noqlen has no `--force`.

@@ -20,14 +20,16 @@ not accept reviews or reshape blocked values. See the [field reference](../refer
 
 Do not use partial to override a warning; address the warning instead. Partial
 is not force: it never lowers confidence, chooses ambiguity, bypasses stale
-guards, or weakens identity/file checks. Noqlen v1 has no `--force`. See
+guards, or weakens identity/file checks. Noqlen has no `--force`. See
 [strict and partial](../concepts/strict-vs-partial.md#partial-is-not-force).
 
 ## Why Did `--apply` Not Change My Audio Files?
 
-Preview native `beet write -p QUERY` if generic file tags should follow the
-database. Noqlen `--apply` authorizes database changes only. Read [database,
-files, and Navidrome](../concepts/database-files-navidrome.md).
+Add Noqlen `--write` if supported ordinary metadata/BPM tags or prepared artwork
+embedding should follow the approved plan. `--apply` alone may write verified
+`cover.jpg` sidecars, but does not mutate audio files. Preview native
+`beet write -p QUERY` for generic beets database-to-file synchronization. Read
+[database, files, and Navidrome](../concepts/database-files-navidrome.md).
 
 ## What Is The Difference Between `beet write` And Identity Tags `--write`?
 

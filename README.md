@@ -7,15 +7,26 @@ offers separate workflows to audit MusicBrainz identity, use AcoustID as
 recording-level identity evidence, and synchronize four confirmed MusicBrainz
 IDs to audio-file tags.
 
-Noqlen previews by default. Database changes require `--apply`; specialized
+Noqlen previews by default. Ordinary database and approved artwork-sidecar
+changes require `--apply`; audio-file mutation requires `--write`. Specialized
 identity-tag file replacement requires `--identity-tags --write`. There is no
 `--force` option.
 
+The repository is preparing Noqlen Meta `2.0.0`. The currently published
+PyPI/GitHub release remains `1.0.0` until the v2 release workflow is explicitly
+executed after merge to `main`.
+
 ## Capabilities
 
-- Enrich selected releases from Discogs, MusicBrainz, Last.fm, and iTunes.
+- Enrich releases, tracks, and artists with semantic genres, styles, moods,
+  languages, and geography from Discogs, MusicBrainz, Last.fm, and iTunes.
 - Add selected-track plain lyrics from LRCLIB during import.
 - Preview or apply ordinary enrichment to albums already in a beets library.
+- Synchronize supported ordinary metadata to files through a verified
+  `--apply --write` workflow.
+- Select and apply verified Cover Art Archive album artwork, including
+  deterministic `cover.jpg` sidecars and optional embedding.
+- Analyze local BPM with optional lazy Librosa support from the `[audio]` extra.
 - Audit and repair release, release-group, recording, and release-track MBIDs.
 - Use decisive AcoustID recording evidence to filter incompatible MusicBrainz
   identity candidates without changing structural scores or thresholds.
@@ -119,13 +130,15 @@ After reviewing the same query, explicitly apply ordinary safe changes:
 beet nm --apply album:"Example Album"
 ```
 
-This changes ordinary metadata in the beets database only. It does not write
-audio-file tags. Strict mode is the default: one review or mapping blocker
-withholds every ordinary Noqlen change for that album.
+This changes ordinary metadata in the beets database and may write an authorized
+verified `cover.jpg` sidecar and persist `Album.artpath`. Audio files remain
+unchanged unless `--write` is also present. Strict mode is the default: one
+review or mapping blocker withholds every ordinary Noqlen change for that album.
 
 Add `--write` to the same reviewed command to synchronize supported ordinary
 fields to media files through verified candidate-copy/reopen checks. Collection
-is identical with or without `--write`; the flag never causes provider calls.
+and analysis are identical with or without `--write`; adding `--write` never
+triggers another provider call or analyzer run.
 
 Partial mode is explicit:
 
@@ -181,7 +194,7 @@ existing-library evidence workflow and does not replace `chroma`.
 | Command | Purpose | Network | Database | Audio files |
 | --- | --- | --- | --- | --- |
 | `beet nm QUERY` | Ordinary preview | Enabled providers | No | No |
-| `beet nm --apply QUERY` | Ordinary application | Enabled providers | Ordinary album metadata | No |
+| `beet nm --apply QUERY` | Ordinary application | Enabled providers | Ordinary metadata and artwork path | No audio mutation; verified `cover.jpg` may change |
 | `beet nm --apply --write QUERY` | Ordinary DB + file application | Enabled providers | Ordinary metadata | Supported verified tags |
 | `beet nm --identity QUERY` | Identity audit | MusicBrainz + optional AcoustID lookup | No | No |
 | `beet nm --identity --apply QUERY` | Identity repair | MusicBrainz + optional AcoustID lookup | Four MBID columns | No |
@@ -254,11 +267,13 @@ The beets database is information managed privately by beets. Audio-file tags
 are metadata stored inside media files. Navidrome normally scans those files;
 it does not normally read the private beets database.
 
-Therefore `beet nm --apply` or `beet nm --acoustid --apply` alone does not
-update what Navidrome sees. Use native `beet write` for generic beets
-database-to-file synchronization, or use `beet nm --identity-tags --write` only
-for the specialized four-MBID workflow. Then let Navidrome rescan according to
-its own configuration.
+Therefore `beet nm --apply` alone does not synchronize audio tags, although an
+authorized artwork sidecar may become visible to Navidrome after a rescan.
+Use `beet nm --apply --write` for supported ordinary metadata/BPM tags and
+prepared cover embedding, native `beet write` for generic beets
+database-to-file synchronization, or `beet nm --identity-tags --write` only for
+the specialized four-MBID workflow. Then let Navidrome rescan according to its
+own configuration. AcoustID `--apply` remains database-only.
 
 ## Compatibility
 

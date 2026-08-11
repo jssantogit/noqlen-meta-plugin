@@ -1,6 +1,10 @@
 # Release Status
 
-Noqlen Meta 1.0.0 was released on 2026-08-02. The package is published on
+Repository release candidate: `2.0.0`.
+
+Currently published release: `1.0.0` (2026-08-02).
+
+Noqlen Meta 1.0.0 is published on
 [PyPI](https://pypi.org/project/beets-noqlenmeta/), and the corresponding
 [GitHub Release](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v1.0.0)
 uses the existing `v1.0.0` tag.
@@ -15,6 +19,14 @@ documentation, and package validation. The GitHub repository is public, the
 root [`LICENSE`](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE)
 is the canonical MIT License text, and private vulnerability reporting is
 enabled.
+
+## Version 2.0.0 Candidate
+
+The source repository has prepared package metadata, changelog, public
+documentation, and release contracts for `2.0.0`. Main merge, tag, publication,
+and versioned documentation remain pending and require explicit owner
+authorization. No `v2.0.0` tag, 2.0.0 PyPI publication, GitHub Release, or
+versioned Read the Docs build is claimed by this candidate.
 
 ## Publication
 
