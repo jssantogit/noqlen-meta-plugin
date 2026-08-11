@@ -23,6 +23,21 @@ from beetsplug.noqlenmeta.acoustid import (
     render_acoustid_preview,
     select_acoustid_targets,
 )
+from beetsplug.noqlenmeta.artwork import (
+    ArtworkContext,
+    ArtworkLookupResult,
+    ArtworkPlan,
+    ArtworkSettings,
+    artwork_context_from_album,
+    artwork_context_requires_lookup,
+    artwork_settings_from_config,
+    plan_artwork_context,
+    resolve_caa_artwork,
+)
+from beetsplug.noqlenmeta.artwork_application import (
+    ArtworkApplicationResult,
+    apply_artwork_plan,
+)
 from beetsplug.noqlenmeta.beets_application import (
     BeetsApplicationMode,
     apply_beets_target_plan,
@@ -32,6 +47,8 @@ from beetsplug.noqlenmeta.beets_mapping import map_change_plan_to_beets
 from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange, build_change_plan
 from beetsplug.noqlenmeta.configuration import (
     default_config,
+    validate_artwork_config,
+    validate_bpm_config,
     validate_local_analysis_config,
 )
 from beetsplug.noqlenmeta.domain import (
@@ -139,6 +156,7 @@ from beetsplug.noqlenmeta.orchestration import (
 )
 from beetsplug.noqlenmeta.provider_cache import CommandEntityCache
 from beetsplug.noqlenmeta.providers import ProviderError
+from beetsplug.noqlenmeta.providers.coverartarchive import CoverArtArchiveClient
 from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_NAMES,
     BUILTIN_RELEASE_PROVIDER_SPECS,
@@ -293,6 +311,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         self._musicbrainz_semantic_client = None
         self._semantic_cache = CommandEntityCache()
         self._musicbrainz_identity_source: MusicBrainzIdentitySource | None = None
+        self._coverartarchive_client: CoverArtArchiveClient | None = None
         self.register_listener("import_task_choice", self._import_task_choice)
         self._command = Subcommand(
             "noqlenmeta",
@@ -697,13 +716,15 @@ class NoqlenMetaPlugin(BeetsPlugin):
             raise ui.UserError("noqlenmeta: use a query or --all, not both")
 
         policy = self._resolution_policy()
-        release_can_contribute = self._has_contributing_release_provider(policy) or (
+        ordinary_release_can_contribute = self._has_contributing_release_provider(policy) or (
             policy.is_provider_enabled("musicbrainz")
             and any(
                 policy.is_field_enabled(field)
                 for field in ("artist_countries", "artist_areas", "artist_languages")
             )
         )
+        artwork_enabled = self.config["fields"]["cover"].get(bool)
+        release_can_contribute = ordinary_release_can_contribute or artwork_enabled
         track_can_contribute = self._has_contributing_track_provider(policy)
         if not release_can_contribute and not track_can_contribute:
             ui.print_("Noqlen Meta: no enabled provider can contribute to the configured fields")
@@ -717,8 +738,39 @@ class NoqlenMetaPlugin(BeetsPlugin):
             return
 
         prepared_albums: list[LibraryAlbumPlan] = []
+        prepared_artwork: list[tuple[Album, ArtworkPlan]] = []
+        artwork_settings = self._artwork_settings()
         total = len(albums)
         for position, album in enumerate(albums, 1):
+            if artwork_enabled:
+                album_items = tuple(album.items())
+                try:
+                    artwork_context = artwork_context_from_album(album, album_items)
+                    artwork_lookup = self._resolve_album_artwork(
+                        artwork_context, artwork_settings
+                    )
+                    artwork_plan = plan_artwork_context(
+                        artwork_context,
+                        artwork_lookup,
+                        artwork_settings,
+                        write_enabled=write_enabled,
+                    )
+                except ValueError as error:
+                    artwork_plan = ArtworkPlan(
+                        album.id,
+                        "BLOCKED",
+                        None,
+                        None,
+                        (),
+                        None,
+                        (),
+                        artwork_settings.replace_existing,
+                        str(error),
+                    )
+                prepared_artwork.append((album, artwork_plan))
+                self._render_artwork_plan(artwork_plan)
+            if not ordinary_release_can_contribute:
+                continue
             context = context_from_library_album(album)
             if context is None:
                 ui.print_(
@@ -935,6 +987,13 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 or application_result is not None
                 and application_result.stored
             )
+
+        if apply_enabled:
+            for artwork_album, artwork_plan in prepared_artwork:
+                artwork_result = self._apply_artwork_plan(
+                    lib, artwork_album, artwork_plan
+                )
+                self._render_artwork_application_result(artwork_result)
 
         for album_plan, application_result in zip(
             prepared_albums, album_results, strict=True
@@ -1307,6 +1366,11 @@ class NoqlenMetaPlugin(BeetsPlugin):
             validate_local_analysis_config(self.config["local_analysis"].get(dict))
         except (confuse.ConfigError, ValueError) as error:
             raise ui.UserError("noqlenmeta: invalid local_analysis configuration") from error
+        try:
+            validate_artwork_config(self.config["artwork"].get(dict))
+            validate_bpm_config(self.config["bpm"].get(dict))
+        except (confuse.ConfigError, ValueError) as error:
+            raise ui.UserError("noqlenmeta: invalid enrichment configuration") from error
         field_settings = {
             field: self.config["fields"][field].get(bool) for field in _FIELD_DEFAULTS
         }
@@ -1351,6 +1415,67 @@ class NoqlenMetaPlugin(BeetsPlugin):
             raise ui.UserError(
                 f"noqlenmeta: invalid moods configuration: {error}"
             ) from None
+
+    def _artwork_settings(self) -> ArtworkSettings:
+        try:
+            return artwork_settings_from_config(self.config["artwork"].get(dict))
+        except (confuse.ConfigError, ValueError) as error:
+            raise ui.UserError(f"noqlenmeta: invalid artwork configuration: {error}") from None
+
+    def _resolve_album_artwork(
+        self,
+        context: ArtworkContext,
+        settings: ArtworkSettings,
+    ) -> ArtworkLookupResult | None:
+        if not artwork_context_requires_lookup(context, settings):
+            return None
+        try:
+            provider_enabled = self.config["providers"]["coverartarchive"]["enabled"].get(
+                bool
+            )
+        except confuse.ConfigError as error:
+            raise ui.UserError("noqlenmeta: invalid Cover Art Archive configuration") from error
+        if not provider_enabled:
+            return None
+        if self._coverartarchive_client is None:
+            self._coverartarchive_client = CoverArtArchiveClient()
+        return resolve_caa_artwork(
+            self._coverartarchive_client,
+            release_mbid=context.release_mbid,
+            release_group_mbid=context.release_group_mbid,
+            settings=settings,
+        )
+
+    def _apply_artwork_plan(
+        self, library: Library, album: Album, plan: ArtworkPlan
+    ) -> ArtworkApplicationResult:
+        return apply_artwork_plan(library, album, plan)
+
+    @staticmethod
+    def _render_artwork_plan(plan: ArtworkPlan) -> None:
+        source = (
+            plan.candidate.source_scope
+            if plan.candidate is not None
+            else "local-cover.jpg"
+            if plan.local_source is not None
+            else "none"
+        )
+        ui.print_(
+            "Noqlen Meta / artwork plan: "
+            f"Album {plan.album_id}; outcome={plan.outcome}; source={source}; "
+            f"sidecars={len(plan.sidecar_destinations)}; embeds={len(plan.embed_item_ids)}"
+        )
+
+    @staticmethod
+    def _render_artwork_application_result(result: ArtworkApplicationResult) -> None:
+        status = "blocked" if result.blocked_reason else "committed"
+        reason = f"; reason={result.blocked_reason}" if result.blocked_reason else ""
+        ui.print_(
+            "Noqlen Meta / artwork application: "
+            f"Album {result.album_id}; status={status}; "
+            f"sidecars={len(result.committed_sidecars)}; "
+            f"embeds={len(result.embedded_item_ids)}{reason}"
+        )
 
     @staticmethod
     def _has_contributing_release_provider(policy: ResolutionPolicy) -> bool:

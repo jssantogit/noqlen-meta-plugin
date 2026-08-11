@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
 from urllib.parse import urlparse
+
+from beets.library import Album, Item
+from mediafile import MediaFile
 
 from beetsplug.noqlenmeta.configuration import validate_artwork_config
 from beetsplug.noqlenmeta.providers.coverartarchive import (
@@ -53,6 +57,31 @@ class ArtworkLookupResult:
     reason: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ArtworkContext:
+    album_id: int
+    release_mbid: str
+    release_group_mbid: str | None
+    item_ids: tuple[int, ...]
+    item_paths: tuple[bytes, ...]
+    disc_directories: tuple[bytes, ...]
+    existing_sidecars: tuple[bytes, ...]
+    embedded_art_item_ids: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ArtworkPlan:
+    album_id: int
+    outcome: str
+    candidate: ArtworkCandidate | None
+    local_source: bytes | None
+    sidecar_destinations: tuple[bytes, ...]
+    canonical_artpath: bytes | None
+    embed_item_ids: tuple[int, ...]
+    replace_existing: bool
+    reason: str | None = None
+
+
 class _InvalidArtworkMetadata(ValueError):
     pass
 
@@ -64,6 +93,140 @@ def artwork_settings_from_config(value: object) -> ArtworkSettings:
     return ArtworkSettings(
         size=ArtworkSize(value["size"]),
         replace_existing=value["replace_existing"],
+    )
+
+
+def artwork_context_from_album(
+    album: Album, items: list[Item] | tuple[Item, ...]
+) -> ArtworkContext:
+    """Snapshot album paths and existing artwork state for deterministic planning."""
+    if not isinstance(album, Album) or not isinstance(album.id, int):
+        raise ValueError("artwork planning requires a persisted Album")
+    persisted = tuple(items)
+    if not persisted or any(not isinstance(item.id, int) for item in persisted):
+        raise ValueError("artwork planning requires persisted album Items")
+    if any(item.album_id != album.id for item in persisted):
+        raise ValueError("artwork planning Items must belong to the Album")
+    item_paths = tuple(item.path for item in persisted)
+    if any(not isinstance(path, bytes) or not path for path in item_paths):
+        raise ValueError("artwork planning requires Item paths")
+    directories = tuple(sorted({os.path.dirname(path) for path in item_paths}))
+    sidecars = tuple(
+        destination
+        for directory in directories
+        if os.path.exists(destination := os.path.join(directory, b"cover.jpg"))
+    )
+    embedded = []
+    for item, path in zip(persisted, item_paths, strict=True):
+        try:
+            if MediaFile(os.fsdecode(path)).images:
+                embedded.append(item.id)
+        except Exception as error:
+            raise ValueError("existing embedded artwork could not be inspected") from error
+    release_mbid = str(album.get("mb_albumid") or "").strip()
+    release_group_mbid = str(album.get("mb_releasegroupid") or "").strip() or None
+    return ArtworkContext(
+        album.id,
+        release_mbid,
+        release_group_mbid,
+        tuple(item.id for item in persisted),
+        item_paths,
+        directories,
+        sidecars,
+        tuple(embedded),
+    )
+
+
+def artwork_context_requires_lookup(context: ArtworkContext, settings: ArtworkSettings) -> bool:
+    """Return whether preservation policy permits CAA metadata collection."""
+    if not context.release_mbid:
+        return False
+    return settings.replace_existing or not (
+        context.existing_sidecars or context.embedded_art_item_ids
+    )
+
+
+def plan_album_artwork(
+    album: Album,
+    items: list[Item] | tuple[Item, ...],
+    lookup: ArtworkLookupResult | None,
+    settings: ArtworkSettings,
+    *,
+    write_enabled: bool,
+) -> ArtworkPlan:
+    """Prepare album artwork effects without mutating files or database state."""
+    return plan_artwork_context(
+        artwork_context_from_album(album, items),
+        lookup,
+        settings,
+        write_enabled=write_enabled,
+    )
+
+
+def plan_artwork_context(
+    context: ArtworkContext,
+    lookup: ArtworkLookupResult | None,
+    settings: ArtworkSettings,
+    *,
+    write_enabled: bool,
+) -> ArtworkPlan:
+    if context.embedded_art_item_ids and not settings.replace_existing:
+        return ArtworkPlan(
+            context.album_id,
+            "PRESERVED",
+            None,
+            None,
+            (),
+            context.existing_sidecars[0] if context.existing_sidecars else None,
+            (),
+            False,
+            "existing embedded artwork preserved for the whole album",
+        )
+
+    if context.existing_sidecars and not settings.replace_existing:
+        source = context.existing_sidecars[0]
+        missing = tuple(
+            os.path.join(directory, b"cover.jpg")
+            for directory in context.disc_directories
+            if os.path.join(directory, b"cover.jpg") not in context.existing_sidecars
+        )
+        return ArtworkPlan(
+            context.album_id,
+            "RESOLVED",
+            None,
+            source,
+            missing,
+            source,
+            context.item_ids if write_enabled else (),
+            False,
+            "existing cover.jpg is authoritative",
+        )
+
+    if lookup is None or lookup.outcome != "RESOLVED" or lookup.candidate is None:
+        return ArtworkPlan(
+            context.album_id,
+            lookup.outcome if lookup is not None else "NO_EVIDENCE",
+            None,
+            None,
+            (),
+            None,
+            (),
+            settings.replace_existing,
+            lookup.reason if lookup is not None else "no prepared artwork evidence",
+        )
+
+    destinations = tuple(
+        os.path.join(directory, b"cover.jpg") for directory in context.disc_directories
+    )
+    return ArtworkPlan(
+        context.album_id,
+        "RESOLVED",
+        lookup.candidate,
+        None,
+        destinations,
+        destinations[0] if destinations else None,
+        context.item_ids if write_enabled else (),
+        settings.replace_existing,
     )
 
 

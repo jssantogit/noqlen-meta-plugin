@@ -170,6 +170,7 @@ def test_configuration_defaults_and_redacts_user_token() -> None:
     assert plugin.config["providers"]["itunes"]["enabled"].get(bool) is False
     assert plugin.config["providers"]["itunes"]["storefront"].as_str() == "us"
     assert plugin.config["providers"]["lrclib"]["enabled"].get(bool) is False
+    assert plugin.config["providers"]["coverartarchive"]["enabled"].get(bool) is True
     assert plugin.config["resolution"]["authority"].get(dict) == {}
     assert plugin.config["resolution"]["min_confidence"].get(dict) == {}
     assert plugin.config["resolution"]["preserve_existing"].get(dict) == {}
