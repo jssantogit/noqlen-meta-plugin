@@ -9,6 +9,7 @@ from beetsplug.noqlenmeta.tempo import (
     TempoObservation,
     bpm_settings_from_config,
     local_bpm_settings_from_config,
+    normalize_bpm,
 )
 
 
@@ -91,3 +92,31 @@ def test_tempo_observation_is_immutable() -> None:
 
     with pytest.raises(AttributeError):
         observation.bpm = 128.0  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(
+    "raw,settings,expected",
+    [
+        (127.63, BpmSettings(), 127.63),
+        (127.63, BpmSettings(round=True), 128.0),
+        (55.0, BpmSettings(octave_normalization=True), 110.0),
+        (210.0, BpmSettings(octave_normalization=True), 105.0),
+        (72.0, BpmSettings(octave_normalization=True), 72.0),
+        (144.0, BpmSettings(octave_normalization=True), 144.0),
+        (
+            55.3,
+            BpmSettings(round=True, octave_normalization=True),
+            111.0,
+        ),
+    ],
+)
+def test_normalize_bpm_applies_only_approved_policy(
+    raw: float, settings: BpmSettings, expected: float
+) -> None:
+    assert normalize_bpm(TempoObservation(raw, "librosa"), settings) == expected
+
+
+@pytest.mark.parametrize("raw", [0.0, -1.0, math.nan, math.inf, -math.inf])
+def test_normalize_bpm_rejects_invalid_observation(raw: float) -> None:
+    with pytest.raises(ValueError):
+        normalize_bpm(TempoObservation(raw, "librosa"), BpmSettings())
