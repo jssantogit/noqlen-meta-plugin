@@ -23,6 +23,9 @@ RECORDING_MBID = "6ea45c08-3cfa-461a-aa4d-4cc404fcfa86"
 RELEASE_TRACK_MBID = "15ad0189-3921-42d5-a5b5-21b92133e4f0"
 SECOND_RECORDING_MBID = "680be1b3-3326-4fd0-8f10-55e2b4514439"
 ACOUSTID_ID = "e365ad13-c3e2-44d7-a781-79666b70a233"
+RELEASE_MBID = "11111111-1111-4111-8111-111111111111"
+ARTIST_ONE_MBID = "22222222-2222-4222-8222-222222222222"
+ARTIST_TWO_MBID = "33333333-3333-4333-8333-333333333333"
 
 
 def track_info(**overrides: object) -> TrackInfo:
@@ -102,6 +105,65 @@ def test_musicbrainz_track_info_maps_generic_recording_and_release_track_ids() -
     assert id_pairs(context) == [
         ("musicbrainz.recording", RECORDING_MBID),
         ("musicbrainz.release_track", RELEASE_TRACK_MBID),
+    ]
+
+
+def test_selected_exact_release_mbid_is_carried_into_track_context() -> None:
+    info = track_info()
+    album = AlbumInfo(
+        [info],
+        artist="Gojira",
+        album="From Mars to Sirius",
+        data_source="MusicBrainz",
+        album_id=RELEASE_MBID,
+    )
+
+    context = context_from_track_info(info, album_info=album)
+
+    assert context is not None
+    assert context.release is not None
+    assert context.release.external_ids == (
+        ExternalIdentifier("musicbrainz.release", RELEASE_MBID),
+    )
+
+
+def test_collaboration_creates_one_context_per_artist_in_stable_credit_order() -> None:
+    context = context_from_track_info(
+        track_info(
+            artists=["First Artist", "Second Artist", "First Artist"],
+            artists_credit=["First", "Second", "First"],
+            artists_ids=[ARTIST_ONE_MBID, ARTIST_TWO_MBID, ARTIST_ONE_MBID],
+        )
+    )
+
+    assert context is not None
+    credits = [
+        (artist.name, artist.credit_name, artist.credit_index)
+        for artist in context.artists
+    ]
+    assert credits == [
+        ("First Artist", "First", 1),
+        ("Second Artist", "Second", 2),
+    ]
+    assert [artist.external_ids[0].value for artist in context.artists] == [
+        ARTIST_ONE_MBID,
+        ARTIST_TWO_MBID,
+    ]
+
+
+def test_selected_scalar_artist_id_wins_over_stale_item_credit_ids() -> None:
+    context = context_from_track_info(
+        track_info(mb_artistid=ARTIST_ONE_MBID),
+        item=Item(
+            artist="Stale Artist",
+            mb_artistids=[ARTIST_TWO_MBID],
+            artists=["Stale Artist"],
+        ),
+    )
+
+    assert context is not None
+    assert [artist.external_ids[0].value for artist in context.artists] == [
+        ARTIST_ONE_MBID
     ]
 
 

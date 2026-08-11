@@ -31,6 +31,7 @@ from beetsplug.noqlenmeta.resolver import (
     ResolutionPolicy,
     default_resolution_policy,
 )
+from beetsplug.noqlenmeta.semantic_enrichment import SemanticFieldOutcome
 
 if TYPE_CHECKING:
     from beetsplug.noqlenmeta.beets_application import BeetsApplicationResult
@@ -114,6 +115,11 @@ def current_values_from_album_info(album_info: AlbumInfo) -> dict[str, MetadataV
             styles = (legacy_style,)
     if styles:
         current_values["styles"] = styles
+
+    for field in ("artist_countries", "artist_areas", "artist_languages"):
+        values = _text_tuple(album_info.get(field))
+        if values:
+            current_values[field] = values
 
     singular_fields = {
         "labels": album_info.label,
@@ -237,6 +243,7 @@ def eligible_album_info(task: object) -> AlbumInfo | None:
 def render_beets_target_plan(
     plan: BeetsTargetPlan,
     application_result: BeetsApplicationResult | None = None,
+    semantic_outcomes: Mapping[str, SemanticFieldOutcome] | None = None,
 ) -> None:
     """Print a safe target plan and truthful selected-release application state."""
     source = plan.source
@@ -282,6 +289,7 @@ def render_beets_target_plan(
         lines.extend(_render_mapping_blocker(blocker))
     for decision in (*source.reviews, *source.kept, *source.skipped):
         lines.extend(_render_resolution_decision(decision))
+    lines.extend(_render_semantic_outcomes(semantic_outcomes or {}))
     ui.print_("\n".join(lines))
 
 
@@ -354,6 +362,20 @@ def _safe_preview_text(value: object) -> str:
 def _provider_display_name(provider: object) -> str:
     safe_name = _safe_preview_text(provider)
     return provider_display_name(safe_name)
+
+
+def _render_semantic_outcomes(
+    outcomes: Mapping[str, SemanticFieldOutcome],
+) -> tuple[str, ...]:
+    if not outcomes:
+        return ()
+    lines = ["", "  semantic outcomes:"]
+    lines.extend(
+        f"    {_safe_preview_text(field)}: {outcome.status.value}; "
+        f"{_safe_preview_text(outcome.reason)}"
+        for field, outcome in sorted(outcomes.items())
+    )
+    return tuple(lines)
 
 
 def _render_resolution_decision(decision: FieldDecision) -> tuple[str, ...]:

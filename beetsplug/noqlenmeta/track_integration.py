@@ -12,8 +12,10 @@ from beets.importer.actions import Action
 from beets.library import Item
 
 from beetsplug.noqlenmeta.domain import (
+    ArtistEnrichmentContext,
     ExternalIdentifier,
     MetadataValue,
+    ReleaseEnrichmentContext,
     TrackEnrichmentContext,
     canonical_isrc,
     canonical_uuid,
@@ -21,6 +23,7 @@ from beetsplug.noqlenmeta.domain import (
 
 _MUSICBRAINZ_RECORDING_NAMESPACE = "musicbrainz.recording"
 _MUSICBRAINZ_RELEASE_TRACK_NAMESPACE = "musicbrainz.release_track"
+_MUSICBRAINZ_RELEASE_NAMESPACE = "musicbrainz.release"
 _ISRC_NAMESPACE = "isrc"
 _ACOUSTID_TRACK_NAMESPACE = "acoustid.track"
 
@@ -57,6 +60,23 @@ def context_from_track_info(
     item_ids = _item_identifier_values(item)
     data_source = _optional_text(track_info.data_source)
     is_musicbrainz = data_source is not None and data_source.casefold() == "musicbrainz"
+    album_data_source = (
+        _optional_text(album_info.data_source) if album_info is not None else None
+    )
+    release = _release_context(
+        artist,
+        album_title,
+        (
+            getattr(album_info, "mb_albumid", None) if album_info is not None else None,
+            album_info.album_id
+            if album_info is not None
+            and album_data_source is not None
+            and album_data_source.casefold() == "musicbrainz"
+            else None,
+            track_info.get("mb_albumid"),
+            _item_get(item, "mb_albumid") if item is not None else None,
+        ),
+    )
     return TrackEnrichmentContext(
         artist=artist,
         title=title,
@@ -78,6 +98,43 @@ def context_from_track_info(
             isrc_values=(track_info.get("isrc"), item_ids[2]),
             acoustid_values=(track_info.get("acoustid_id"), item_ids[3]),
         ),
+        release=release,
+        artists=_artist_contexts(
+            artist,
+            (
+                (
+                    track_info.get("artists"),
+                    track_info.get("artists_credit"),
+                    track_info.get("artists_sort"),
+                    track_info.get("artists_ids"),
+                ),
+                (
+                    (artist,),
+                    (track_info.get("artist_credit"),),
+                    (track_info.get("artist_sort"),),
+                    (
+                        track_info.get("mb_artistid")
+                        or (
+                            getattr(track_info, "artist_id", None)
+                            if is_musicbrainz
+                            else None
+                        ),
+                    ),
+                ),
+                (
+                    _item_get(item, "artists") if item is not None else None,
+                    _item_get(item, "artists_credit") if item is not None else None,
+                    _item_get(item, "artists_sort") if item is not None else None,
+                    _item_get(item, "mb_artistids") if item is not None else None,
+                ),
+                (
+                    (artist,),
+                    (_item_get(item, "artist_credit") if item is not None else None,),
+                    (_item_get(item, "artist_sort") if item is not None else None,),
+                    (_item_get(item, "mb_artistid") if item is not None else None,),
+                ),
+            ),
+        ),
     )
 
 
@@ -89,10 +146,11 @@ def context_from_library_item(item: Item) -> TrackEnrichmentContext | None:
         return None
 
     item_ids = _item_identifier_values(item)
+    album_title = _optional_text(_item_get(item, "album"))
     return TrackEnrichmentContext(
         artist=artist,
         title=title,
-        album_title=_optional_text(_item_get(item, "album")),
+        album_title=album_title,
         duration=_positive_duration(_item_get(item, "length")),
         track_number=_positive_int(_item_get(item, "track")),
         disc_number=_positive_int(_item_get(item, "disc")),
@@ -101,6 +159,26 @@ def context_from_library_item(item: Item) -> TrackEnrichmentContext | None:
             release_track_values=(item_ids[1],),
             isrc_values=(item_ids[2],),
             acoustid_values=(item_ids[3],),
+        ),
+        release=_release_context(
+            artist, album_title, (_item_get(item, "mb_albumid"),)
+        ),
+        artists=_artist_contexts(
+            artist,
+            (
+                (
+                    _item_get(item, "artists"),
+                    _item_get(item, "artists_credit"),
+                    _item_get(item, "artists_sort"),
+                    _item_get(item, "mb_artistids"),
+                ),
+                (
+                    (artist,),
+                    (_item_get(item, "artist_credit"),),
+                    (_item_get(item, "artist_sort"),),
+                    (_item_get(item, "mb_artistid"),),
+                ),
+            ),
         ),
     )
 
@@ -171,6 +249,66 @@ def _external_ids(
     return tuple(identifiers)
 
 
+def _release_context(
+    artist: str, album_title: str | None, release_id_values: tuple[object, ...]
+) -> ReleaseEnrichmentContext | None:
+    if album_title is None:
+        return None
+    for value in release_id_values:
+        release_id = canonical_uuid(value)
+        if release_id is not None:
+            return ReleaseEnrichmentContext(
+                artist,
+                album_title,
+                external_ids=(ExternalIdentifier(_MUSICBRAINZ_RELEASE_NAMESPACE, release_id),),
+            )
+    return None
+
+
+def _artist_contexts(
+    artist_name: str,
+    sources: tuple[tuple[object, object, object, object], ...],
+) -> tuple[ArtistEnrichmentContext, ...]:
+    for names_value, credits_value, sorts_value, ids_value in sources:
+        ids = _object_tuple(ids_value)
+        if not ids:
+            continue
+        names = _object_tuple(names_value)
+        credits = _object_tuple(credits_value)
+        sorts = _object_tuple(sorts_value)
+        contexts: list[ArtistEnrichmentContext] = []
+        seen: set[str] = set()
+        for index, value in enumerate(ids, 1):
+            artist_id = canonical_uuid(value)
+            if artist_id is None or artist_id in seen:
+                continue
+            seen.add(artist_id)
+            contexts.append(
+                ArtistEnrichmentContext(
+                    _optional_text(_at(names, index - 1)) or artist_name,
+                    sort_name=_optional_text(_at(sorts, index - 1)),
+                    credit_name=_optional_text(_at(credits, index - 1)),
+                    credit_index=index,
+                    external_ids=(
+                        ExternalIdentifier("musicbrainz.artist", artist_id),
+                    ),
+                )
+            )
+        if contexts:
+            return tuple(contexts)
+    return ()
+
+
+def _object_tuple(value: object) -> tuple[object, ...]:
+    if isinstance(value, (list, tuple)):
+        return tuple(value)
+    return ()
+
+
+def _at(values: tuple[object, ...], index: int) -> object:
+    return values[index] if index < len(values) else None
+
+
 def _item_identifier_values(item: Item | None) -> tuple[object, object, object, object]:
     if item is None:
         return None, None, None, None
@@ -191,6 +329,7 @@ def _current_track_values(getter: Callable[[str], object]) -> dict[str, Metadata
             values[field] = text
 
     for field in (
+        "genres",
         "moods",
         "lyrics_languages",
         "artist_countries",

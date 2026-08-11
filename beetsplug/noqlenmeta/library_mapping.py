@@ -40,6 +40,9 @@ class LibraryFieldTarget:
 _TARGETS = (
     LibraryFieldTarget("genres", "genres", BeetsTargetShape.STRING_LIST),
     LibraryFieldTarget("styles", "styles", BeetsTargetShape.STRING_LIST),
+    LibraryFieldTarget("artist_countries", "artist_countries", BeetsTargetShape.STRING_LIST),
+    LibraryFieldTarget("artist_areas", "artist_areas", BeetsTargetShape.STRING_LIST),
+    LibraryFieldTarget("artist_languages", "artist_languages", BeetsTargetShape.STRING_LIST),
     LibraryFieldTarget("labels", "label", BeetsTargetShape.SCALAR_STRING),
     LibraryFieldTarget("catalog_numbers", "catalognum", BeetsTargetShape.SCALAR_STRING),
     LibraryFieldTarget("barcodes", "barcode", BeetsTargetShape.SCALAR_STRING),

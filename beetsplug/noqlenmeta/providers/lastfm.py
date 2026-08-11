@@ -14,14 +14,29 @@ from urllib.request import Request, urlopen
 
 import beets.plugins
 
-from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
+from beetsplug.noqlenmeta.domain import (
+    ArtistEnrichmentContext,
+    MetadataCandidate,
+    ReleaseEnrichmentContext,
+    SemanticCategory,
+    SemanticEvidenceBundle,
+    TrackEnrichmentContext,
+    canonical_uuid,
+)
+from beetsplug.noqlenmeta.genre_evidence import GenreEvidence, GenreEvidenceKind
 from beetsplug.noqlenmeta.genre_taxonomy import (
     DEFAULT_GENRE_TAXONOMY,
     GenreSemanticCategory,
     GenreTaxonomy,
 )
 from beetsplug.noqlenmeta.providers.base import ProviderError
-from beetsplug.noqlenmeta.providers.specs import LASTFM_SPEC
+from beetsplug.noqlenmeta.providers.specs import (
+    LASTFM_ARTIST_SPEC,
+    LASTFM_SPEC,
+    LASTFM_TRACK_SPEC,
+    ProviderScope,
+)
+from beetsplug.noqlenmeta.semantic_tags import classify_semantic_tag
 
 _API_URL = "https://ws.audioscrobbler.com/2.0/"
 _PUBLIC_ALBUM_URL = "https://www.last.fm/music"
@@ -61,6 +76,27 @@ class _LastFmTransport:
         self._last_request_started: float | None = None
 
     def fetch_top_tags(self, artist: str, album: str) -> Mapping[str, object]:
+        return self._fetch_top_tags(
+            {
+                "method": "album.getTopTags",
+                "artist": artist,
+                "album": album,
+            }
+        )
+
+    def fetch_track_top_tags(
+        self, artist: str, track: str, mbid: str | None
+    ) -> Mapping[str, object]:
+        identity = {"mbid": mbid} if mbid else {"artist": artist, "track": track}
+        return self._fetch_top_tags({"method": "track.getTopTags", **identity})
+
+    def fetch_artist_top_tags(
+        self, artist: str, mbid: str | None
+    ) -> Mapping[str, object]:
+        identity = {"mbid": mbid} if mbid else {"artist": artist}
+        return self._fetch_top_tags({"method": "artist.getTopTags", **identity})
+
+    def _fetch_top_tags(self, identity: Mapping[str, str]) -> Mapping[str, object]:
         now = self._monotonic()
         if self._last_request_started is not None:
             remaining = _MIN_REQUEST_INTERVAL_SECONDS - (
@@ -72,9 +108,7 @@ class _LastFmTransport:
         self._last_request_started = now
 
         parameters = {
-            "method": "album.getTopTags",
-            "artist": artist,
-            "album": album,
+            **identity,
             "api_key": self._api_key,
             "format": "json",
             "autocorrect": "0",
@@ -108,6 +142,7 @@ class LastFmProvider:
             raise TypeError("taxonomy must be a GenreTaxonomy")
         self._taxonomy = taxonomy
         self._cache: dict[tuple[str, str], tuple[MetadataCandidate, ...]] = {}
+        self._payload_cache: dict[tuple[str, str], Mapping[str, object]] = {}
 
     def get_candidates(
         self, context: ReleaseEnrichmentContext
@@ -118,10 +153,32 @@ class LastFmProvider:
         if cache_key in self._cache:
             return self._cache[cache_key]
 
-        payload = self._fetch_top_tags(artist, album)
+        payload = self._payload(artist, album)
         candidates = self._normalize_payload(payload, artist, album)
         self._cache[cache_key] = candidates
         return candidates
+
+    def get_semantic_evidence(
+        self, context: ReleaseEnrichmentContext
+    ) -> SemanticEvidenceBundle:
+        artist = _clean_identity(context.album_artist)
+        album = _clean_identity(context.album_title)
+        payload = self._payload(artist, album)
+        source_id = f"{artist} / {album}"
+        source_url = f"{_PUBLIC_ALBUM_URL}/{quote(artist, safe='')}/{quote(album, safe='')}"
+        return _semantic_bundle(
+            payload,
+            expected={"artist": artist, "album": album},
+            scope=ProviderScope.RELEASE,
+            source_id=source_id,
+            source_url=source_url,
+        )
+
+    def _payload(self, artist: str, album: str) -> Mapping[str, object]:
+        key = (_comparison_identity(artist), _comparison_identity(album))
+        if key not in self._payload_cache:
+            self._payload_cache[key] = self._fetch_top_tags(artist, album)
+        return self._payload_cache[key]
 
     def _normalize_payload(
         self, payload: object, requested_artist: str, requested_album: str
@@ -197,6 +254,159 @@ class LastFmProvider:
                 source_url=source_url,
             ),
         )
+
+
+class LastFmTrackProvider:
+    name = LASTFM_TRACK_SPEC.name
+    supported_fields = LASTFM_TRACK_SPEC.supported_fields
+
+    def __init__(
+        self,
+        *,
+        fetch_top_tags: Callable[[str, str, str | None], Mapping[str, object]] | None = None,
+        transport: _LastFmTransport | None = None,
+    ) -> None:
+        if fetch_top_tags is not None and transport is not None:
+            raise TypeError("provide fetch_top_tags or transport, not both")
+        self._fetch_top_tags = fetch_top_tags or (
+            transport or _LastFmTransport()
+        ).fetch_track_top_tags
+        self._cache: dict[tuple[str, str, str | None], SemanticEvidenceBundle] = {}
+
+    def get_semantic_evidence(
+        self, context: TrackEnrichmentContext
+    ) -> SemanticEvidenceBundle:
+        artist = _clean_identity(context.artist)
+        title = _clean_identity(context.title)
+        mbid = _external_mbid(context.external_ids, "musicbrainz.recording")
+        key = (_comparison_identity(artist), _comparison_identity(title), mbid)
+        if key in self._cache:
+            return self._cache[key]
+        payload = self._fetch_top_tags(artist, title, mbid)
+        source_id = f"{artist} / {title}"
+        source_url = f"{_PUBLIC_ALBUM_URL}/{quote(artist, safe='')}/_/{quote(title, safe='')}"
+        bundle = _semantic_bundle(
+            payload,
+            expected={"artist": artist, "track": title},
+            scope=ProviderScope.TRACK,
+            source_id=source_id,
+            source_url=source_url,
+        )
+        self._cache[key] = bundle
+        return bundle
+
+
+class LastFmArtistProvider:
+    name = LASTFM_ARTIST_SPEC.name
+    supported_fields = LASTFM_ARTIST_SPEC.supported_fields
+
+    def __init__(
+        self,
+        *,
+        fetch_top_tags: Callable[[str, str | None], Mapping[str, object]] | None = None,
+        transport: _LastFmTransport | None = None,
+    ) -> None:
+        if fetch_top_tags is not None and transport is not None:
+            raise TypeError("provide fetch_top_tags or transport, not both")
+        self._fetch_top_tags = fetch_top_tags or (
+            transport or _LastFmTransport()
+        ).fetch_artist_top_tags
+        self._cache: dict[tuple[str, str | None], SemanticEvidenceBundle] = {}
+
+    def get_semantic_evidence(
+        self, context: ArtistEnrichmentContext
+    ) -> SemanticEvidenceBundle:
+        artist = _clean_identity(context.name)
+        mbid = _external_mbid(context.external_ids, "musicbrainz.artist")
+        key = (_comparison_identity(artist), mbid)
+        if key in self._cache:
+            return self._cache[key]
+        payload = self._fetch_top_tags(artist, mbid)
+        bundle = _semantic_bundle(
+            payload,
+            expected={"artist": artist},
+            scope=ProviderScope.ARTIST,
+            source_id=artist,
+            source_url=f"{_PUBLIC_ALBUM_URL}/{quote(artist, safe='')}",
+        )
+        self._cache[key] = bundle
+        return bundle
+
+
+def _semantic_bundle(
+    payload: object,
+    *,
+    expected: Mapping[str, str],
+    scope: ProviderScope,
+    source_id: str,
+    source_url: str,
+) -> SemanticEvidenceBundle:
+    if not isinstance(payload, Mapping):
+        raise ProviderError("Last.fm API response is invalid")
+    if "error" in payload:
+        if _error_code(payload.get("error")) in _NO_RESOURCE_ERROR_CODES:
+            return SemanticEvidenceBundle()
+        raise ProviderError("Last.fm service request failed")
+    toptags = payload.get("toptags")
+    if not isinstance(toptags, Mapping):
+        raise ProviderError("Last.fm API response is invalid")
+    attributes = toptags.get("@attr")
+    if not isinstance(attributes, Mapping):
+        raise ProviderError("Last.fm API response is invalid")
+    for field, expected_value in expected.items():
+        actual = _optional_identity(attributes.get(field))
+        if not actual or _comparison_identity(actual) != _comparison_identity(expected_value):
+            raise ProviderError(f"Last.fm {scope.value} identity does not match selected target")
+    rows = toptags.get("tag")
+    if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+        raise ProviderError("Last.fm API response is invalid")
+
+    genres: list[GenreEvidence] = []
+    tags = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        name = _optional_tag_name(row.get("name"))
+        weight = _tag_weight(row.get("count"))
+        if not name or weight is None or weight < _MIN_TAG_WEIGHT:
+            continue
+        evidence = classify_semantic_tag(
+            name,
+            "lastfm",
+            scope,
+            _COMMUNITY_CONFIDENCE,
+            source_id,
+            source_url,
+            weight,
+        )
+        if evidence is None:
+            continue
+        if evidence.category is SemanticCategory.GENRE:
+            genres.append(
+                GenreEvidence(
+                    evidence.canonical_term,
+                    evidence.provider,
+                    evidence.scope,
+                    GenreEvidenceKind.COMMUNITY_TAG,
+                    evidence.confidence,
+                    evidence.source_id,
+                    evidence.source_url,
+                    weight,
+                )
+            )
+        elif evidence.category in {SemanticCategory.STYLE, SemanticCategory.MOOD}:
+            tags.append(evidence)
+    return SemanticEvidenceBundle(genres=tuple(genres), tags=tuple(tags))
+
+
+def _external_mbid(identifiers: Sequence[object], namespace: str) -> str | None:
+    values = {
+        value
+        for identifier in identifiers
+        if getattr(identifier, "namespace", None) == namespace
+        and (value := canonical_uuid(getattr(identifier, "value", None))) is not None
+    }
+    return values.pop() if len(values) == 1 else None
 
 
 def _request_json(url: str) -> Mapping[str, object]:

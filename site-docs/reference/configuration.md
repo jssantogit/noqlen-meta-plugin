@@ -102,12 +102,12 @@ exist. Enabling a field does not guarantee an enabled provider can supply it.
 | `noqlenmeta.fields.year` | `true` | Release | Album | MusicBrainz, Discogs, iTunes. |
 | `noqlenmeta.fields.media` | `true` | Release | Preview/block | Importer target exists; persistent Album target does not. |
 | `noqlenmeta.fields.format_descriptions` | `true` | Preview/block | Preview/block | Discogs can supply it; v1 has no lossless ordinary target. |
-| `noqlenmeta.fields.moods` | `true` | Typed track target | Typed Item target | Semantic mood providers/normalization are deferred. |
+| `noqlenmeta.fields.moods` | `true` | Typed track target | Typed Item target | Classified MusicBrainz tags; optional Last.fm corroboration/fallback. |
 | `noqlenmeta.fields.bpm` | `true` | Numeric track target | Built-in Item target | Foundation adds no provider or local analyzer. |
-| `noqlenmeta.fields.lyrics_languages` | `true` | Typed track target | Typed Item target | MusicBrainz Work lookup is deferred. |
-| `noqlenmeta.fields.artist_countries` | `true` | Typed release/track targets | Typed Album/Item targets | Artist API lookup is deferred. |
-| `noqlenmeta.fields.artist_areas` | `false` | Typed release/track targets | Typed Album/Item targets | Artist API lookup is deferred. |
-| `noqlenmeta.fields.artist_languages` | `true` | Typed release/track targets | Typed Album/Item targets | Semantic derivation is deferred. |
+| `noqlenmeta.fields.lyrics_languages` | `true` | Typed track target | Typed Item target | Exact Recording -> Work lookup; stores three-letter codes. |
+| `noqlenmeta.fields.artist_countries` | `true` | Typed release/track targets | Typed Album/Item targets | Structurally derived MusicBrainz geographic identification. |
+| `noqlenmeta.fields.artist_areas` | `false` | Typed release/track targets | Typed Album/Item targets | Trustworthy MusicBrainz main area; no string inference. |
+| `noqlenmeta.fields.artist_languages` | `true` | Typed release/track targets | Typed Album/Item targets | Three-letter codes derived only from current-target Works. |
 | `noqlenmeta.fields.lyrics` | `false` | Selected tracks | Items | LRCLIB plain lyrics use shared import/library resolution. |
 | `noqlenmeta.fields.synced_lyrics` | `false` | Preview/block | Preview/block | No lossless synchronized-lyrics target is delivered. |
 | `noqlenmeta.fields.cover` | `true` | None currently | None currently | CAA/download/embed are deferred. |
@@ -153,6 +153,16 @@ genres:
   promote_styles: true
 ```
 
+### `noqlenmeta.moods.max_moods`
+
+- Type: integer. Default: `1`. Accepted range: `1` through `10`.
+- Effect: bounds independently evidenced canonical moods without padding.
+
+```yaml
+moods:
+  max_moods: 1
+```
+
 ## Provider Controls
 
 Every `enabled` key is boolean, accepts `true`/`false`, and grants no write
@@ -164,8 +174,8 @@ tracks and existing-library Items. No provider key controls identity-tag mode.
 | --- | --- | --- | --- |
 | `noqlenmeta.providers.discogs.enabled` | boolean | `false` | Enables release collection when field authority intersects Discogs capability; search needs the optional Discogs dependency. |
 | `noqlenmeta.providers.discogs.user_token` | string | empty | Optional Discogs token; redacted; a non-empty `NOQLENMETA_DISCOGS_TOKEN` environment value takes precedence. |
-| `noqlenmeta.providers.musicbrainz.enabled` | boolean | `true` | Enables safe zero-credential exact-release-MBID enrichment only; does not control identity audit. |
-| `noqlenmeta.providers.lastfm.enabled` | boolean | `false` | Enables filtered album genres; uses the API key current beets shares with plugins. |
+| `noqlenmeta.providers.musicbrainz.enabled` | boolean | `true` | Zero-credential exact-MBID Release/Recording/Work/Artist semantic backbone; no fuzzy search; does not control identity audit. |
+| `noqlenmeta.providers.lastfm.enabled` | boolean | `false` | Enables classified Track -> Release -> Artist fallback for unresolved genres/styles/moods; uses beets' shared API key. |
 | `noqlenmeta.providers.itunes.enabled` | boolean | `false` | Enables album genres/year from the public search API. |
 | `noqlenmeta.providers.itunes.storefront` | string | `us` | Two ASCII letters such as `us`, `gb`, or `jp`; normalized lowercase when iTunes is used. |
 | `noqlenmeta.providers.lrclib.enabled` | boolean | `false` | Enables exact-signature selected-track lookup; no API key. |
@@ -179,6 +189,14 @@ tracks and existing-library Items. No provider key controls identity-tag mode.
 These are validated Foundation settings. They do not run analysis in this
 change: no BPM backend, `[audio]` dependency, or local mood model is included
 yet. `--write` never activates analysis.
+
+Discogs remains opt-in and its structured ordered `styles` tuple takes
+precedence over community style tags. MusicBrainz and Last.fm community tags
+are persisted only after deterministic classification; unknown tags are not
+accepted. Semantic file synchronization uses custom lossless list descriptors
+for `styles`, `moods`, `lyrics_languages`, `artist_languages`,
+`artist_countries`, and `artist_areas`. Artwork and BPM collection remain
+deferred.
 
 Token example without a secret value:
 

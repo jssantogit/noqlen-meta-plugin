@@ -97,6 +97,12 @@ class FileSyncApplicationError(RuntimeError):
 
 _TARGETS = (
     FileTagTarget("genres", "genres", FileTagShape.STRING_LIST),
+    FileTagTarget("styles", "styles", FileTagShape.STRING_LIST),
+    FileTagTarget("moods", "moods", FileTagShape.STRING_LIST),
+    FileTagTarget("lyrics_languages", "lyrics_languages", FileTagShape.STRING_LIST),
+    FileTagTarget("artist_languages", "artist_languages", FileTagShape.STRING_LIST),
+    FileTagTarget("artist_countries", "artist_countries", FileTagShape.STRING_LIST),
+    FileTagTarget("artist_areas", "artist_areas", FileTagShape.STRING_LIST),
     FileTagTarget("labels", "label", FileTagShape.SCALAR_STRING),
     FileTagTarget("country", "country", FileTagShape.SCALAR_STRING),
     FileTagTarget("year", "year", FileTagShape.SCALAR_INT),
@@ -106,10 +112,13 @@ _TARGETS = (
 FILE_TAG_TARGETS: Mapping[str, FileTagTarget] = MappingProxyType(
     {target.canonical_field: target for target in _TARGETS}
 )
-_ALL_MEDIA_FIELDS = tuple(sorted(MediaFile.fields()))
 _RELATED_MEDIA_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType(
     {"genres": frozenset({"genres", "genre"})}
 )
+
+
+def _all_media_fields() -> tuple[str, ...]:
+    return tuple(sorted(MediaFile.fields()))
 
 
 def plan_file_sync(item: Item, changes: Sequence[PlannedChange]) -> FileSyncPlan:
@@ -119,13 +128,14 @@ def plan_file_sync(item: Item, changes: Sequence[PlannedChange]) -> FileSyncPlan
     path = item.path
     if not isinstance(path, bytes) or not path:
         raise ValueError("file synchronization requires an Item path")
+    all_media_fields = _all_media_fields()
     missing_media_fields = {
         target.media_field for target in _TARGETS
-    } - set(_ALL_MEDIA_FIELDS)
+    } - set(all_media_fields)
     if missing_media_fields:
         raise ValueError("declared file target is unavailable from MediaFile")
 
-    snapshot = snapshot_media_file(path, fields=_ALL_MEDIA_FIELDS)
+    snapshot = snapshot_media_file(path, fields=all_media_fields)
     snapshot_values = dict(snapshot.values)
     mapped: list[FileTagChange] = []
     blocked: list[FileSyncBlocker] = []
@@ -219,7 +229,7 @@ def apply_file_sync_plan(library: Library, plan: FileSyncPlan) -> FileSyncResult
             destination_descriptor=descriptor,
         )
         _require_source_snapshot(plan)
-        candidate_before = snapshot_media_file(candidate, fields=_ALL_MEDIA_FIELDS)
+        candidate_before = snapshot_media_file(candidate, fields=_all_media_fields())
         if candidate_before.values != plan.snapshot.values:
             raise ValueError("ordinary metadata candidate differs before save")
 
@@ -228,7 +238,7 @@ def apply_file_sync_plan(library: Library, plan: FileSyncPlan) -> FileSyncResult
             target = FILE_TAG_TARGETS[change.canonical_field]
             setattr(media, change.media_field, _materialize(target, change.after))
         media.save()
-        candidate_after = snapshot_media_file(candidate, fields=_ALL_MEDIA_FIELDS)
+        candidate_after = snapshot_media_file(candidate, fields=_all_media_fields())
         _verify_candidate_snapshot(plan, candidate_after)
         _restore_atime(candidate, plan.snapshot.filesystem_metadata.atime_ns)
         verify_candidate_metadata(candidate, plan.snapshot.filesystem_metadata)
@@ -245,7 +255,7 @@ def apply_file_sync_plan(library: Library, plan: FileSyncPlan) -> FileSyncResult
         candidate = None
         replaced = True
         _fsync_directory(plan.path)
-        final_snapshot = snapshot_media_file(plan.path, fields=_ALL_MEDIA_FIELDS)
+        final_snapshot = snapshot_media_file(plan.path, fields=_all_media_fields())
         _verify_candidate_snapshot(plan, final_snapshot)
         _restore_atime(plan.path, plan.snapshot.filesystem_metadata.atime_ns)
         verify_candidate_metadata(plan.path, plan.snapshot.filesystem_metadata)
@@ -455,7 +465,7 @@ def _verify_recovery_artifact(
 
 
 def _verify_original_snapshot(path: bytes, plan: FileSyncPlan, digest: bytes) -> None:
-    snapshot = snapshot_media_file(path, fields=_ALL_MEDIA_FIELDS)
+    snapshot = snapshot_media_file(path, fields=_all_media_fields())
     fingerprint = snapshot.fingerprint
     expected = plan.snapshot
     if (

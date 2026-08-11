@@ -56,6 +56,9 @@ def default_config() -> dict[str, Any]:
             "num_genres": 1,
             "promote_styles": True,
         },
+        "moods": {
+            "max_moods": 1,
+        },
         "providers": {
             "discogs": {
                 "enabled": False,

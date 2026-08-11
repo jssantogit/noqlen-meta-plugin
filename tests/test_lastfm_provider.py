@@ -10,14 +10,24 @@ from urllib.parse import parse_qs, urlsplit
 import beets.plugins
 import pytest
 
-from beetsplug.noqlenmeta.domain import ReleaseEnrichmentContext
+from beetsplug.noqlenmeta.domain import (
+    ArtistEnrichmentContext,
+    ExternalIdentifier,
+    ReleaseEnrichmentContext,
+    SemanticCategory,
+    TrackEnrichmentContext,
+)
 from beetsplug.noqlenmeta.genre_taxonomy import DEFAULT_GENRE_TAXONOMY
 from beetsplug.noqlenmeta.providers import ProviderError, ReleaseMetadataProvider
 from beetsplug.noqlenmeta.providers.lastfm import (
+    LastFmArtistProvider,
     LastFmProvider,
+    LastFmTrackProvider,
     _LastFmTransport,
 )
-from beetsplug.noqlenmeta.providers.specs import LASTFM_SPEC
+from beetsplug.noqlenmeta.providers.specs import LASTFM_SPEC, ProviderScope
+from beetsplug.noqlenmeta.resolver import FieldRule, ResolutionPolicy
+from beetsplug.noqlenmeta.semantic_enrichment import collect_semantic_enrichment
 
 FIXTURES = Path(__file__).parent / "fixtures" / "lastfm"
 FAKE_KEY = "fake-test-key"
@@ -412,6 +422,94 @@ def test_lastfm_provider_satisfies_metadata_provider_contract() -> None:
     assert isinstance(lastfm, ReleaseMetadataProvider)
     assert lastfm.name == LASTFM_SPEC.name
     assert lastfm.supported_fields is LASTFM_SPEC.supported_fields
+
+
+def test_scoped_semantic_tags_preserve_provenance_and_category() -> None:
+    payload = {
+        "toptags": {
+            "@attr": {"artist": "Synthetic Artist", "track": "Synthetic Track"},
+            "tag": [
+                {"name": "k-pop", "count": "80"},
+                {"name": "dreamy", "count": "70"},
+                {"name": "seen live", "count": "60"},
+            ],
+        }
+    }
+    bundle = LastFmTrackProvider(
+        fetch_top_tags=lambda artist, title, mbid: payload
+    ).get_semantic_evidence(
+        TrackEnrichmentContext(
+            "Synthetic Artist",
+            "Synthetic Track",
+            external_ids=(
+                ExternalIdentifier(
+                    "musicbrainz.recording", "11111111-1111-4111-8111-111111111111"
+                ),
+            ),
+        )
+    )
+    assert [(item.genre, item.scope, item.weight) for item in bundle.genres] == [
+        ("K-pop", ProviderScope.TRACK, 80)
+    ]
+    assert [(item.canonical_term, item.category, item.scope) for item in bundle.tags] == [
+        ("Dreamy", SemanticCategory.MOOD, ProviderScope.TRACK)
+    ]
+    assert bundle.tags[0].provider == "lastfm"
+    assert bundle.tags[0].source_id == "Synthetic Artist / Synthetic Track"
+    assert bundle.tags[0].raw_tag == "dreamy"
+
+
+def test_release_and_artist_semantic_tags_keep_their_scopes() -> None:
+    release_payload = {
+        "toptags": {
+            "@attr": {"artist": "Gojira", "album": "From Mars to Sirius"},
+            "tag": [{"name": "dreamy", "count": 50}],
+        }
+    }
+    release = LastFmProvider(
+        fetch_top_tags=FetchTopTags(release_payload)
+    ).get_semantic_evidence(context())
+    artist_payload = {
+        "toptags": {
+            "@attr": {"artist": "Synthetic Artist"},
+            "tag": [{"name": "alternative metal", "count": 40}],
+        }
+    }
+    artist = LastFmArtistProvider(
+        fetch_top_tags=lambda name, mbid: artist_payload
+    ).get_semantic_evidence(ArtistEnrichmentContext("Synthetic Artist"))
+
+    assert release.tags[0].scope is ProviderScope.RELEASE
+    assert release.tags[0].category is SemanticCategory.MOOD
+    assert artist.genres[0].scope is ProviderScope.ARTIST
+    assert artist.genres[0].genre == "Alternative Metal"
+
+
+def test_production_community_style_reaches_orchestration_without_discogs() -> None:
+    payload = {
+        "toptags": {
+            "@attr": {"artist": "Gojira", "album": "From Mars to Sirius"},
+            "tag": [{"name": "Acoustic", "count": 80}],
+        }
+    }
+    lastfm = LastFmProvider(fetch_top_tags=FetchTopTags(payload))
+    policy = ResolutionPolicy(
+        field_rules={"styles": FieldRule(True, ("lastfm",))},
+        providers={"lastfm": True},
+    )
+
+    result = collect_semantic_enrichment(
+        {"styles"},
+        policy=policy,
+        lastfm_release=lambda: lastfm.get_semantic_evidence(context()),
+    )
+
+    assert len(result.candidates) == 1
+    candidate = result.candidates[0]
+    assert candidate.field == "styles"
+    assert candidate.value == ("Acoustic",)
+    assert candidate.provider == "lastfm"
+    assert result.outcomes["styles"].provenance == ("lastfm",)
 
 
 @pytest.mark.live

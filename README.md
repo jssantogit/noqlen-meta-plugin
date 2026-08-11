@@ -85,8 +85,8 @@ The command is `beet noqlenmeta`; `beet nm` is the preferred alias.
 
 ## First Preview
 
-Enable at least one provider before ordinary enrichment. For example,
-MusicBrainz enrichment uses the exact release MBID already known by beets:
+MusicBrainz is enabled by default and uses only exact MBIDs already known by
+beets; it never performs fuzzy identity search:
 
 ```yaml
 noqlenmeta:
@@ -116,6 +116,10 @@ beet nm --apply album:"Example Album"
 This changes ordinary metadata in the beets database only. It does not write
 audio-file tags. Strict mode is the default: one review or mapping blocker
 withholds every ordinary Noqlen change for that album.
+
+Add `--write` to the same reviewed command to synchronize supported ordinary
+fields to media files through verified candidate-copy/reopen checks. Collection
+is identical with or without `--write`; the flag never causes provider calls.
 
 Partial mode is explicit:
 
@@ -172,6 +176,7 @@ existing-library evidence workflow and does not replace `chroma`.
 | --- | --- | --- | --- | --- |
 | `beet nm QUERY` | Ordinary preview | Enabled providers | No | No |
 | `beet nm --apply QUERY` | Ordinary application | Enabled providers | Ordinary album metadata | No |
+| `beet nm --apply --write QUERY` | Ordinary DB + file application | Enabled providers | Ordinary metadata | Supported verified tags |
 | `beet nm --identity QUERY` | Identity audit | MusicBrainz + optional AcoustID lookup | No | No |
 | `beet nm --identity --apply QUERY` | Identity repair | MusicBrainz + optional AcoustID lookup | Four MBID columns | No |
 | `beet nm --acoustid QUERY` | AcoustID preview | Configured AcoustID lookup | No | No |
@@ -188,14 +193,14 @@ beets](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/site-docs/refe
 
 ## Providers
 
-All ordinary metadata providers are disabled by default. AcoustID is a separate
-recording-evidence subsystem, not an ordinary provider.
+MusicBrainz is the zero-credential provider enabled by default. Discogs and
+Last.fm are opt-in. AcoustID remains a separate recording-evidence subsystem.
 
 | Provider/source | Current scope | Current contribution |
 | --- | --- | --- |
-| Discogs | Releases | Genres, styles, labels, catalog numbers, barcodes, country, year, media, format descriptions |
-| MusicBrainz enrichment | Releases with an exact release MBID | Labels, catalog numbers, barcode, country, year, media |
-| Last.fm | Releases | Filtered album genres |
+| Discogs | Releases, opt-in | Structured genres/styles plus release metadata; styles remain ordered and authoritative |
+| MusicBrainz enrichment | Exact Release/Recording/Artist/Work MBIDs | Genres, moods, Work language codes, artist areas/countries, and release metadata |
+| Last.fm | Track -> Release -> Artist, opt-in | Classified genre/style/mood community tags only while requested fields remain unresolved |
 | iTunes | Releases | Album genre and release year |
 | LRCLIB | Importer-selected tracks | Plain lyrics; synchronized lyrics preview as blocked |
 | MusicBrainz identity source | Separate identity modes | Four MusicBrainz identity fields |
@@ -207,15 +212,18 @@ optional client and generally a token. Set the token in the
 
 ## Fields And Formats
 
-Ordinary release fields include genres, styles, labels, catalog numbers,
-barcodes, country, year, media, and format descriptions. Mood, lyrics,
-synchronized lyrics, and cover settings are present for explicit capability
-control, but a field is usable only where an enabled provider and a lossless
-target mapping exist.
+Semantic fields include genres, styles, moods, lyrics languages, contextual
+artist languages, artist countries, and artist areas. Language values use
+three-letter codes such as `eng`, `kor`, and `jpn`. `artist_languages` is
+derived only from Works reached by tracks in the current target; it is not a
+whole-career crawl. Artist geography uses MusicBrainz area structure and is
+never guessed from names, language, release country, script, or place strings.
 
-Noqlen v1 does not apply synchronized lyrics or cover art. Existing-library
-ordinary enrichment is album-only. Importer plain-lyrics enrichment applies to
-selected tracks only.
+Verified semantic file mappings are available for `styles`, `moods`,
+`lyrics_languages`, `artist_languages`, `artist_countries`, and `artist_areas`
+on FLAC, MP3, M4A/MP4, Ogg Vorbis, and Opus. Artwork/covers, BPM collection,
+audio analysis, synchronized lyrics, and local ML mood analysis remain outside
+this phase.
 
 Identity-tag round trips are tested with:
 

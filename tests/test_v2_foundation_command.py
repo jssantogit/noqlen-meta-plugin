@@ -21,6 +21,7 @@ from beetsplug.noqlenmeta.library_application import LibraryApplicationError
 from beetsplug.noqlenmeta.library_track_application import (
     LibraryTrackApplicationError,
 )
+from beetsplug.noqlenmeta.semantic_enrichment import SemanticEnrichmentResult
 
 FIXTURE = Path(__file__).parent / "fixtures" / "identity_tags" / "silence.flac"
 
@@ -142,6 +143,41 @@ def test_genre_settings_accept_three_and_reject_non_boolean_promotion() -> None:
         plugin._genre_settings()
 
 
+@pytest.mark.parametrize("max_moods", [1, 3])
+def test_mood_settings_accept_valid_limits(max_moods: int) -> None:
+    plugin = NoqlenMetaPlugin()
+    plugin.config["moods"]["max_moods"].set(max_moods)
+    assert plugin._mood_settings().max_moods == max_moods
+
+
+@pytest.mark.parametrize("max_moods", [0, 11, True, "1"])
+def test_invalid_mood_limit_is_rejected_before_provider_work(
+    max_moods: object, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    library = Library(str(tmp_path / "library.db"), set_music_dir=False)
+    library.add_album(
+        [
+            Item(
+                path=b"synthetic.flac",
+                albumartist="Synthetic Artist",
+                album="Synthetic Album",
+                artist="Synthetic Artist",
+                title="Synthetic Track",
+            )
+        ]
+    )
+    plugin = NoqlenMetaPlugin()
+    plugin.config["moods"]["max_moods"].set(max_moods)
+    monkeypatch.setattr(
+        plugin,
+        "_musicbrainz_candidates",
+        lambda *args: pytest.fail("invalid mood config reached provider work"),
+    )
+
+    with pytest.raises(ui.UserError, match="invalid moods configuration"):
+        invoke(plugin, library, ["--all"])
+
+
 def test_ordinary_apply_write_updates_database_and_real_media_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -190,6 +226,60 @@ def test_ordinary_apply_write_updates_database_and_real_media_file(
     assert any("database PREVIEW" in line and "planned" in line for line in output)
     assert any("database application" in line and "status=stored" in line for line in output)
     assert any("status=committed-complete" in line for line in output)
+
+
+def test_semantic_apply_write_updates_database_and_reopened_media_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "semantic.flac"
+    shutil.copy2(FIXTURE, path)
+    library = Library(str(tmp_path / "library.db"), set_music_dir=False)
+    item = Item(
+        path=str(path).encode(),
+        artist="Synthetic Artist",
+        title="Synthetic Track",
+    )
+    library.add(item)
+    plugin = NoqlenMetaPlugin()
+    monkeypatch.setattr(plugins, "_instances", [plugin])
+    monkeypatch.delitem(cached_classproperty.cache, (Item, "_types"), raising=False)
+    plugin.config.set(
+        {
+            "fields": {field: field == "moods" for field in plugin.config["fields"]},
+            "providers": {
+                "musicbrainz": {"enabled": True},
+                "discogs": {"enabled": False, "user_token": ""},
+                "lastfm": {"enabled": False},
+                "itunes": {"enabled": False, "storefront": "us"},
+                "lrclib": {"enabled": False},
+            },
+        }
+    )
+    calls = 0
+
+    def semantic_candidates(*args: object) -> SemanticEnrichmentResult:
+        nonlocal calls
+        calls += 1
+        return SemanticEnrichmentResult(
+            (
+                MetadataCandidate(
+                    "moods",
+                    ("Melancholic", "Atmospheric"),
+                    "musicbrainz",
+                    0.95,
+                    "42",
+                ),
+            ),
+            {},
+        )
+
+    monkeypatch.setattr(plugin, "_collect_track_candidates", semantic_candidates)
+
+    invoke(plugin, library, ["--apply", "--write", "--all"])
+
+    assert calls == 1
+    assert library.get_item(item.id)["moods"] == ["Melancholic", "Atmospheric"]
+    assert MediaFile(path).moods == ["Melancholic", "Atmospheric"]
 
 
 def test_existing_library_release_uses_specific_promoted_style(

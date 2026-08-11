@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from beetsplug.noqlenmeta.domain import MetadataCandidate, MetadataValue
+from beetsplug.noqlenmeta.domain import (
+    MetadataCandidate,
+    MetadataValue,
+    SemanticEvidenceBundle,
+)
 from beetsplug.noqlenmeta.genre_evidence import GenreEvidence, GenreEvidenceKind
 from beetsplug.noqlenmeta.genre_resolution import GenreSettings, resolve_genres
 from beetsplug.noqlenmeta.genre_taxonomy import (
@@ -14,6 +18,18 @@ from beetsplug.noqlenmeta.genre_taxonomy import (
 )
 from beetsplug.noqlenmeta.providers.specs import ProviderScope
 from beetsplug.noqlenmeta.resolver import FieldDecision, ResolutionAction, ResolutionPolicy
+
+
+def genre_evidence_from_semantic_bundles(
+    bundles: Sequence[SemanticEvidenceBundle],
+) -> tuple[GenreEvidence, ...]:
+    """Flatten already-normalized scope evidence without changing its ranking inputs."""
+    evidence: list[GenreEvidence] = []
+    for bundle in bundles:
+        if not isinstance(bundle, SemanticEvidenceBundle):
+            raise TypeError("bundles must contain SemanticEvidenceBundle values")
+        evidence.extend(bundle.genres)
+    return tuple(evidence)
 
 
 def genre_evidence_from_release_candidates(

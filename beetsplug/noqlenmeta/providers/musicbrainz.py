@@ -6,15 +6,19 @@ import re
 from collections.abc import Callable, Mapping, Sequence
 from typing import TypeGuard
 
-from requests.exceptions import RequestException
-
 from beetsplug.noqlenmeta.domain import (
     MetadataCandidate,
     ReleaseEnrichmentContext,
+    SemanticEvidenceBundle,
     canonical_uuid,
 )
+from beetsplug.noqlenmeta.provider_cache import CommandEntityCache
 from beetsplug.noqlenmeta.providers.base import ProviderError
-from beetsplug.noqlenmeta.providers.specs import MUSICBRAINZ_SPEC
+from beetsplug.noqlenmeta.providers.musicbrainz_semantic import (
+    MusicBrainzSemanticClient,
+    semantic_tags_from_payload,
+)
+from beetsplug.noqlenmeta.providers.specs import MUSICBRAINZ_SPEC, ProviderScope
 
 _MUSICBRAINZ_RELEASE_NAMESPACE = "musicbrainz.release"
 _PUBLIC_RELEASE_URL = "https://musicbrainz.org/release/{}"
@@ -34,8 +38,11 @@ class MusicBrainzProvider:
         self,
         *,
         fetch_release: Callable[[str], Mapping[str, object]] | None = None,
+        cache: CommandEntityCache | None = None,
     ) -> None:
-        self._fetch_release = fetch_release or _fetch_release
+        self._semantic_client = MusicBrainzSemanticClient(
+            cache=cache, fetch_release=fetch_release or _fetch_release
+        )
 
     def get_candidates(
         self, context: ReleaseEnrichmentContext
@@ -44,17 +51,27 @@ class MusicBrainzProvider:
         if release_mbid is None:
             return ()
 
-        try:
-            payload = self._fetch_release(release_mbid)
-        except RequestException:
-            raise ProviderError("MusicBrainz API request failed") from None
-
+        payload = self._semantic_client.lookup_release(release_mbid)
         if not isinstance(payload, Mapping):
             raise ProviderError("MusicBrainz release response is invalid")
-        response_mbid = canonical_uuid(payload.get("id"))
-        if response_mbid is None or response_mbid != release_mbid:
-            raise ProviderError("MusicBrainz release response is invalid")
         return _normalize_release(payload, release_mbid)
+
+    def get_semantic_evidence(
+        self, context: ReleaseEnrichmentContext
+    ) -> SemanticEvidenceBundle:
+        release_mbid = _release_mbid(context)
+        if release_mbid is None:
+            return SemanticEvidenceBundle()
+        payload = self._semantic_client.lookup_release(release_mbid)
+        if payload is None:
+            return SemanticEvidenceBundle()
+        genres, tags = semantic_tags_from_payload(
+            payload,
+            entity_id=release_mbid,
+            entity_type="release",
+            scope=ProviderScope.RELEASE,
+        )
+        return SemanticEvidenceBundle(genres=genres, tags=tags)
 
 
 def _fetch_release(release_mbid: str) -> Mapping[str, object]:
@@ -62,7 +79,7 @@ def _fetch_release(release_mbid: str) -> Mapping[str, object]:
 
     return MusicBrainzAPI().get_release(
         release_mbid,
-        includes=["labels", "media"],
+        includes=["labels", "media", "genres", "tags", "recordings", "artist-credits"],
     )
 
 
