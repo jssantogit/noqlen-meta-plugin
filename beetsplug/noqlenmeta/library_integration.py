@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from beets import ui
@@ -19,6 +20,7 @@ from beetsplug.noqlenmeta.integration import (
     _preview_value,
     _provider_display_name,
     _render_resolution_decision,
+    _render_semantic_outcomes,
     _safe_preview_text,
     _text_tuple,
     _valid_year,
@@ -28,6 +30,7 @@ from beetsplug.noqlenmeta.library_mapping import (
     LibraryTargetChange,
     LibraryTargetPlan,
 )
+from beetsplug.noqlenmeta.semantic_enrichment import SemanticFieldOutcome
 
 if TYPE_CHECKING:
     from beetsplug.noqlenmeta.library_application import LibraryApplicationResult
@@ -81,6 +84,11 @@ def current_values_from_library_album(album: Album) -> dict[str, MetadataValue]:
     if styles:
         current_values["styles"] = styles
 
+    for field in ("artist_countries", "artist_areas", "artist_languages"):
+        values = _text_tuple(album.get(field, None))
+        if values:
+            current_values[field] = values
+
     singular_fields = {
         "labels": album.label,
         "catalog_numbers": album.catalognum,
@@ -109,6 +117,7 @@ def render_library_target_plan(
     *,
     position: int | None = None,
     total: int | None = None,
+    semantic_outcomes: Mapping[str, SemanticFieldOutcome] | None = None,
 ) -> None:
     """Print a safe persistent Album plan and truthful application state."""
     source = plan.source
@@ -160,6 +169,7 @@ def render_library_target_plan(
         lines.extend(_render_library_blocker(blocker))
     for decision in (*source.reviews, *source.kept, *source.skipped):
         lines.extend(_render_resolution_decision(decision))
+    lines.extend(_render_semantic_outcomes(semantic_outcomes or {}))
     ui.print_("\n".join(lines))
 
 

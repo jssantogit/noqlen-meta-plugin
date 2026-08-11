@@ -61,14 +61,12 @@ def classify_semantic_tag(
     canonical: str
     if identity in _NOISE:
         category, canonical = SemanticCategory.NOISE, _NOISE[identity]
-    elif identity in _STYLES:
-        # These reviewed terms are primarily styles even when the broader genre
-        # taxonomy also recognizes them for structured genre promotion.
-        category, canonical = SemanticCategory.STYLE, _STYLES[identity]
     else:
         genre = DEFAULT_GENRE_TAXONOMY.classify(raw_tag)
         if genre.category is GenreSemanticCategory.GENRE:
             category, canonical = SemanticCategory.GENRE, genre.canonical_name
+        elif identity in _STYLES:
+            category, canonical = SemanticCategory.STYLE, _STYLES[identity]
         elif identity in _MOODS:
             category, canonical = SemanticCategory.MOOD, _MOODS[identity]
         elif identity in _ORIGINS:

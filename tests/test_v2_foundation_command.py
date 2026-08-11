@@ -21,6 +21,7 @@ from beetsplug.noqlenmeta.library_application import LibraryApplicationError
 from beetsplug.noqlenmeta.library_track_application import (
     LibraryTrackApplicationError,
 )
+from beetsplug.noqlenmeta.semantic_enrichment import SemanticEnrichmentResult
 
 FIXTURE = Path(__file__).parent / "fixtures" / "identity_tags" / "silence.flac"
 
@@ -256,13 +257,20 @@ def test_semantic_apply_write_updates_database_and_reopened_media_file(
     )
     calls = 0
 
-    def semantic_candidates(*args: object) -> tuple[MetadataCandidate, ...]:
+    def semantic_candidates(*args: object) -> SemanticEnrichmentResult:
         nonlocal calls
         calls += 1
-        return (
-            MetadataCandidate(
-                "moods", ("Melancholic", "Atmospheric"), "musicbrainz", 0.95, "42"
+        return SemanticEnrichmentResult(
+            (
+                MetadataCandidate(
+                    "moods",
+                    ("Melancholic", "Atmospheric"),
+                    "musicbrainz",
+                    0.95,
+                    "42",
+                ),
             ),
+            {},
         )
 
     monkeypatch.setattr(plugin, "_collect_track_candidates", semantic_candidates)

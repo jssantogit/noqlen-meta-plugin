@@ -180,3 +180,28 @@ def test_fallback_reaches_artist_when_track_and_release_are_insufficient() -> No
         collect("artist", semantic_bundle("moods")),
     )
     assert calls == ["track", "release", "artist"]
+
+
+def test_release_beats_artist_after_ineligible_track_is_filtered() -> None:
+    result = resolve_moods(
+        (
+            evidence("Atmospheric", "lastfm", ProviderScope.TRACK, 10, confidence=0.85),
+            evidence("Dreamy", "musicbrainz", ProviderScope.RELEASE, 5, confidence=0.91),
+            evidence("Melancholic", "musicbrainz", ProviderScope.ARTIST, 10, confidence=0.99),
+        ),
+        min_confidence=0.9,
+    )
+
+    assert result == ("Dreamy",)
+
+
+def test_eligible_track_beats_stronger_release() -> None:
+    result = resolve_moods(
+        (
+            evidence("Dreamy", "lastfm", ProviderScope.TRACK, 5, confidence=0.9),
+            evidence("Melancholic", "musicbrainz", ProviderScope.RELEASE, 10, confidence=0.99),
+        ),
+        min_confidence=0.9,
+    )
+
+    assert result == ("Dreamy",)

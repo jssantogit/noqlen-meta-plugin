@@ -4,7 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 from beets import config, ui
-from beets.autotag.hooks import AlbumInfo
+from beets.autotag import AlbumMatch
+from beets.autotag.hooks import AlbumInfo, TrackInfo
 from beets.importer.actions import Action
 from beets.importer.tasks import ImportTask
 from beets.library import Album, Item, Library
@@ -14,9 +15,11 @@ import beetsplug.noqlenmeta as plugin_module
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.changeplan import ChangePlan
 from beetsplug.noqlenmeta.domain import (
+    ArtistEnrichmentContext,
     MetadataCandidate,
     ReleaseEnrichmentContext,
     SemanticEvidenceBundle,
+    TrackEnrichmentContext,
 )
 from beetsplug.noqlenmeta.genre_evidence import GenreEvidence, GenreEvidenceKind
 from beetsplug.noqlenmeta.library_integration import (
@@ -291,6 +294,9 @@ def test_library_album_adapters_preserve_canonical_shapes_without_splitting() ->
         style="Progressive Metal / Groove Metal",
         label="Label A / Label B",
         country=" FR ",
+        artist_countries=["Brazil", " Japan "],
+        artist_areas=["Salvador", " Tokyo "],
+        artist_languages=["por", " jpn "],
     )
 
     context = context_from_library_album(album)
@@ -315,6 +321,9 @@ def test_library_album_adapters_preserve_canonical_shapes_without_splitting() ->
         "barcodes": ("0123456789012",),
         "country": "FR",
         "year": 2005,
+        "artist_countries": ("Brazil", "Japan"),
+        "artist_areas": ("Salvador", "Tokyo"),
+        "artist_languages": ("por", "jpn"),
     }
     assert "media" not in current_values_from_library_album(album)
 
@@ -610,9 +619,11 @@ def test_importer_and_cli_invoke_the_same_planning_helper(
         context: ReleaseEnrichmentContext,
         current_values: object,
         policy: object,
-    ) -> ChangePlan:
+        *,
+        track_contexts: object,
+    ) -> plugin_module.ReleasePlanningResult:
         calls.append((context, current_values, policy))
-        return ChangePlan()
+        return plugin_module.ReleasePlanningResult(ChangePlan(), {})
 
     monkeypatch.setattr(NoqlenMetaPlugin, "_build_change_plan_for_release", record_plan)
     monkeypatch.setattr(
@@ -635,6 +646,153 @@ def test_importer_and_cli_invoke_the_same_planning_helper(
     assert calls[0][0] == calls[1][0]
     assert calls[0][1] == calls[1][1]
     assert calls[0][2] == calls[1][2]
+
+
+def test_importer_and_existing_album_semantic_aggregation_have_three_field_parity(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    from beetsplug.noqlenmeta.providers.musicbrainz_semantic import (
+        MusicBrainzArtistProvider,
+        MusicBrainzTrackProvider,
+    )
+
+    artist_ids = (
+        "22222222-2222-4222-8222-222222222222",
+        "33333333-3333-4333-8333-333333333333",
+        "44444444-4444-4444-8444-444444444444",
+    )
+    recording_ids = (
+        "55555555-5555-4555-8555-555555555555",
+        "66666666-6666-4666-8666-666666666666",
+    )
+    languages = {"Track One": ("eng", "fra"), "Track Two": ("jpn", "eng")}
+    origins = {
+        "Artist A": ("Brazil", "Salvador"),
+        "Artist B": ("Japan", "Tokyo"),
+        "Artist C": ("France", "Paris"),
+    }
+    observed_tracks: list[str] = []
+    observed_artists: list[str] = []
+
+    def track_evidence(
+        provider: MusicBrainzTrackProvider, context: TrackEnrichmentContext
+    ) -> SemanticEvidenceBundle:
+        observed_tracks.append(context.title)
+        return SemanticEvidenceBundle(
+            metadata=(
+                MetadataCandidate(
+                    "lyrics_languages",
+                    languages[context.title],
+                    "musicbrainz",
+                    0.99,
+                    context.external_ids[0].value,
+                ),
+            )
+        )
+
+    def artist_evidence(
+        provider: MusicBrainzArtistProvider, context: ArtistEnrichmentContext
+    ) -> SemanticEvidenceBundle:
+        observed_artists.append(context.name)
+        country, area = origins[context.name]
+        return SemanticEvidenceBundle(
+            metadata=(
+                MetadataCandidate(
+                    "artist_countries", (country,), "musicbrainz", 0.99, context.name
+                ),
+                MetadataCandidate(
+                    "artist_areas", (area,), "musicbrainz", 0.99, context.name
+                ),
+            )
+        )
+
+    monkeypatch.setattr(MusicBrainzTrackProvider, "get_semantic_evidence", track_evidence)
+    monkeypatch.setattr(MusicBrainzArtistProvider, "get_semantic_evidence", artist_evidence)
+    output: list[str] = []
+    monkeypatch.setattr(plugin_module.ui, "print_", output.append)
+
+    def configured_plugin() -> NoqlenMetaPlugin:
+        plugin = NoqlenMetaPlugin()
+        configure_enabled(plugin, discogs=False, musicbrainz=True)
+        plugin.config["fields"].set(
+            {
+                field: field
+                in {"artist_countries", "artist_areas", "artist_languages"}
+                for field in plugin.config["fields"]
+            }
+        )
+        return plugin
+
+    track_infos = (
+        TrackInfo(
+            title="Track One",
+            artist="Artist A feat. Artist B",
+            mb_trackid=recording_ids[0],
+            artists=["Artist A", "Artist B"],
+            artists_ids=list(artist_ids[:2]),
+        ),
+        TrackInfo(
+            title="Track Two",
+            artist="Artist B feat. Artist C",
+            mb_trackid=recording_ids[1],
+            artists=["Artist B", "Artist C"],
+            artists_ids=list(artist_ids[1:]),
+        ),
+    )
+    selected_items = (Item(title="Local One"), Item(title="Local Two"))
+    info = AlbumInfo(
+        list(track_infos), artist="Various Artists", album="Target Album"
+    )
+    task = ImportTask(None, [], [*selected_items, Item(title="Unselected")])
+    task.choice_flag = Action.APPLY
+    task.match = AlbumMatch(
+        None, info, dict(zip(selected_items, track_infos, strict=True))
+    )  # type: ignore[arg-type]
+
+    configured_plugin()._import_task_choice(None, task)
+    importer_preview = next(
+        value for value in output if value.startswith("Noqlen Meta / beets target plan:")
+    )
+
+    target_items = [
+        Item(
+            path=f"{index}.flac".encode(),
+            albumartist="Various Artists",
+            album="Target Album",
+            title=track.title,
+            artist=track.artist,
+            mb_trackid=recording_ids[index - 1],
+            artists=list(track.get("artists")),
+            mb_artistids=list(
+                artist_ids[:2] if index == 1 else artist_ids[1:]
+            ),
+        )
+        for index, track in enumerate(track_infos, 1)
+    ]
+    library.add_album(target_items)
+    add_album(library, album="Other Album", title="Outsider", artist="Outsider")
+    output.clear()
+    observed_tracks.clear()
+    observed_artists.clear()
+
+    invoke(configured_plugin(), library, ["album:Target Album"])
+    library_preview = next(
+        value
+        for value in output
+        if value.startswith("Noqlen Meta / library target preview:")
+    )
+
+    for preview in (importer_preview, library_preview):
+        assert "artist_countries\n    PROPOSE" in preview
+        assert "proposed: Brazil, Japan, France" in preview
+        assert "artist_areas\n    PROPOSE" in preview
+        assert "proposed: Salvador, Tokyo, Paris" in preview
+        assert "artist_languages\n    PROPOSE" in preview
+        assert "proposed: eng, fra, jpn" in preview
+    assert observed_tracks == ["Track One", "Track Two"]
+    assert observed_artists == ["Artist A", "Artist B", "Artist C"]
+    assert "Outsider" not in observed_tracks
+    assert "Outsider" not in observed_artists
 
 
 def test_cli_apply_persists_even_when_importer_apply_is_false(

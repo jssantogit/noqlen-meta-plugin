@@ -479,8 +479,8 @@ def test_release_and_artist_semantic_tags_keep_their_scopes() -> None:
 
     assert release.tags[0].scope is ProviderScope.RELEASE
     assert release.tags[0].category is SemanticCategory.MOOD
-    assert artist.tags[0].scope is ProviderScope.ARTIST
-    assert artist.tags[0].category is SemanticCategory.STYLE
+    assert artist.genres[0].scope is ProviderScope.ARTIST
+    assert artist.genres[0].genre == "Alternative Metal"
 
 
 @pytest.mark.live

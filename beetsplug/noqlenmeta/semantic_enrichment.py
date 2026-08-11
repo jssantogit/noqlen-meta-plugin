@@ -7,10 +7,12 @@ from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
 
+from beetsplug.noqlenmeta.changeplan import ChangePlan
 from beetsplug.noqlenmeta.domain import (
     MetadataCandidate,
     SemanticCategory,
     SemanticEvidenceBundle,
+    SemanticTagEvidence,
 )
 from beetsplug.noqlenmeta.genre_evidence import GenreEvidence, GenreEvidenceKind
 from beetsplug.noqlenmeta.genre_resolution import GenreSettings, resolve_genres
@@ -88,36 +90,36 @@ def collect_semantic_enrichment(
     lastfm_release: BundleCollector | None = None,
     lastfm_artist: BundleCollector | None = None,
     genre_settings: GenreSettings | None = None,
+    min_confidence: Mapping[str, float] | None = None,
     max_moods: int = 1,
-    conflict_fields: Collection[str] = (),
-    blocked_fields: Collection[str] = (),
 ) -> SemanticEnrichmentResult:
     """Collect, normalize, and resolve semantic evidence without mutating targets."""
     enabled = set(enabled_fields) & set(_FIELDS)
     genre_settings = genre_settings or GenreSettings()
+    thresholds = dict(min_confidence or {})
     bundles: list[SemanticEvidenceBundle] = []
     unavailable: set[str] = set()
 
     def collect(collector: BundleCollector, capabilities: set[str]) -> None:
         try:
-            bundles.append(collector())
+            bundles.append(_eligible_bundle(collector(), thresholds))
         except ProviderError:
             unavailable.update(enabled & capabilities)
 
-    if musicbrainz_release is not None and enabled & {"genres", "styles", "moods"}:
-        collect(musicbrainz_release, {"genres", "styles", "moods"})
     if enabled & {"genres", "moods", "lyrics_languages", "artist_languages"}:
         for collector in musicbrainz_tracks:
             collect(
                 collector,
                 {"genres", "moods", "lyrics_languages", "artist_languages"},
             )
+    if musicbrainz_release is not None and enabled & {"genres", "styles", "moods"}:
+        collect(musicbrainz_release, {"genres", "styles", "moods"})
     if enabled & {"genres", "moods", "artist_countries", "artist_areas"}:
         for collector in musicbrainz_artists:
             collect(collector, {"genres", "moods", "artist_countries", "artist_areas"})
 
     structured_genres, structured_styles = _discogs_semantics(
-        discogs_metadata, genre_settings
+        discogs_metadata, genre_settings, thresholds
     )
     genres = [item for bundle in bundles for item in bundle.genres]
     genres.extend(structured_genres)
@@ -141,7 +143,7 @@ def collect_semantic_enrichment(
 
             def wrapped() -> SemanticEvidenceBundle:
                 try:
-                    return collector()
+                    return _eligible_bundle(collector(), thresholds)
                 except ProviderError:
                     unavailable.update(enabled & capabilities)
                     return SemanticEvidenceBundle()
@@ -154,6 +156,7 @@ def collect_semantic_enrichment(
             safe(lastfm_track, {"genres", "styles", "moods"}),
             safe(lastfm_release, {"genres", "styles", "moods"}),
             safe(lastfm_artist, {"genres", "styles", "moods"}),
+            min_confidence=thresholds,
         )
         bundles.extend(fallback)
         genres.extend(item for bundle in fallback for item in bundle.genres)
@@ -161,76 +164,138 @@ def collect_semantic_enrichment(
 
     values: dict[str, tuple[str, ...]] = {}
     provenance: dict[str, tuple[str, ...]] = {}
+    winners: dict[
+        str, tuple[MetadataCandidate | GenreEvidence | SemanticTagEvidence, ...]
+    ] = {}
     if "genres" in enabled:
-        resolved = resolve_genres(genres, settings=genre_settings)
+        resolved = resolve_genres(
+            genres,
+            settings=genre_settings,
+            min_confidence=thresholds.get("genres", 0.0),
+        )
         if resolved.genres:
             values["genres"] = resolved.genres
             provenance["genres"] = _provenance(resolved.evidence)
+            winners["genres"] = tuple(resolved.evidence)
     if "styles" in enabled:
-        styles = resolve_styles(structured_styles, tags)
+        styles = resolve_styles(
+            structured_styles,
+            tags,
+            min_confidence=thresholds.get("styles", 0.0),
+        )
         if styles:
             values["styles"] = styles
-            provenance["styles"] = (
-                ("discogs",) if structured_styles else _provenance(tags, SemanticCategory.STYLE)
+            style_evidence: tuple[
+                MetadataCandidate | GenreEvidence | SemanticTagEvidence, ...
+            ] = tuple(
+                candidate
+                for candidate in discogs_metadata
+                if candidate.field == "styles"
+                and candidate.provider.casefold() == "discogs"
+                and candidate.confidence >= thresholds.get("styles", 0.0)
             )
+            if not style_evidence:
+                style_evidence = tuple(
+                    item
+                    for item in tags
+                    if item.category is SemanticCategory.STYLE
+                    and item.canonical_term in styles
+                )
+            provenance["styles"] = _provenance(style_evidence)
+            winners["styles"] = style_evidence
     if "moods" in enabled:
-        moods = resolve_moods(tags, max_moods)
+        moods = resolve_moods(
+            tags,
+            max_moods,
+            min_confidence=thresholds.get("moods", 0.0),
+        )
         if moods:
             values["moods"] = moods
-            provenance["moods"] = _provenance(tags, SemanticCategory.MOOD)
+            mood_evidence = tuple(
+                item
+                for item in tags
+                if item.category is SemanticCategory.MOOD
+                and item.canonical_term in moods
+            )
+            provenance["moods"] = _provenance(mood_evidence)
+            winners["moods"] = mood_evidence
 
-    track_languages = tuple(
-        value
+    track_language_candidates = tuple(
+        candidate
         for bundle in bundles
-        for value in _metadata_values(bundle, "lyrics_languages")
+        for candidate in bundle.metadata
+        if candidate.field == "lyrics_languages"
+    )
+    lyrics_candidates = tuple(
+        candidate
+        for candidate in track_language_candidates
+        if candidate.confidence >= thresholds.get("lyrics_languages", 0.0)
+    )
+    artist_language_candidates = tuple(
+        candidate
+        for candidate in track_language_candidates
+        if candidate.confidence >= thresholds.get("artist_languages", 0.0)
+    )
+    track_languages = tuple(
+        candidate.value
+        for candidate in lyrics_candidates
+        if isinstance(candidate.value, tuple)
     )
     if "lyrics_languages" in enabled and track_languages:
         values["lyrics_languages"] = _ordered_union(track_languages)
         provenance["lyrics_languages"] = ("musicbrainz work",)
-    if "artist_languages" in enabled and track_languages:
+        winners["lyrics_languages"] = lyrics_candidates
+    artist_track_languages = tuple(
+        candidate.value
+        for candidate in artist_language_candidates
+        if isinstance(candidate.value, tuple)
+    )
+    if "artist_languages" in enabled and artist_track_languages:
         values["artist_languages"] = derive_artist_languages(
-            tuple((index, value) for index, value in enumerate(track_languages, 1))
+            tuple(
+                (index, value)
+                for index, value in enumerate(artist_track_languages, 1)
+            )
         )
         provenance["artist_languages"] = ("current-target musicbrainz works",)
+        winners["artist_languages"] = artist_language_candidates
     for field in ("artist_countries", "artist_areas"):
+        field_candidates = tuple(
+            candidate
+            for bundle in bundles
+            for candidate in bundle.metadata
+            if candidate.field == field
+            and candidate.confidence >= thresholds.get(field, 0.0)
+        )
         field_values = tuple(
-            value for bundle in bundles for value in _metadata_values(bundle, field)
+            candidate.value
+            for candidate in field_candidates
+            if isinstance(candidate.value, tuple)
         )
         if field in enabled and field_values:
             values[field] = _ordered_union(field_values)
             provenance[field] = ("musicbrainz artist area",)
+            winners[field] = field_candidates
 
-    conflicts = set(conflict_fields)
-    blockers = set(blocked_fields)
     candidates: list[MetadataCandidate] = []
     outcomes: dict[str, SemanticFieldOutcome] = {}
     for field in _FIELDS:
         if field not in enabled:
             continue
         value = values.get(field)
-        if field in blockers:
-            status, reason = SemanticFieldStatus.BLOCKED, "lossless application is unavailable"
-        elif field in conflicts:
-            status, reason = SemanticFieldStatus.CONFLICT, "eligible evidence has no safe winner"
-        elif value:
+        if value:
             status, reason = SemanticFieldStatus.RESOLVED, "semantic evidence resolved safely"
+            provider, confidence, source_id, source_url = _winner_details(
+                winners.get(field, ())
+            )
             candidates.append(
                 MetadataCandidate(
                     field,
                     value,
-                    (
-                        "musicbrainz"
-                        if field
-                        in {
-                            "lyrics_languages",
-                            "artist_languages",
-                            "artist_countries",
-                            "artist_areas",
-                        }
-                        else provenance.get(field, ("musicbrainz",))[0].split()[0]
-                    ),
-                    0.95,
-                    f"semantic:{field}",
+                    provider,
+                    confidence,
+                    source_id,
+                    source_url,
                 )
             )
         elif field in unavailable:
@@ -243,13 +308,47 @@ def collect_semantic_enrichment(
     return SemanticEnrichmentResult(tuple(candidates), outcomes)
 
 
+def reconcile_semantic_outcomes(
+    outcomes: Mapping[str, SemanticFieldOutcome],
+    plan: ChangePlan,
+    target_blocker_fields: Collection[str] = (),
+) -> Mapping[str, SemanticFieldOutcome]:
+    """Reconcile collection outcomes with resolver review and target capability."""
+    conflicts = {decision.field for decision in plan.reviews}
+    blockers = set(target_blocker_fields)
+    reconciled: dict[str, SemanticFieldOutcome] = {}
+    for field, outcome in outcomes.items():
+        if field in blockers:
+            outcome = SemanticFieldOutcome(
+                field,
+                SemanticFieldStatus.BLOCKED,
+                outcome.value,
+                outcome.provenance,
+                "lossless application is unavailable",
+            )
+        elif field in conflicts:
+            outcome = SemanticFieldOutcome(
+                field,
+                SemanticFieldStatus.CONFLICT,
+                outcome.value,
+                outcome.provenance,
+                "eligible evidence requires resolver review",
+            )
+        reconciled[field] = outcome
+    return MappingProxyType(reconciled)
+
+
 def _discogs_semantics(
-    candidates: Sequence[MetadataCandidate], settings: GenreSettings
+    candidates: Sequence[MetadataCandidate],
+    settings: GenreSettings,
+    min_confidence: Mapping[str, float],
 ) -> tuple[tuple[GenreEvidence, ...], tuple[str, ...]]:
     genres: list[GenreEvidence] = []
     styles: tuple[str, ...] = ()
     for candidate in candidates:
         if candidate.provider.casefold() != "discogs" or not isinstance(candidate.value, tuple):
+            continue
+        if candidate.confidence < min_confidence.get(candidate.field, 0.0):
             continue
         if candidate.field == "styles":
             styles = _ordered_union((candidate.value,))
@@ -279,16 +378,6 @@ def _discogs_semantics(
     return tuple(genres), styles
 
 
-def _metadata_values(
-    bundle: SemanticEvidenceBundle, field: str
-) -> tuple[tuple[str, ...], ...]:
-    return tuple(
-        candidate.value
-        for candidate in bundle.metadata
-        if candidate.field == field and isinstance(candidate.value, tuple)
-    )
-
-
 def _ordered_union(rows: Sequence[Sequence[str]]) -> tuple[str, ...]:
     values: list[str] = []
     for row in rows:
@@ -309,3 +398,39 @@ def _provenance(
         if isinstance(provider, str) and provider not in values:
             values.append(provider)
     return tuple(values)
+
+
+def _eligible_bundle(
+    bundle: SemanticEvidenceBundle, min_confidence: Mapping[str, float]
+) -> SemanticEvidenceBundle:
+    categories = {
+        SemanticCategory.STYLE: "styles",
+        SemanticCategory.MOOD: "moods",
+    }
+    return SemanticEvidenceBundle(
+        metadata=bundle.metadata,
+        genres=tuple(
+            item
+            for item in bundle.genres
+            if item.confidence >= min_confidence.get("genres", 0.0)
+        ),
+        tags=tuple(
+            item
+            for item in bundle.tags
+            if (field := categories.get(item.category)) is None
+            or item.confidence >= min_confidence.get(field, 0.0)
+        ),
+    )
+
+
+def _winner_details(
+    evidence: Sequence[MetadataCandidate | GenreEvidence | SemanticTagEvidence],
+) -> tuple[str, float, str, str | None]:
+    if not evidence:
+        raise ValueError("resolved semantic field must retain supporting evidence")
+    winner = max(evidence, key=lambda item: item.confidence)
+    provider = winner.provider
+    confidence = winner.confidence
+    source_id = winner.source_id
+    source_url = winner.source_url
+    return provider, confidence, source_id, source_url

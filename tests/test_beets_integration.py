@@ -17,6 +17,7 @@ from beetsplug.noqlenmeta.beets_application import BeetsApplicationError
 from beetsplug.noqlenmeta.beets_mapping import BeetsMappingError
 from beetsplug.noqlenmeta.changeplan import ChangePlanError
 from beetsplug.noqlenmeta.domain import (
+    ArtistEnrichmentContext,
     MetadataCandidate,
     ReleaseEnrichmentContext,
     SemanticEvidenceBundle,
@@ -277,6 +278,9 @@ def test_current_values_map_album_info_to_canonical_shapes() -> None:
         country=" NL ",
         year=2024,
         media=" CD ",
+        artist_countries=["Brazil", " Japan "],
+        artist_areas=["Salvador", " Tokyo "],
+        artist_languages=["por", " jpn "],
     )
 
     assert current_values_from_album_info(info) == {
@@ -288,6 +292,9 @@ def test_current_values_map_album_info_to_canonical_shapes() -> None:
         "country": "NL",
         "year": 2024,
         "media": ("CD",),
+        "artist_countries": ("Brazil", "Japan"),
+        "artist_areas": ("Salvador", "Tokyo"),
+        "artist_languages": ("por", "jpn"),
     }
 
 
@@ -850,7 +857,7 @@ def test_genres_bypass_generic_resolver_and_rejoin_one_change_plan(
     monkeypatch.setattr("beetsplug.noqlenmeta.map_change_plan_to_beets", record_mapping)
     monkeypatch.setattr(
         "beetsplug.noqlenmeta.render_beets_target_plan",
-        lambda plan, application_result: rendered.append(plan),
+        lambda plan, application_result, semantic_outcomes: rendered.append(plan),
     )
     plugin = NoqlenMetaPlugin()
     configure_enabled(plugin, discogs=True, itunes=True, storefront="gb")
@@ -1266,6 +1273,76 @@ def test_preview_is_visible_and_selected_info_remains_unchanged(
     assert "candidate: Listenable Records" in output[0]
     assert "existing conflicting value is preserved" in output[0]
     assert TOKEN not in output[0]
+
+
+def test_importer_preview_retains_semantic_no_evidence_unavailable_and_conflict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from beetsplug.noqlenmeta.providers.musicbrainz_semantic import (
+        MusicBrainzArtistProvider,
+        MusicBrainzTrackProvider,
+    )
+
+    artist_ids = (
+        "22222222-2222-4222-8222-222222222222",
+        "33333333-3333-4333-8333-333333333333",
+    )
+    output: list[str] = []
+
+    monkeypatch.setattr(
+        MusicBrainzTrackProvider,
+        "get_semantic_evidence",
+        lambda *args: SemanticEvidenceBundle(),
+    )
+
+    def artist_evidence(
+        provider: MusicBrainzArtistProvider, context: ArtistEnrichmentContext
+    ) -> SemanticEvidenceBundle:
+        if context.external_ids[0].value == artist_ids[1]:
+            raise ProviderError("network")
+        return SemanticEvidenceBundle(
+            metadata=(
+                MetadataCandidate(
+                    "artist_countries",
+                    ("Brazil",),
+                    "musicbrainz",
+                    0.99,
+                    artist_ids[0],
+                ),
+            )
+        )
+
+    monkeypatch.setattr(MusicBrainzArtistProvider, "get_semantic_evidence", artist_evidence)
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(
+        plugin,
+        fields={
+            field: field in {"artist_countries", "artist_areas", "artist_languages"}
+            for field in plugin.config["fields"]
+        },
+        discogs=False,
+        musicbrainz=True,
+    )
+    track = TrackInfo(
+        title="Selected Track",
+        artist="Artist A feat. Artist B",
+        artists=["Artist A", "Artist B"],
+        artists_ids=list(artist_ids),
+    )
+    info = album_info(tracks=[track], artist_countries=["Existing"])
+    item = Item(title="Local Track")
+    task = ImportTask(None, [], [item])
+    task.choice_flag = Action.APPLY
+    task.match = AlbumMatch(None, info, {item: track})  # type: ignore[arg-type]
+
+    plugin._import_task_choice(None, task)
+
+    release_preview = output[0]
+    assert "artist_languages: no-evidence" in release_preview
+    assert "artist_areas: unavailable" in release_preview
+    assert "artist_countries: conflict" in release_preview
+    assert "raw_tag" not in release_preview
 
 
 def test_importer_uses_preserve_override_but_preview_does_not_mutate_selected_info(

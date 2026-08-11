@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
+from types import MappingProxyType
 
 from beets.library import Item
 
@@ -17,6 +19,10 @@ from beetsplug.noqlenmeta.resolver import (
     FieldDecision,
     ResolutionPolicy,
     resolve_metadata,
+)
+from beetsplug.noqlenmeta.semantic_enrichment import (
+    SemanticFieldOutcome,
+    reconcile_semantic_outcomes,
 )
 from beetsplug.noqlenmeta.track_integration import (
     SelectedImportTrack,
@@ -50,6 +56,14 @@ class TrackPlanningResult:
     decisions: tuple[FieldDecision, ...]
     change_plan: ChangePlan
     target_plan: TrackTargetPlan
+    semantic_outcomes: Mapping[str, SemanticFieldOutcome] = dataclass_field(
+        default_factory=dict
+    )
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "semantic_outcomes", MappingProxyType(dict(self.semantic_outcomes))
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +77,14 @@ class ImportTrackPlanningResult:
     decisions: tuple[FieldDecision, ...]
     change_plan: ChangePlan
     target_plan: TrackTargetPlan
+    semantic_outcomes: Mapping[str, SemanticFieldOutcome] = dataclass_field(
+        default_factory=dict
+    )
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "semantic_outcomes", MappingProxyType(dict(self.semantic_outcomes))
+        )
 
 
 def selected_metadata_current_values(
@@ -103,6 +125,7 @@ def build_import_track_planning_result(
     from_scratch: bool,
     candidates: Sequence[MetadataCandidate],
     policy: ResolutionPolicy,
+    semantic_outcomes: Mapping[str, SemanticFieldOutcome] | None = None,
 ) -> ImportTrackPlanningResult:
     """Resolve validated candidates through the shared canonical planning path."""
     result = build_track_planning_result(
@@ -113,6 +136,7 @@ def build_import_track_planning_result(
         ),
         candidates=candidates,
         policy=policy,
+        semantic_outcomes=semantic_outcomes,
     )
     return ImportTrackPlanningResult(
         selected=selected,
@@ -122,6 +146,7 @@ def build_import_track_planning_result(
         decisions=result.decisions,
         change_plan=result.change_plan,
         target_plan=result.target_plan,
+        semantic_outcomes=result.semantic_outcomes,
     )
 
 
@@ -131,17 +156,25 @@ def build_track_planning_result(
     *,
     candidates: Sequence[MetadataCandidate],
     policy: ResolutionPolicy,
+    semantic_outcomes: Mapping[str, SemanticFieldOutcome] | None = None,
 ) -> TrackPlanningResult:
     """Resolve one track through the shared canonical planning path."""
     collected = tuple(candidates)
     decisions = resolve_metadata(current_values, collected, policy)
     change_plan = build_change_plan(decisions)
+    target_plan = map_change_plan_to_track_info(change_plan)
+    outcomes = reconcile_semantic_outcomes(
+        semantic_outcomes or {},
+        change_plan,
+        tuple(blocker.source.field for blocker in target_plan.blocked_changes),
+    )
     return TrackPlanningResult(
         context=context,
         candidate_count=len(collected),
         decisions=decisions,
         change_plan=change_plan,
-        target_plan=map_change_plan_to_track_info(change_plan),
+        target_plan=target_plan,
+        semantic_outcomes=outcomes,
     )
 
 

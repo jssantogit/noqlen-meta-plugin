@@ -5,7 +5,7 @@ from __future__ import annotations
 from beets import ui
 
 from beetsplug.noqlenmeta.domain import MetadataValue, TrackEnrichmentContext
-from beetsplug.noqlenmeta.integration import _safe_preview_text
+from beetsplug.noqlenmeta.integration import _render_semantic_outcomes, _safe_preview_text
 from beetsplug.noqlenmeta.providers.specs import provider_display_name
 from beetsplug.noqlenmeta.resolver import FieldDecision, ResolutionAction
 from beetsplug.noqlenmeta.track_application import TrackApplicationResult
@@ -50,6 +50,7 @@ def render_import_track_plan(
                 blocked_by_field.get(decision.field),
             )
         )
+    lines.extend(_render_semantic_outcomes(result.semantic_outcomes))
     ui.print_("\n".join(lines))
 
 

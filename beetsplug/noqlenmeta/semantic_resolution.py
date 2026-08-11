@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 
 from beetsplug.noqlenmeta.domain import (
@@ -26,15 +26,17 @@ def collect_scoped_semantic_fallback(
     track: Callable[[], SemanticEvidenceBundle],
     release: Callable[[], SemanticEvidenceBundle],
     artist: Callable[[], SemanticEvidenceBundle],
+    min_confidence: Mapping[str, float] | None = None,
 ) -> tuple[SemanticEvidenceBundle, ...]:
     """Collect Track -> Release -> Artist only while requested fields remain unresolved."""
     requested = set(requested_fields) & {"genres", "styles", "moods"}
     unresolved = requested - set(resolved_fields)
+    thresholds = min_confidence or {}
     bundles: list[SemanticEvidenceBundle] = []
     for collector in (track, release, artist):
         if not unresolved:
             break
-        bundle = _filter_bundle(collector(), unresolved)
+        bundle = _filter_bundle(collector(), unresolved, thresholds)
         bundles.append(bundle)
         unresolved -= _bundle_fields(bundle)
     return tuple(bundles)
@@ -50,7 +52,9 @@ def _bundle_fields(bundle: SemanticEvidenceBundle) -> set[str]:
 
 
 def _filter_bundle(
-    bundle: SemanticEvidenceBundle, fields: Collection[str]
+    bundle: SemanticEvidenceBundle,
+    fields: Collection[str],
+    min_confidence: Mapping[str, float],
 ) -> SemanticEvidenceBundle:
     categories = {
         SemanticCategory.STYLE: "styles",
@@ -58,8 +62,19 @@ def _filter_bundle(
     }
     return SemanticEvidenceBundle(
         metadata=bundle.metadata,
-        genres=bundle.genres if "genres" in fields else (),
-        tags=tuple(item for item in bundle.tags if categories.get(item.category) in fields),
+        genres=tuple(
+            item
+            for item in bundle.genres
+            if "genres" in fields
+            and item.confidence >= min_confidence.get("genres", 0.0)
+        ),
+        tags=tuple(
+            item
+            for item in bundle.tags
+            if (field := categories.get(item.category)) is not None
+            and field in fields
+            and item.confidence >= min_confidence.get(field, 0.0)
+        ),
     )
 
 
@@ -75,7 +90,9 @@ class MoodSettings:
 
 
 def resolve_styles(
-    structured: Sequence[str], community: Sequence[SemanticTagEvidence]
+    structured: Sequence[str],
+    community: Sequence[SemanticTagEvidence],
+    min_confidence: float = 0.0,
 ) -> tuple[str, ...]:
     """Prefer lossless structured styles and use classified tags only as fallback."""
     selected: list[str] = []
@@ -91,7 +108,10 @@ def resolve_styles(
     if selected:
         return tuple(selected)
     for item in community:
-        if item.category is not SemanticCategory.STYLE or item.confidence <= 0.0:
+        if (
+            item.category is not SemanticCategory.STYLE
+            or item.confidence < min_confidence
+        ):
             continue
         identity = item.canonical_term.casefold()
         if identity not in seen:
@@ -101,7 +121,9 @@ def resolve_styles(
 
 
 def resolve_moods(
-    evidence: Sequence[SemanticTagEvidence], max_moods: int = 1
+    evidence: Sequence[SemanticTagEvidence],
+    max_moods: int = 1,
+    min_confidence: float = 0.0,
 ) -> tuple[str, ...]:
     """Select recognized moods using ordered, discrete ranking components."""
     settings = MoodSettings(max_moods)
@@ -110,7 +132,10 @@ def resolve_moods(
     for index, item in enumerate(evidence):
         if not isinstance(item, SemanticTagEvidence):
             raise TypeError("evidence must contain SemanticTagEvidence values")
-        if item.category is not SemanticCategory.MOOD or item.confidence <= 0.0:
+        if (
+            item.category is not SemanticCategory.MOOD
+            or item.confidence < min_confidence
+        ):
             continue
         identity = item.canonical_term.casefold()
         names.setdefault(identity, item.canonical_term)
