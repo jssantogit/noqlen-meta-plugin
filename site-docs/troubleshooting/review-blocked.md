@@ -18,5 +18,5 @@ preview again. Partial mode may retain independently safe ordinary fields, but
 partial is not force. It never accepts a review, fabricates a mapping, lowers
 identity gates, or bypasses stale checks. Noqlen has no force mode.
 
-See [Strict and Partial](../concepts/strict-vs-partial.md) for the current
+See [Strict vs Partial](../advanced/strict-vs-partial.md) for the current
 conceptual model.

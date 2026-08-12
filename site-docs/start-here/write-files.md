@@ -23,4 +23,4 @@ configure -> preview -> review -> apply -> write, when wanted
 
 Next, customize behavior in **Configuration**, or learn the secondary importer
 path in **Recipes -> Enrich During Import** once that section is introduced.
-For exact boundaries now, use [Preview, Apply, and Write](../concepts/preview-apply-write.md).
+For exact boundaries now, use [Preview, Apply and Write](../advanced/preview-apply-write.md).

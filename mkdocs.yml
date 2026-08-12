@@ -77,13 +77,6 @@ nav:
       - Repair MusicBrainz Identity: commands/identity.md
       - Use AcoustID: commands/acoustid.md
       - Sync Identity Tags: commands/identity-tags.md
-  - Concepts:
-      - concepts/index.md
-      - Database, Files, and Navidrome: concepts/database-files-navidrome.md
-      - Preview, Apply, and Write: concepts/preview-apply-write.md
-      - Strict and Partial: concepts/strict-vs-partial.md
-      - Result Statuses: concepts/result-statuses.md
-      - Providers and Field Authority: concepts/providers-and-field-authority.md
   - Recipes:
       - Recipes: recipes/index.md
       - Enrich an Existing Library: recipes/existing-library.md
@@ -109,7 +102,12 @@ nav:
       - File Writing Problems: troubleshooting/file-writing.md
       - AcoustID Problems: troubleshooting/acoustid.md
   - Advanced:
-      - Safety: advanced/safety.md
+      - Advanced: advanced/index.md
+      - Database vs File Tags: advanced/database-vs-file-tags.md
+      - Preview, Apply and Write: advanced/preview-apply-write.md
+      - Strict vs Partial: advanced/strict-vs-partial.md
+      - Provider Authority and Resolution: advanced/provider-authority-resolution.md
+      - Safety Guarantees: advanced/safety.md
       - Architecture: advanced/architecture.md
   - Project:
       - Changelog: project/changelog.md

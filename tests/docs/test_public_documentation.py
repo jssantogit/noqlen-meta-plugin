@@ -165,9 +165,10 @@ def test_public_release_state_is_consistent() -> None:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     home = (ROOT / "site-docs/index.md").read_text(encoding="utf-8")
     release = (ROOT / "site-docs/project/release.md").read_text(encoding="utf-8")
-    permissions = (ROOT / "site-docs/concepts/preview-apply-write.md").read_text(
+    permissions = (ROOT / "site-docs/advanced/preview-apply-write.md").read_text(
         encoding="utf-8"
     )
+    assert not (ROOT / "site-docs" / "concepts").exists()
     checklist = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
     release_words = " ".join(release.split()).casefold()
     combined = " ".join(

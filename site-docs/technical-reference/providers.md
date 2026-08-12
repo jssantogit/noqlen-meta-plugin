@@ -40,7 +40,7 @@ tokens are not displayed.
 
 No result can also be normal: the provider may not support the enabled field,
 may lack the required identity, may not appear in field authority, or may
-return evidence below confidence. See [field authority](../concepts/providers-and-field-authority.md).
+return evidence below confidence. See [provider authority](../advanced/provider-authority-resolution.md).
 
 `providers.musicbrainz.enabled` is only the enrichment adapter. It neither
 enables nor disables identity audit or the MusicBrainz identity source.
