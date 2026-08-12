@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from http.client import HTTPException
 from json import JSONDecodeError
 from typing import Any, Protocol
@@ -13,9 +13,21 @@ import discogs_client
 from discogs_client.exceptions import DiscogsAPIError
 from requests.exceptions import RequestException
 
-from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
+from beetsplug.noqlenmeta.domain import (
+    ExternalIdentifier,
+    MetadataCandidate,
+    ReleaseEnrichmentContext,
+)
+from beetsplug.noqlenmeta.evidence import (
+    AcquisitionMethod,
+    AcquisitionProvenance,
+    MetadataEvidence,
+    SubjectRef,
+)
+from beetsplug.noqlenmeta.field_contracts import EntityKind
 from beetsplug.noqlenmeta.providers.base import ProviderError
-from beetsplug.noqlenmeta.providers.specs import DISCOGS_SPEC
+from beetsplug.noqlenmeta.providers.specs import DISCOGS_SPEC, ProviderScope
+from beetsplug.noqlenmeta.release_catalog import normalize_edition, parse_partial_date
 
 _DISCOGS_RELEASE_NAMESPACE = "discogs.release"
 _SEARCH_LIMIT = 10
@@ -69,26 +81,71 @@ class DiscogsProvider:
         )
         self._client.set_timeout(connect=5, read=10)
 
-    def get_candidates(
+    def get_candidates(self, context: ReleaseEnrichmentContext) -> Sequence[MetadataCandidate]:
+        resolved = self._resolve_release(context)
+        if resolved is None:
+            return ()
+        release, release_id, confidence = resolved
+        return _normalize_release(release, release_id, confidence)
+
+    def get_release_catalog_evidence(
+        self,
+        context: ReleaseEnrichmentContext,
+        enabled_fields: Collection[str],
+    ) -> tuple[MetadataEvidence, ...]:
+        requested = set(enabled_fields) & {"date", "edition"}
+        if not requested:
+            return ()
+        resolved = self._resolve_release(context)
+        if resolved is None:
+            return ()
+        release, release_id, confidence = resolved
+        if _positive_int(release.get("id")) != release_id:
+            return ()
+        fields: list[tuple[str, object]] = []
+        if "date" in requested and (date := parse_partial_date(release.get("released"))):
+            fields.append(("date", date))
+        if "edition" in requested:
+            fields.extend(("edition", value) for value in _editions(release.get("formats")))
+        source_url = _optional_string(release.get("uri")) or None
+        return tuple(
+            MetadataEvidence(
+                field=field,
+                value=value,  # type: ignore[arg-type]
+                subject=SubjectRef(
+                    EntityKind.RELEASE,
+                    (ExternalIdentifier("discogs.release", str(release_id)),),
+                ),
+                provider="discogs",
+                acquisition_scope=ProviderScope.RELEASE,
+                source_id=str(release_id),
+                source_url=source_url,
+                provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+                confidence=confidence,
+            )
+            for field, value in fields
+        )
+
+    def _resolve_release(
         self, context: ReleaseEnrichmentContext
-    ) -> Sequence[MetadataCandidate]:
+    ) -> tuple[Mapping[str, object], int, float] | None:
         direct_id, has_discogs_ids = _discogs_release_id(context)
         if has_discogs_ids:
             if direct_id is None:
-                return ()
+                return None
             release = self._fetch_release(direct_id)
-            return _normalize_release(release, direct_id, _DIRECT_CONFIDENCE)
+            return release, direct_id, _DIRECT_CONFIDENCE
 
         if self._token is None:
             raise ProviderError("Discogs search requires a personal user token")
 
         selected = self._search_release(context)
         if selected is None:
-            return ()
+            return None
 
         release_id, confidence = selected
         release = self._fetch_release(release_id)
-        return _normalize_release(release, release_id, confidence)
+        return release, release_id, confidence
 
     def _fetch_release(self, release_id: int) -> Mapping[str, object]:
         try:
@@ -100,9 +157,7 @@ class DiscogsProvider:
 
         return data if isinstance(data, Mapping) else {}
 
-    def _search_release(
-        self, context: ReleaseEnrichmentContext
-    ) -> tuple[int, float] | None:
+    def _search_release(self, context: ReleaseEnrichmentContext) -> tuple[int, float] | None:
         try:
             results = self._client.search(**_search_parameters(context))
             results.per_page = _SEARCH_LIMIT
@@ -285,6 +340,20 @@ def _formats(value: object) -> tuple[tuple[str, ...], tuple[str, ...]]:
     return tuple(media), tuple(descriptions)
 
 
+def _editions(value: object) -> tuple[str, ...]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return ()
+    editions: list[str] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        for description in _ordered_strings(item.get("descriptions")):
+            edition = normalize_edition(description)
+            if edition is not None:
+                _append_unique(editions, edition)
+    return tuple(editions)
+
+
 def _ordered_strings(value: object) -> tuple[str, ...]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         return ()
@@ -312,9 +381,7 @@ def _matches_any(expected: str | None, actual: object) -> bool:
 
 def _normalized_identifier(value: object) -> str:
     return "".join(
-        character
-        for character in _optional_string(value).casefold()
-        if character.isalnum()
+        character for character in _optional_string(value).casefold() if character.isalnum()
     )
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from datetime import datetime
 from http.client import HTTPException
 from json import JSONDecodeError
@@ -13,9 +13,21 @@ from typing import Any
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
-from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
+from beetsplug.noqlenmeta.domain import (
+    ExternalIdentifier,
+    MetadataCandidate,
+    ReleaseEnrichmentContext,
+)
+from beetsplug.noqlenmeta.evidence import (
+    AcquisitionMethod,
+    AcquisitionProvenance,
+    MetadataEvidence,
+    SubjectRef,
+)
+from beetsplug.noqlenmeta.field_contracts import EntityKind
 from beetsplug.noqlenmeta.providers.base import ProviderError
-from beetsplug.noqlenmeta.providers.specs import ITUNES_SPEC
+from beetsplug.noqlenmeta.providers.specs import ITUNES_SPEC, ProviderScope
+from beetsplug.noqlenmeta.release_catalog import parse_iso_datetime_date
 
 _ITUNES_COLLECTION_NAMESPACE = "itunes.collection"
 _API_URL = "https://itunes.apple.com"
@@ -56,24 +68,63 @@ class ITunesProvider:
         self._storefront = storefront
         self._request_json = request_json or _request_json
 
-    def get_candidates(
+    def get_candidates(self, context: ReleaseEnrichmentContext) -> Sequence[MetadataCandidate]:
+        resolved = self._resolve_collection(context)
+        if resolved is None:
+            return ()
+        collection, confidence = resolved
+        return _normalize_collection(collection, confidence)
+
+    def get_release_catalog_evidence(
+        self,
+        context: ReleaseEnrichmentContext,
+        enabled_fields: Collection[str],
+    ) -> tuple[MetadataEvidence, ...]:
+        if "date" not in enabled_fields:
+            return ()
+        resolved = self._resolve_collection(context)
+        if resolved is None:
+            return ()
+        collection, confidence = resolved
+        collection_id = _positive_int(collection.get("collectionId"))
+        date = parse_iso_datetime_date(collection.get("releaseDate"))
+        if collection_id is None or date is None:
+            return ()
+        return (
+            MetadataEvidence(
+                field="date",
+                value=date,
+                subject=SubjectRef(
+                    EntityKind.RELEASE,
+                    (ExternalIdentifier("itunes.collection", str(collection_id)),),
+                ),
+                provider="itunes",
+                acquisition_scope=ProviderScope.RELEASE,
+                source_id=str(collection_id),
+                source_url=_public_url(collection.get("collectionViewUrl")),
+                provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+                confidence=confidence,
+            ),
+        )
+
+    def _resolve_collection(
         self, context: ReleaseEnrichmentContext
-    ) -> Sequence[MetadataCandidate]:
+    ) -> tuple[Mapping[str, object], float] | None:
         direct_id, has_itunes_ids = _itunes_collection_id(context)
         if has_itunes_ids:
             if direct_id is None:
-                return ()
+                return None
             results = self._request("lookup", id=direct_id, entity="album")
             collection = _direct_collection(results, direct_id)
-            return _normalize_collection(collection, _DIRECT_CONFIDENCE)
+            return (collection, _DIRECT_CONFIDENCE) if collection else None
 
         if context.barcode is not None:
             results = self._request("lookup", upc=context.barcode, entity="album")
             matches = _matching_collections(results, context)
             if len(matches) == 1:
-                return _normalize_collection(matches[0], _UPC_CONFIDENCE)
+                return matches[0], _UPC_CONFIDENCE
             if len(matches) > 1:
-                return ()
+                return None
 
         results = self._request(
             "search",
@@ -84,8 +135,8 @@ class ITunesProvider:
         )
         matches = _matching_collections(results, context)
         if len(matches) != 1:
-            return ()
-        return _normalize_collection(matches[0], _SEARCH_CONFIDENCE)
+            return None
+        return matches[0], _SEARCH_CONFIDENCE
 
     def _request(self, operation: str, **parameters: object) -> tuple[Mapping[str, object], ...]:
         parameters["country"] = self._storefront.upper()
@@ -135,8 +186,7 @@ def _direct_collection(
     matches = [
         result
         for result in results
-        if _is_album_collection(result)
-        and _positive_int(result.get("collectionId")) == expected_id
+        if _is_album_collection(result) and _positive_int(result.get("collectionId")) == expected_id
     ]
     return matches[0] if len(matches) == 1 else {}
 
@@ -150,8 +200,7 @@ def _matching_collections(
         if (
             not _is_album_collection(result)
             or collection_id is None
-            or _normalized_text(result.get("artistName"))
-            != _normalized_text(context.album_artist)
+            or _normalized_text(result.get("artistName")) != _normalized_text(context.album_artist)
             or _normalized_text(result.get("collectionName"))
             != _normalized_text(context.album_title)
         ):

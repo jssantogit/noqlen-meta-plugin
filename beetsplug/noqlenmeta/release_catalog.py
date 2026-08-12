@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from datetime import datetime
 from enum import Enum
 
 from beetsplug.noqlenmeta.field_contracts import PartialDate
@@ -77,6 +78,17 @@ def parse_partial_date(value: object) -> PartialDate | None:
         return PartialDate(int(year_text), month, day)
     except ValueError:
         return None
+
+
+def parse_iso_datetime_date(value: object) -> PartialDate | None:
+    """Parse an ISO timestamp while retaining only its explicit calendar date."""
+    if not isinstance(value, str) or "T" not in value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return PartialDate(parsed.year, parsed.month, parsed.day)
 
 
 def compatible_partial_dates(left: PartialDate, right: PartialDate) -> bool:
