@@ -45,12 +45,13 @@ the [command reference](reference/commands.md) when you already know beets.
 - [Advanced safety](advanced/safety.md): inspect write guarantees and limitations.
 
 The canonical public documentation is live at
-[https://noqlen-meta-plugin.readthedocs.io/](https://noqlen-meta-plugin.readthedocs.io/).
-The public `latest`, `stable`, and versioned `v1.0.0` builds have passed.
+[https://noqlen-meta.readthedocs.io/en/stable/](https://noqlen-meta.readthedocs.io/en/stable/).
+The Read the Docs project slug is `noqlen-meta`; `stable` is the canonical
+public entry point.
 
-The repository is preparing the `2.0.0` release candidate. The currently
-published PyPI/GitHub release remains `1.0.0` until the owner-authorized v2
-release workflow runs after merge to `main`.
+Noqlen Meta `2.0.0` is the current stable release and is published on PyPI and
+GitHub. The explicit versioned Read the Docs `v2.0.0` build remains a separate
+post-release verification item.
 
 ## License And Repository Status
 
@@ -58,8 +59,8 @@ Noqlen Meta is MIT licensed. The repository's root
 [`LICENSE`](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE)
 is the canonical license text.
 
-The GitHub repository is public. Version `1.0.0` is available from
+The GitHub repository is public. Version `2.0.0` is available from
 [PyPI](https://pypi.org/project/beets-noqlenmeta/) and the corresponding
-[GitHub Release](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v1.0.0).
+[GitHub Release](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.0).
 The license choice does not imply endorsement by beets, MusicBrainz, Discogs,
-Navidrome, Last.fm, Apple, LRCLIB, or any provider.
+Navidrome, Last.fm, Apple, LRCLIB, AcoustID, or any provider.
