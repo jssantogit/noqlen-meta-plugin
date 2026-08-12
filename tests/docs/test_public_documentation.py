@@ -203,6 +203,9 @@ def test_public_release_state_is_consistent() -> None:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     home = (ROOT / "site-docs/index.md").read_text(encoding="utf-8")
     release = (ROOT / "site-docs/project/release.md").read_text(encoding="utf-8")
+    project_changelog = (ROOT / "site-docs/project/changelog.md").read_text(
+        encoding="utf-8"
+    )
     permissions = (ROOT / "site-docs/advanced/preview-apply-write.md").read_text(
         encoding="utf-8"
     )
@@ -221,18 +224,21 @@ def test_public_release_state_is_consistent() -> None:
     assert "canonical public documentation is live" in release_words
     assert "https://pypi.org/project/beets-noqlenmeta/" in home
     assert (
-        "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.0"
+        "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.1"
         in release
     )
     assert "## Unreleased" in changelog
+    assert "## 2.0.1 - 2026-08-12" in changelog
     assert "## 2.0.0 - 2026-08-11" in changelog
     assert (
         changelog.index("## Unreleased")
+        < changelog.index("## 2.0.1 - 2026-08-12")
         < changelog.index("## 2.0.0 - 2026-08-11")
         < changelog.index("## 1.0.0 - 2026-08-02")
     )
-    assert "Current stable release: `2.0.0` (2026-08-11)" in release
-    assert "Noqlen Meta 2.0.0 is published on" in release
+    assert "Current stable release: `2.0.1` (2026-08-12)" in release
+    assert "Noqlen Meta 2.0.1 is published on" in release
+    assert "Version 2.0.1 is the current stable release." in project_changelog
     assert "The Read the Docs project slug is `noqlen-meta`." in release
     assert "verified `cover.jpg` sidecars may be written" in combined
     assert "audio files remain unchanged unless `--write`" in combined
