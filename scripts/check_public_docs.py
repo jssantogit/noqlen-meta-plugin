@@ -50,7 +50,9 @@ FORBIDDEN_PUBLIC_LINKS = (
     "handoff.md",
 )
 SECRET_PATTERNS = (
-    re.compile(r"(?i)(?:api[_-]?key|access[_-]?token|password|secret)\s*[:=]\s*[\"'][^\"']{8,}[\"']"),
+    re.compile(
+        r"(?i)(?:api[_-]?key|access[_-]?token|password|secret)\s*[:=]\s*[\"'][^\"']{8,}[\"']"
+    ),
     re.compile(r"/(?:home|Users)/[^/\s]+/"),
     re.compile(r"[A-Za-z]:\\Users\\[^\\\s]+\\"),
 )
@@ -84,7 +86,9 @@ class UniqueKeyLoader(yaml.SafeLoader):
     """YAML loader that rejects duplicate mapping keys."""
 
 
-def _construct_mapping(loader: UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False) -> Any:
+def _construct_mapping(
+    loader: UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False
+) -> Any:
     mapping: dict[Any, Any] = {}
     for key_node, value_node in node.value:
         key = loader.construct_object(key_node, deep=deep)
@@ -202,8 +206,23 @@ def check() -> list[str]:
     for term in FORBIDDEN_README_TERMS:
         if term.casefold() in readme_text.casefold():
             failures.append(f"README contains internal term: {term}")
-    if "[MIT License](LICENSE)" not in readme_text:
-        failures.append("README does not identify and link the MIT License")
+    readme_headings = [line for line in readme_text.splitlines() if line.startswith("#")]
+    if readme_headings != ["# Noqlen Meta", "## Capabilities", "## Installation"]:
+        failures.append("README does not use the approved landing-page structure")
+    for forbidden_heading in ("## Documentation", "## First Preview", "## License"):
+        if forbidden_heading in readme_text:
+            failures.append(f"README retains removed section: {forbidden_heading}")
+    if "Version `" in readme_text or "releases/tag/v" in readme_text:
+        failures.append("README contains release-specific version metadata")
+    for required_install_text in (
+        "pip install beets-noqlenmeta",
+        'pip install "beets-noqlenmeta[discogs]"',
+        'pip install "beets-noqlenmeta[audio]"',
+        "plugins:\n  - noqlenmeta",
+        "beet help noqlenmeta",
+    ):
+        if required_install_text not in readme_text:
+            failures.append(f"README installation omits: {required_install_text}")
     if "MIT License" not in release_text:
         failures.append("release documentation does not identify the MIT License")
     if "[x] MIT License selected and added" not in checklist_text:
@@ -217,8 +236,6 @@ def check() -> list[str]:
     for phrase in STALE_VISIBILITY_PHRASES:
         if phrase in public_release_text:
             failures.append(f"public release text retains stale visibility phrase: {phrase}")
-    if f"[Read the Docs]({READTHEDOCS_URL})" not in readme_text:
-        failures.append("README does not link to the canonical live Read the Docs site")
     if READTHEDOCS_URL not in public_text or "canonical public documentation is live" not in folded:
         failures.append("public docs do not identify the canonical live Read the Docs site")
     if STALE_READTHEDOCS_HOST in public_release_text:
@@ -266,12 +283,10 @@ def check() -> list[str]:
         if item not in checklist_text:
             failures.append(f"release checklist omits required state: {item}")
 
-    if PYPI_URL not in readme_text or PYPI_URL not in public_text:
-        failures.append("public release text does not link to the published PyPI project")
+    if PYPI_URL not in public_text:
+        failures.append("public docs do not link to the published PyPI project")
     if GITHUB_RELEASE_URL not in public_text:
         failures.append("public release text does not link to the v2.0.0 GitHub Release")
-    if "version `2.0.0` is published on" not in readme_text.casefold():
-        failures.append("README does not record the v2.0.0 PyPI publication")
     if "## Unreleased" not in changelog_text:
         failures.append("CHANGELOG.md does not contain an Unreleased section")
     if "## 2.0.0 - 2026-08-11" not in changelog_text:
