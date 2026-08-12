@@ -1,0 +1,81 @@
+import pytest
+
+from beetsplug.noqlenmeta.authority import (
+    AUTHORITY_MATRIX,
+    AuthorityMatrix,
+    AuthorityRole,
+    AuthorityRule,
+    eligible_standalone,
+    translate_v2_authority,
+)
+from beetsplug.noqlenmeta.field_contracts import EntityKind
+from beetsplug.noqlenmeta.providers.specs import ProviderScope
+
+
+def rule(provider: str, role: AuthorityRole) -> AuthorityRule:
+    return AuthorityRule(
+        field="year",
+        asserted_entity=EntityKind.RELEASE,
+        acquisition_scope=ProviderScope.RELEASE,
+        provider=provider,
+        role=role,
+    )
+
+
+def test_unlisted_authority_is_ineligible() -> None:
+    assert (
+        AUTHORITY_MATRIX.role_for(
+            "year",
+            EntityKind.RELEASE,
+            ProviderScope.RELEASE,
+            "lastfm",
+        )
+        is AuthorityRole.INELIGIBLE
+    )
+
+
+def test_corroboration_only_cannot_be_selected_alone() -> None:
+    assert not eligible_standalone(AuthorityRole.CORROBORATION_ONLY)
+    assert not eligible_standalone(AuthorityRole.INELIGIBLE)
+    assert eligible_standalone(AuthorityRole.PRIMARY)
+    assert eligible_standalone(AuthorityRole.SECONDARY)
+    assert eligible_standalone(AuthorityRole.FALLBACK)
+
+
+def test_fallback_remains_distinct_from_secondary() -> None:
+    assert (
+        AUTHORITY_MATRIX.role_for("year", EntityKind.RELEASE, ProviderScope.RELEASE, "discogs")
+        is AuthorityRole.SECONDARY
+    )
+    assert (
+        AUTHORITY_MATRIX.role_for("year", EntityKind.RELEASE, ProviderScope.RELEASE, "itunes")
+        is AuthorityRole.FALLBACK
+    )
+
+
+def test_duplicate_authority_rule_is_rejected() -> None:
+    authority = rule("catalog", AuthorityRole.PRIMARY)
+    with pytest.raises(ValueError, match="duplicate authority"):
+        AuthorityMatrix((authority, authority))
+
+
+def test_ineligible_rules_are_implicit_not_stored() -> None:
+    with pytest.raises(ValueError, match="must remain unlisted"):
+        AuthorityMatrix((rule("catalog", AuthorityRole.INELIGIBLE),))
+
+
+def test_v2_ordered_authority_translation_preserves_exact_rank() -> None:
+    translated = translate_v2_authority("year", ("itunes", "musicbrainz", "discogs"))
+
+    assert [(entry.provider, entry.rank) for entry in translated] == [
+        ("itunes", 0),
+        ("musicbrainz", 1),
+        ("discogs", 2),
+    ]
+    assert all(entry.field == "year" for entry in translated)
+
+
+def test_v2_translation_does_not_guess_new_authority_roles() -> None:
+    translated = translate_v2_authority("genres", ("lastfm", "discogs"))
+
+    assert all(not hasattr(entry, "role") for entry in translated)

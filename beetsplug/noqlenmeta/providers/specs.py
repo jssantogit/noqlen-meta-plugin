@@ -8,6 +8,8 @@ from enum import Enum
 from types import MappingProxyType
 from typing import TypeAlias
 
+from beetsplug.noqlenmeta.field_contracts import EntityKind, field_contract
+
 
 def _canonical_name(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
@@ -24,6 +26,76 @@ class ProviderScope(Enum):
     RELEASE = "release"
     TRACK = "track"
     ARTIST = "artist"
+
+
+class IdentityPrerequisite(Enum):
+    """Identity context required before an adapter may acquire evidence."""
+
+    NONE = "none"
+    EXACT_CANONICAL_ID = "exact_canonical_id"
+    STRUCTURALLY_VALIDATED_CONTEXT = "structurally_validated_context"
+
+
+class AcquisitionCharacteristic(Enum):
+    """Discrete acquisition behavior relevant to lazy planning."""
+
+    DIRECT_LOOKUP = "direct_lookup"
+    SEARCH = "search"
+    RESPONSE_REUSE = "response_reuse"
+    SUPPORTING_TRAVERSAL = "supporting_traversal"
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderCapability:
+    """One field an ordinary adapter can emit under explicit preconditions."""
+
+    provider: str
+    field: str
+    asserted_entity: EntityKind
+    acquisition_scope: ProviderScope
+    identity_prerequisite: IdentityPrerequisite
+    characteristics: frozenset[AcquisitionCharacteristic] = frozenset()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "provider", _canonical_name(self.provider, "provider name"))
+        contract = field_contract(self.field)
+        object.__setattr__(self, "field", contract.canonical_name)
+        if not isinstance(self.asserted_entity, EntityKind):
+            raise TypeError("asserted entity must be an EntityKind")
+        if not isinstance(self.acquisition_scope, ProviderScope):
+            raise TypeError("acquisition scope must be a ProviderScope")
+        if not isinstance(self.identity_prerequisite, IdentityPrerequisite):
+            raise TypeError("identity prerequisite must be an IdentityPrerequisite")
+        characteristics = frozenset(self.characteristics)
+        if not all(
+            isinstance(characteristic, AcquisitionCharacteristic)
+            for characteristic in characteristics
+        ):
+            raise TypeError("characteristics must contain AcquisitionCharacteristic values")
+        object.__setattr__(self, "characteristics", characteristics)
+
+
+CapabilityKey: TypeAlias = tuple[str, str, EntityKind, ProviderScope]
+
+
+def capability_registry(
+    capabilities: tuple[ProviderCapability, ...],
+) -> Mapping[CapabilityKey, ProviderCapability]:
+    """Build an immutable capability index and reject duplicate declarations."""
+    registry: dict[CapabilityKey, ProviderCapability] = {}
+    for capability in capabilities:
+        if not isinstance(capability, ProviderCapability):
+            raise TypeError("capabilities must contain ProviderCapability values")
+        key = (
+            capability.provider,
+            capability.field,
+            capability.asserted_entity,
+            capability.acquisition_scope,
+        )
+        if key in registry:
+            raise ValueError(f"duplicate capability: {key!r}")
+        registry[key] = capability
+    return MappingProxyType(registry)
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,9 +115,7 @@ class ProviderSpec:
 
         if isinstance(self.supported_fields, str):
             raise TypeError("supported fields must be a collection of field names")
-        fields = tuple(
-            _canonical_name(field, "supported field") for field in self.supported_fields
-        )
+        fields = tuple(_canonical_name(field, "supported field") for field in self.supported_fields)
         if len(fields) != len(set(fields)):
             raise ValueError("supported field names must be unique after normalization")
         object.__setattr__(self, "supported_fields", frozenset(fields))
@@ -99,9 +169,7 @@ MUSICBRAINZ_TRACK_SPEC = ProviderSpec(
 MUSICBRAINZ_ARTIST_SPEC = ProviderSpec(
     name="musicbrainz",
     display_name="MusicBrainz",
-    supported_fields=frozenset(
-        {"genres", "moods", "artist_countries", "artist_areas"}
-    ),
+    supported_fields=frozenset({"genres", "moods", "artist_countries", "artist_areas"}),
     scope=ProviderScope.ARTIST,
 )
 
@@ -152,6 +220,48 @@ _BUILTIN_PROVIDER_CAPABILITIES = (
     ITUNES_SPEC,
     LRCLIB_SPEC,
 )
+
+
+def _asserted_entity(spec: ProviderSpec, field: str) -> EntityKind:
+    if field == "lyrics_languages":
+        return EntityKind.WORK
+    return {
+        ProviderScope.RELEASE: EntityKind.RELEASE,
+        ProviderScope.TRACK: EntityKind.RECORDING,
+        ProviderScope.ARTIST: EntityKind.ARTIST,
+    }[spec.scope]
+
+
+def _identity_prerequisite(spec: ProviderSpec) -> IdentityPrerequisite:
+    if spec.name == "musicbrainz":
+        return IdentityPrerequisite.EXACT_CANONICAL_ID
+    return IdentityPrerequisite.STRUCTURALLY_VALIDATED_CONTEXT
+
+
+def _characteristics(spec: ProviderSpec, field: str) -> frozenset[AcquisitionCharacteristic]:
+    values = {AcquisitionCharacteristic.RESPONSE_REUSE}
+    if spec.name == "musicbrainz":
+        values.add(AcquisitionCharacteristic.DIRECT_LOOKUP)
+    else:
+        values.add(AcquisitionCharacteristic.SEARCH)
+    if spec.name == "musicbrainz" and field == "lyrics_languages":
+        values.add(AcquisitionCharacteristic.SUPPORTING_TRAVERSAL)
+    return frozenset(values)
+
+
+BUILTIN_PROVIDER_CAPABILITIES = tuple(
+    ProviderCapability(
+        provider=spec.name,
+        field=field,
+        asserted_entity=_asserted_entity(spec, field),
+        acquisition_scope=spec.scope,
+        identity_prerequisite=_identity_prerequisite(spec),
+        characteristics=_characteristics(spec, field),
+    )
+    for spec in _BUILTIN_PROVIDER_CAPABILITIES
+    for field in sorted(spec.supported_fields)
+)
+BUILTIN_PROVIDER_CAPABILITY_REGISTRY = capability_registry(BUILTIN_PROVIDER_CAPABILITIES)
 BUILTIN_PROVIDER_SPECS: Mapping[ProviderKey, ProviderSpec] = MappingProxyType(
     {(spec.name, spec.scope): spec for spec in _BUILTIN_PROVIDER_CAPABILITIES}
 )
@@ -182,7 +292,5 @@ BUILTIN_ARTIST_PROVIDER_SPECS: Mapping[str, ProviderSpec] = MappingProxyType(
 def provider_display_name(name: str) -> str:
     """Return built-in branding with a safe generic fallback for unknown names."""
     normalized = name.casefold()
-    spec = next(
-        (spec for spec in _BUILTIN_PROVIDER_CAPABILITIES if spec.name == normalized), None
-    )
+    spec = next((spec for spec in _BUILTIN_PROVIDER_CAPABILITIES if spec.name == normalized), None)
     return spec.display_name if spec is not None else name.title()

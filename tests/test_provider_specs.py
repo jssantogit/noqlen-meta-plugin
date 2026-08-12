@@ -2,8 +2,10 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+from beetsplug.noqlenmeta.field_contracts import EntityKind, field_contract
 from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_ARTIST_PROVIDER_SPECS,
+    BUILTIN_PROVIDER_CAPABILITIES,
     BUILTIN_PROVIDER_NAMES,
     BUILTIN_PROVIDER_SPECS,
     BUILTIN_RELEASE_PROVIDER_SPECS,
@@ -17,8 +19,12 @@ from beetsplug.noqlenmeta.providers.specs import (
     MUSICBRAINZ_ARTIST_SPEC,
     MUSICBRAINZ_SPEC,
     MUSICBRAINZ_TRACK_SPEC,
+    AcquisitionCharacteristic,
+    IdentityPrerequisite,
+    ProviderCapability,
     ProviderScope,
     ProviderSpec,
+    capability_registry,
 )
 
 
@@ -138,9 +144,7 @@ def test_provider_registry_keys_same_provider_name_by_scope() -> None:
         frozenset({"artist_countries"}),
         ProviderScope.ARTIST,
     )
-    registry = {
-        (spec.name, spec.scope): spec for spec in (MUSICBRAINZ_SPEC, artist_spec)
-    }
+    registry = {(spec.name, spec.scope): spec for spec in (MUSICBRAINZ_SPEC, artist_spec)}
 
     assert registry[("musicbrainz", ProviderScope.RELEASE)] is MUSICBRAINZ_SPEC
     assert registry[("musicbrainz", ProviderScope.ARTIST)] is artist_spec
@@ -192,3 +196,54 @@ def test_provider_spec_normalizes_names_and_rejects_normalized_duplicates() -> N
             "Provider",
             ("genres", " GENRES "),  # type: ignore[arg-type]
         )
+
+
+def test_every_builtin_capability_references_registered_field_and_provider() -> None:
+    for capability in BUILTIN_PROVIDER_CAPABILITIES:
+        assert field_contract(capability.field)
+        assert capability.provider in BUILTIN_PROVIDER_NAMES
+        assert isinstance(capability.asserted_entity, EntityKind)
+        assert isinstance(capability.acquisition_scope, ProviderScope)
+
+
+def test_supported_fields_remain_exact_compatibility_views() -> None:
+    for spec in BUILTIN_PROVIDER_SPECS.values():
+        fields = frozenset(
+            capability.field
+            for capability in BUILTIN_PROVIDER_CAPABILITIES
+            if capability.provider == spec.name and capability.acquisition_scope is spec.scope
+        )
+        assert spec.supported_fields == fields
+
+
+def test_capability_preserves_identity_and_lazy_acquisition_characteristics() -> None:
+    capability = next(
+        capability
+        for capability in BUILTIN_PROVIDER_CAPABILITIES
+        if capability.provider == "musicbrainz" and capability.field == "lyrics_languages"
+    )
+
+    assert capability.asserted_entity is EntityKind.WORK
+    assert capability.acquisition_scope is ProviderScope.TRACK
+    assert capability.identity_prerequisite is IdentityPrerequisite.EXACT_CANONICAL_ID
+    assert AcquisitionCharacteristic.SUPPORTING_TRAVERSAL in capability.characteristics
+
+
+def test_duplicate_capability_is_rejected() -> None:
+    capability = ProviderCapability(
+        provider="catalog",
+        field="year",
+        asserted_entity=EntityKind.RELEASE,
+        acquisition_scope=ProviderScope.RELEASE,
+        identity_prerequisite=IdentityPrerequisite.STRUCTURALLY_VALIDATED_CONTEXT,
+        characteristics=frozenset({AcquisitionCharacteristic.SEARCH}),
+    )
+
+    with pytest.raises(ValueError, match="duplicate capability"):
+        capability_registry((capability, capability))
+
+
+def test_caa_and_acoustid_remain_outside_ordinary_capabilities() -> None:
+    assert not {"coverartarchive", "acoustid"} & {
+        capability.provider for capability in BUILTIN_PROVIDER_CAPABILITIES
+    }
