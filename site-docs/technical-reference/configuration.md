@@ -93,15 +93,15 @@ exist. Enabling a field does not guarantee an enabled provider can supply it.
 
 | Path | Default | Importer use | Ordinary library use | Important interaction |
 | --- | ---: | --- | --- | --- |
-| `noqlenmeta.fields.genres` | `true` | Release | Album | Discogs, Last.fm, iTunes; list mapping. |
-| `noqlenmeta.fields.styles` | `true` | Release | Album | Discogs; typed plural storage is lossless and legacy `style` is a read fallback. |
+| `noqlenmeta.fields.genres` | `true` | Release | Album | MusicBrainz, Discogs, Last.fm, iTunes; list mapping. |
+| `noqlenmeta.fields.styles` | `true` | Release | Album | Discogs structured styles plus classified MusicBrainz/Last.fm semantic tags; typed plural storage is lossless and legacy `style` is a read fallback. |
 | `noqlenmeta.fields.labels` | `true` | Release | Album | Discogs/MusicBrainz; multiple values can block singular targets. |
 | `noqlenmeta.fields.catalog_numbers` | `true` | Release | Album | Discogs/MusicBrainz; multiple values can block. |
 | `noqlenmeta.fields.barcodes` | `true` | Release | Album | Discogs/MusicBrainz; multiple values can block. |
 | `noqlenmeta.fields.country` | `true` | Release | Album | Discogs/MusicBrainz; iTunes storefront is not release country. |
 | `noqlenmeta.fields.year` | `true` | Release | Album | MusicBrainz, Discogs, iTunes. |
 | `noqlenmeta.fields.media` | `true` | Release | Preview/block | Importer target exists; persistent Album target does not. |
-| `noqlenmeta.fields.format_descriptions` | `true` | Preview/block | Preview/block | Discogs can supply it; v1 has no lossless ordinary target. |
+| `noqlenmeta.fields.format_descriptions` | `true` | Preview/block | Preview/block | Discogs can supply it; there is currently no lossless ordinary target. |
 | `noqlenmeta.fields.moods` | `true` | Typed track target | Typed Item target | Classified MusicBrainz tags; optional Last.fm corroboration/fallback. |
 | `noqlenmeta.fields.bpm` | `true` | Numeric track target | Float Item target | Enables preservation/sync and optional local Librosa analysis. |
 | `noqlenmeta.fields.lyrics_languages` | `true` | Typed track target | Typed Item target | Exact Recording -> Work lookup; stores three-letter codes. |
