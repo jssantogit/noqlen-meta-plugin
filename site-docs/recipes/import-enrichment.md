@@ -24,9 +24,9 @@ task; skip, use-as-is, and abort decisions do not become Noqlen targets.
 
 Review importer output first. Set `noqlenmeta.apply: true` only when approved
 ordinary proposals should mutate the selected AlbumInfo/TrackInfo. beets owns
-later database persistence and `import.write` tag behavior. Shipped semantic
-fields such as moods, lyrics languages, and artist geography are not deferred;
-they apply where production has a lossless selected-metadata target.
+later database persistence and `import.write` tag behavior. Current semantic
+fields such as moods, lyrics languages, and artist geography apply where
+production has a lossless selected-metadata target.
 
 Native beets/chroma owns importer acoustic matching and fingerprint submission.
 Noqlen's AcoustID feature is an existing-library evidence workflow and does not

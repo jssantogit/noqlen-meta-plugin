@@ -86,14 +86,6 @@ nav:
       - Add Lyrics and Language Metadata: recipes/lyrics-languages.md
       - Repair MusicBrainz IDs: recipes/repair-musicbrainz-ids.md
       - Safely Update an Entire Library: recipes/whole-library.md
-  - Technical Reference:
-      - technical-reference/index.md
-      - Commands: technical-reference/command-line.md
-      - Configuration: technical-reference/configuration.md
-      - Providers: technical-reference/providers.md
-      - Fields: technical-reference/fields.md
-      - Compatibility: technical-reference/compatibility.md
-      - beets Interaction: technical-reference/beets-interaction.md
   - Troubleshooting:
       - Common Problems: troubleshooting/index.md
       - Nothing Was Changed: troubleshooting/nothing-changed.md
@@ -101,8 +93,16 @@ nav:
       - Provider Problems: troubleshooting/providers.md
       - File Writing Problems: troubleshooting/file-writing.md
       - AcoustID Problems: troubleshooting/acoustid.md
+  - Technical Reference:
+      - technical-reference/index.md
+      - Configuration Reference: technical-reference/configuration.md
+      - Command-line Reference: technical-reference/command-line.md
+      - Fields Reference: technical-reference/fields.md
+      - Providers Reference: technical-reference/providers.md
+      - beets Interaction: technical-reference/beets-interaction.md
+      - Compatibility: technical-reference/compatibility.md
   - Advanced:
-      - Advanced: advanced/index.md
+      - advanced/index.md
       - Database vs File Tags: advanced/database-vs-file-tags.md
       - Preview, Apply and Write: advanced/preview-apply-write.md
       - Strict vs Partial: advanced/strict-vs-partial.md

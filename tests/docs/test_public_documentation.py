@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.configuration import default_config
 
@@ -106,6 +108,25 @@ def test_troubleshooting_routes_by_symptom() -> None:
     assert required == {path.name for path in troubleshooting.glob("*.md")}
     for name in required - {"index.md"}:
         assert f"({name})" in index
+
+
+def test_public_navigation_matches_v2_information_architecture() -> None:
+    mkdocs = yaml.safe_load((ROOT / "mkdocs.yml").read_text(encoding="utf-8"))
+    labels = [next(iter(entry)) for entry in mkdocs["nav"]]
+
+    assert labels == [
+        "Home",
+        "Start Here",
+        "Configuration",
+        "Commands",
+        "Recipes",
+        "Troubleshooting",
+        "Technical Reference",
+        "Advanced",
+        "Project",
+    ]
+    for legacy in ("getting-started", "concepts", "guides", "reference"):
+        assert not (ROOT / "site-docs" / legacy).exists()
 
 
 def test_default_config_is_fresh_and_complete() -> None:
