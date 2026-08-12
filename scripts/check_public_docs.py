@@ -31,7 +31,7 @@ RELEASE_PAGE = DOCS / "project" / "release.md"
 READTHEDOCS_URL = "https://noqlen-meta.readthedocs.io/en/stable/"
 PYPI_URL = "https://pypi.org/project/beets-noqlenmeta/"
 GITHUB_RELEASE_URL = (
-    "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.0"
+    "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.1"
 )
 
 FORBIDDEN_README_TERMS = (
@@ -154,8 +154,8 @@ def check() -> list[str]:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
         "project"
     ]
-    if project["version"] != "2.0.0":
-        failures.append("active package version is not 2.0.0")
+    if project["version"] != "2.0.1":
+        failures.append("active package version is not 2.0.1")
 
     command = NoqlenMetaPlugin().commands()[0]
     long_options = sorted(
@@ -286,21 +286,22 @@ def check() -> list[str]:
     if PYPI_URL not in public_text:
         failures.append("public docs do not link to the published PyPI project")
     if GITHUB_RELEASE_URL not in public_text:
-        failures.append("public release text does not link to the v2.0.0 GitHub Release")
+        failures.append("public release text does not link to the v2.0.1 GitHub Release")
     if "## Unreleased" not in changelog_text:
         failures.append("CHANGELOG.md does not contain an Unreleased section")
-    if "## 2.0.0 - 2026-08-11" not in changelog_text:
-        failures.append("CHANGELOG.md does not contain the dated 2.0.0 release section")
+    if "## 2.0.1 - 2026-08-12" not in changelog_text:
+        failures.append("CHANGELOG.md does not contain the dated 2.0.1 release section")
     elif not (
         changelog_text.index("## Unreleased")
+        < changelog_text.index("## 2.0.1 - 2026-08-12")
         < changelog_text.index("## 2.0.0 - 2026-08-11")
         < changelog_text.index("## 1.0.0 - 2026-08-02")
     ):
-        failures.append("CHANGELOG.md must order Unreleased, 2.0.0, then 1.0.0")
+        failures.append("CHANGELOG.md must order Unreleased, 2.0.1, 2.0.0, then 1.0.0")
 
     required_release_state = (
-        "current stable release: `2.0.0` (2026-08-11)",
-        "noqlen meta 2.0.0 is published on",
+        "current stable release: `2.0.1` (2026-08-12)",
+        "noqlen meta 2.0.1 is published on",
         "the read the docs project slug is `noqlen-meta`",
     )
     for phrase in required_release_state:
