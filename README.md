@@ -12,7 +12,9 @@ changes require `--apply`; audio-file mutation requires `--write`. Specialized
 identity-tag file replacement requires `--identity-tags --write`. There is no
 `--force` option.
 
-The current stable release is Noqlen Meta `2.0.0`, published on PyPI and GitHub.
+Version `2.0.0` is published on
+[PyPI](https://pypi.org/project/beets-noqlenmeta/) and as the
+[GitHub Release v2.0.0](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.0).
 
 ## Capabilities
 
@@ -115,3 +117,8 @@ Preview one existing album:
 ```bash
 beet nm album:"Example Album"
 ```
+
+## License
+
+Noqlen Meta is distributed under the [MIT License](LICENSE).
+Copyright © 2026 João Pedro Rosa dos Santos.
