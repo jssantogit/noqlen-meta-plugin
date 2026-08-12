@@ -1,11 +1,11 @@
 # Release Status
 
-Current stable release: `2.0.0` (2026-08-11).
+Current stable release: `2.0.1` (2026-08-12).
 
-Noqlen Meta 2.0.0 is published on
+Noqlen Meta 2.0.1 is published on
 [PyPI](https://pypi.org/project/beets-noqlenmeta/), and the corresponding
-[GitHub Release](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.0)
-uses the `v2.0.0` tag.
+[GitHub Release](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.1)
+uses the `v2.0.1` tag.
 
 Package support is bounded to Python 3.10 through 3.14. Distribution checks
 require wheel `Requires-Python` to match `>=3.10,<3.15`; Python 3.15 is not
@@ -15,6 +15,13 @@ The final `main` CI passed across Python 3.10 through 3.14, the supported beets
 compatibility boundaries, documentation, package validation, and the optional
 audio-analysis lane. The tagged release workflow then built and validated the
 release artifacts and published them through PyPI Trusted Publishing.
+
+## Version 2.0.1
+
+Version 2.0.1 is a documentation-only patch release. It ships the redesigned
+beginner-first Documentation v2 as a stable release, reduces the repository and
+PyPI README to a concise project landing page, and carries forward documentation
+and release-metadata corrections made after 2.0.0. Runtime behavior is unchanged.
 
 ## Version 2.0.0
 
@@ -57,7 +64,7 @@ The canonical public documentation is live at
 [https://noqlen-meta.readthedocs.io/en/stable/](https://noqlen-meta.readthedocs.io/en/stable/).
 The Read the Docs project slug is `noqlen-meta`.
 
-The explicit `v2.0.0` Read the Docs version remains a separate post-release
+The explicit `v2.0.1` Read the Docs version remains a separate post-release
 verification item; the `stable` URL above is the canonical public entry point.
 
 The repository root `RELEASE_CHECKLIST.md` remains the operational source for
