@@ -13,7 +13,7 @@ remains the operational behavior.
 field IDs and intrinsic field facts. `FieldContract` records only:
 
 - canonical name and compatibility aliases;
-- asserted `EntityKind`;
+- the explicit set of allowed asserted `EntityKind` subjects;
 - `Cardinality`;
 - `ResolverKind`;
 - valid target classes;
@@ -28,6 +28,26 @@ The asserted entity vocabulary is Release, Release Group, Medium, Recording,
 Work and Artist. `PartialDate` preserves annual, monthly and complete calendar
 precision without invented components. It validates real calendar dates and
 deliberately has no ordering that would pretend missing precision is known.
+
+`allowed_entities` is the only field-level source of truth for evidence scope.
+It is not an inheritance rule: allowing Release and Recording evidence for a
+field preserves two distinct assertions and never promotes a Release value to a
+Recording. Target classes and target adapters separately describe persistence,
+so the field contract does not need an ambiguous singular persistence entity.
+The current multi-entity contracts are:
+
+- genres, styles and moods: Recording, Release and Artist;
+- media and format descriptions: Release and Medium;
+- composer, lyricist and arranger: Work and Recording;
+- producer, conductor, performer, featured/guest artist and artist credit:
+  Recording and Release;
+- alternate/localized titles and transliterations: Recording, Release and
+  Work.
+
+Strict concepts retain strict subjects, including Recording for ISRC and
+recording date, Work for ISWC, and Release for edition and release status.
+Evidence, provider capabilities and authority rules all validate their asserted
+subject against the same field contract.
 
 Multiple identifiers use `IdentifierCollection` containing typed
 `ExternalIdentifier` values. Canonical `isrcs` and `iswcs` are plural and
@@ -66,9 +86,25 @@ start emitting new canonical values.
 
 `ProviderSpec` remains the static adapter identity and its `supported_fields`
 surface remains compatible. `ProviderCapability` separately declares one
-field, asserted entity, acquisition scope, identity prerequisite and discrete
-lazy-planning characteristics. Characteristics describe direct lookup, search,
-response reuse or supporting traversal; there is no arbitrary cost score.
+field, asserted entity, acquisition scope, typed identity prerequisites and
+discrete lazy-planning characteristics. Alternative prerequisites mean that any
+listed path can initiate the current adapter; they are descriptive and do not
+introduce an acquisition planner. Characteristics describe direct lookup,
+search, response reuse or supporting traversal; there is no arbitrary cost
+score.
+
+Current adapter characteristics are represented as follows:
+
+- MusicBrainz: direct exact canonical-ID lookup, response reuse and supporting
+  traversal only where the V2 adapter already traverses;
+- Discogs: direct provider release-ID lookup, search fallback and response
+  reuse;
+- iTunes: direct collection/provider-identity or UPC path, search fallback and
+  response reuse;
+- Last.fm: direct top-tags request from validated entity context or MBID and
+  response reuse, without generic search;
+- LRCLIB: exact `/api/get` request from validated track context and response
+  reuse, without generic search.
 
 The built-in capabilities are a structured representation of existing V2
 adapter output only. Cover Art Archive, AcoustID and local analysis remain
@@ -137,9 +173,12 @@ transports are unchanged.
 ## V2 compatibility freeze
 
 - `fields.cover` remains valid and resolves only to Front artwork intent.
+- `front_artwork` carries the enabled V2 default behind the `cover` alias.
 - `lyrics_languages` remains distinct from `vocal_languages`.
 - `year` remains edition year and distinct from current partial `date`, original
   date and recording date.
+- `original_date` is the sole canonical original-date ID; `originaldate` is its
+  conceptual compatibility alias and does not add public configuration.
 - styles, moods and artist-context fields retain their existing DB and legacy
   `NOQLEN_*` read/write behavior.
 - the four MusicBrainz IDs and AcoustID configuration remain unchanged and
