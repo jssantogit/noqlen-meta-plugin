@@ -31,6 +31,55 @@ def test_release_evidence_cannot_claim_a_recording_field() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("entity", "scope"),
+    [
+        (EntityKind.RELEASE, ProviderScope.RELEASE),
+        (EntityKind.ARTIST, ProviderScope.ARTIST),
+        (EntityKind.RECORDING, ProviderScope.TRACK),
+    ],
+)
+def test_genre_evidence_preserves_each_allowed_subject(
+    entity: EntityKind, scope: ProviderScope
+) -> None:
+    evidence = MetadataEvidence(
+        field="genres",
+        value=("Ambient",),
+        subject=subject(entity, f"catalog.{entity.value}"),
+        provider="catalog",
+        acquisition_scope=scope,
+        source_id="entity-1",
+        provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+    )
+
+    assert evidence.subject.entity is entity
+
+
+def test_release_and_recording_producer_evidence_remain_distinct() -> None:
+    release = MetadataEvidence(
+        field="producers",
+        value=("Release Producer",),
+        subject=subject(EntityKind.RELEASE, "catalog.release"),
+        provider="catalog",
+        acquisition_scope=ProviderScope.RELEASE,
+        source_id="release-1",
+        provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+    )
+    recording = MetadataEvidence(
+        field="producers",
+        value=("Recording Producer",),
+        subject=subject(EntityKind.RECORDING, "catalog.recording"),
+        provider="catalog",
+        acquisition_scope=ProviderScope.TRACK,
+        source_id="recording-1",
+        provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+    )
+
+    assert release.subject.entity is EntityKind.RELEASE
+    assert recording.subject.entity is EntityKind.RECORDING
+    assert release.subject != recording.subject
+
+
 def test_work_evidence_preserves_work_scope_after_recording_traversal() -> None:
     work = subject(EntityKind.WORK, "musicbrainz.work")
     evidence = MetadataEvidence(

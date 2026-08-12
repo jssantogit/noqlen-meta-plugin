@@ -13,10 +13,12 @@ from beetsplug.noqlenmeta.track_mapping import TRACK_FIELD_TARGETS
 def test_provider_capabilities_reference_field_registry() -> None:
     for capability in BUILTIN_PROVIDER_CAPABILITIES:
         assert capability.field in FIELD_CONTRACTS
+        assert capability.asserted_entity in FIELD_CONTRACTS[capability.field].allowed_entities
 
 
 def test_authority_matrix_references_registered_capabilities() -> None:
     for authority in AUTHORITY_MATRIX.rules:
+        assert authority.asserted_entity in FIELD_CONTRACTS[authority.field].allowed_entities
         assert (
             authority.provider,
             authority.field,

@@ -203,6 +203,7 @@ def test_every_builtin_capability_references_registered_field_and_provider() -> 
         assert field_contract(capability.field)
         assert capability.provider in BUILTIN_PROVIDER_NAMES
         assert isinstance(capability.asserted_entity, EntityKind)
+        assert capability.asserted_entity in field_contract(capability.field).allowed_entities
         assert isinstance(capability.acquisition_scope, ProviderScope)
 
 
@@ -216,7 +217,7 @@ def test_supported_fields_remain_exact_compatibility_views() -> None:
         assert spec.supported_fields == fields
 
 
-def test_capability_preserves_identity_and_lazy_acquisition_characteristics() -> None:
+def test_musicbrainz_capability_describes_exact_lookup_and_traversal() -> None:
     capability = next(
         capability
         for capability in BUILTIN_PROVIDER_CAPABILITIES
@@ -225,8 +226,78 @@ def test_capability_preserves_identity_and_lazy_acquisition_characteristics() ->
 
     assert capability.asserted_entity is EntityKind.WORK
     assert capability.acquisition_scope is ProviderScope.TRACK
-    assert capability.identity_prerequisite is IdentityPrerequisite.EXACT_CANONICAL_ID
+    assert capability.identity_prerequisites == frozenset({IdentityPrerequisite.EXACT_CANONICAL_ID})
+    assert AcquisitionCharacteristic.DIRECT_LOOKUP in capability.characteristics
+    assert AcquisitionCharacteristic.RESPONSE_REUSE in capability.characteristics
     assert AcquisitionCharacteristic.SUPPORTING_TRAVERSAL in capability.characteristics
+
+
+@pytest.mark.parametrize(
+    ("provider", "expected", "unexpected", "prerequisites"),
+    [
+        (
+            "discogs",
+            {
+                AcquisitionCharacteristic.DIRECT_LOOKUP,
+                AcquisitionCharacteristic.SEARCH,
+                AcquisitionCharacteristic.RESPONSE_REUSE,
+            },
+            set(),
+            {
+                IdentityPrerequisite.EXACT_PROVIDER_ID,
+                IdentityPrerequisite.STRUCTURALLY_VALIDATED_CONTEXT,
+            },
+        ),
+        (
+            "itunes",
+            {
+                AcquisitionCharacteristic.DIRECT_LOOKUP,
+                AcquisitionCharacteristic.SEARCH,
+                AcquisitionCharacteristic.RESPONSE_REUSE,
+            },
+            set(),
+            {
+                IdentityPrerequisite.EXACT_PROVIDER_ID,
+                IdentityPrerequisite.STRUCTURALLY_VALIDATED_CONTEXT,
+            },
+        ),
+        (
+            "lastfm",
+            {
+                AcquisitionCharacteristic.DIRECT_LOOKUP,
+                AcquisitionCharacteristic.RESPONSE_REUSE,
+            },
+            {AcquisitionCharacteristic.SEARCH},
+            {IdentityPrerequisite.STRUCTURALLY_VALIDATED_CONTEXT},
+        ),
+        (
+            "lrclib",
+            {
+                AcquisitionCharacteristic.DIRECT_LOOKUP,
+                AcquisitionCharacteristic.RESPONSE_REUSE,
+            },
+            {AcquisitionCharacteristic.SEARCH},
+            {IdentityPrerequisite.STRUCTURALLY_VALIDATED_CONTEXT},
+        ),
+    ],
+)
+def test_provider_capabilities_describe_real_acquisition_paths(
+    provider: str,
+    expected: set[AcquisitionCharacteristic],
+    unexpected: set[AcquisitionCharacteristic],
+    prerequisites: set[IdentityPrerequisite],
+) -> None:
+    capabilities = [
+        capability
+        for capability in BUILTIN_PROVIDER_CAPABILITIES
+        if capability.provider == provider
+    ]
+
+    assert capabilities
+    for capability in capabilities:
+        assert expected <= capability.characteristics
+        assert not unexpected & capability.characteristics
+        assert capability.identity_prerequisites == frozenset(prerequisites)
 
 
 def test_duplicate_capability_is_rejected() -> None:
@@ -235,7 +306,7 @@ def test_duplicate_capability_is_rejected() -> None:
         field="year",
         asserted_entity=EntityKind.RELEASE,
         acquisition_scope=ProviderScope.RELEASE,
-        identity_prerequisite=IdentityPrerequisite.STRUCTURALLY_VALIDATED_CONTEXT,
+        identity_prerequisites=frozenset({IdentityPrerequisite.STRUCTURALLY_VALIDATED_CONTEXT}),
         characteristics=frozenset({AcquisitionCharacteristic.SEARCH}),
     )
 
@@ -247,3 +318,14 @@ def test_caa_and_acoustid_remain_outside_ordinary_capabilities() -> None:
     assert not {"coverartarchive", "acoustid"} & {
         capability.provider for capability in BUILTIN_PROVIDER_CAPABILITIES
     }
+
+
+def test_capability_rejects_entity_outside_field_contract() -> None:
+    with pytest.raises(ValueError, match="allowed entities"):
+        ProviderCapability(
+            provider="catalog",
+            field="isrcs",
+            asserted_entity=EntityKind.RELEASE,
+            acquisition_scope=ProviderScope.RELEASE,
+            identity_prerequisites=frozenset({IdentityPrerequisite.STRUCTURALLY_VALIDATED_CONTEXT}),
+        )

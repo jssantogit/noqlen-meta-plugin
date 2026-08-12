@@ -101,7 +101,7 @@ class FieldContract:
 
     canonical_name: str
     aliases: tuple[str, ...]
-    entity: EntityKind
+    allowed_entities: frozenset[EntityKind]
     cardinality: Cardinality
     resolver_kind: ResolverKind
     target_classes: frozenset[TargetClass]
@@ -122,8 +122,10 @@ class FieldContract:
         if self.canonical_name in aliases:
             raise ValueError("canonical field name cannot also be an alias")
         object.__setattr__(self, "aliases", aliases)
-        if not isinstance(self.entity, EntityKind):
-            raise TypeError("entity must be an EntityKind")
+        entities = frozenset(self.allowed_entities)
+        if not entities or not all(isinstance(entity, EntityKind) for entity in entities):
+            raise TypeError("allowed_entities must contain EntityKind values")
+        object.__setattr__(self, "allowed_entities", entities)
         if not isinstance(self.cardinality, Cardinality):
             raise TypeError("cardinality must be a Cardinality")
         if not isinstance(self.resolver_kind, ResolverKind):
@@ -138,7 +140,7 @@ class FieldContract:
 
 def _field(
     name: str,
-    entity: EntityKind,
+    entities: EntityKind | frozenset[EntityKind],
     cardinality: Cardinality,
     resolver: ResolverKind,
     *targets: TargetClass,
@@ -146,10 +148,13 @@ def _field(
     legacy: bool = False,
     default_enabled: bool = False,
 ) -> FieldContract:
+    allowed_entities = (
+        frozenset({entities}) if isinstance(entities, EntityKind) else frozenset(entities)
+    )
     return FieldContract(
         name,
         aliases,
-        entity,
+        allowed_entities,
         cardinality,
         resolver,
         frozenset(targets),
@@ -163,15 +168,20 @@ _MANY = Cardinality.ZERO_OR_MANY
 _NATIVE = TargetClass.NATIVE_BEETS
 _DB = TargetClass.TYPED_DB
 _INTERNAL = TargetClass.INTERNAL
+_SEMANTIC_ENTITIES = frozenset({EntityKind.RECORDING, EntityKind.RELEASE, EntityKind.ARTIST})
+_RELEASE_MEDIUM_ENTITIES = frozenset({EntityKind.RELEASE, EntityKind.MEDIUM})
+_WORK_RECORDING_ENTITIES = frozenset({EntityKind.WORK, EntityKind.RECORDING})
+_RELEASE_RECORDING_ENTITIES = frozenset({EntityKind.RELEASE, EntityKind.RECORDING})
+_TITLE_ENTITIES = frozenset({EntityKind.RECORDING, EntityKind.RELEASE, EntityKind.WORK})
 
 _CONTRACTS = (
     # V2 catalog and semantic fields.
     _field(
-        "genres", EntityKind.RECORDING, _MANY, ResolverKind.TAXONOMIC, _NATIVE, default_enabled=True
+        "genres", _SEMANTIC_ENTITIES, _MANY, ResolverKind.TAXONOMIC, _NATIVE, default_enabled=True
     ),
     _field(
         "styles",
-        EntityKind.RELEASE,
+        _SEMANTIC_ENTITIES,
         _MANY,
         ResolverKind.TAXONOMIC,
         _DB,
@@ -210,11 +220,16 @@ _CONTRACTS = (
         default_enabled=True,
     ),
     _field(
-        "media", EntityKind.MEDIUM, _MANY, ResolverKind.MULTIVALUE, _NATIVE, default_enabled=True
+        "media",
+        _RELEASE_MEDIUM_ENTITIES,
+        _MANY,
+        ResolverKind.MULTIVALUE,
+        _NATIVE,
+        default_enabled=True,
     ),
     _field(
         "format_descriptions",
-        EntityKind.MEDIUM,
+        _RELEASE_MEDIUM_ENTITIES,
         _MANY,
         ResolverKind.MULTIVALUE,
         _INTERNAL,
@@ -222,7 +237,7 @@ _CONTRACTS = (
     ),
     _field(
         "moods",
-        EntityKind.RECORDING,
+        _SEMANTIC_ENTITIES,
         _MANY,
         ResolverKind.TAXONOMIC,
         _DB,
@@ -262,7 +277,14 @@ _CONTRACTS = (
     _field("synced_lyrics", EntityKind.RECORDING, _ONE, ResolverKind.LYRICS, TargetClass.SIDECAR),
     # Dates and release classification.
     _field("date", EntityKind.RELEASE, _ONE, ResolverKind.EXCLUSIVE, _NATIVE),
-    _field("original_date", EntityKind.RELEASE_GROUP, _ONE, ResolverKind.EXCLUSIVE, _NATIVE),
+    _field(
+        "original_date",
+        EntityKind.RELEASE_GROUP,
+        _ONE,
+        ResolverKind.EXCLUSIVE,
+        _NATIVE,
+        aliases=("originaldate",),
+    ),
     _field("original_year", EntityKind.RELEASE_GROUP, _ONE, ResolverKind.EXCLUSIVE, _NATIVE),
     _field("recording_date", EntityKind.RECORDING, _ONE, ResolverKind.EXCLUSIVE, _DB),
     _field("release_type", EntityKind.RELEASE_GROUP, _ONE, ResolverKind.EXCLUSIVE, _NATIVE),
@@ -281,19 +303,33 @@ _CONTRACTS = (
     _field("iswcs", EntityKind.WORK, _MANY, ResolverKind.MULTIVALUE, _DB),
     _field("works", EntityKind.RECORDING, _MANY, ResolverKind.STRUCTURED, _NATIVE, _INTERNAL),
     # Credits and structured title/language concepts.
-    _field("composers", EntityKind.WORK, _MANY, ResolverKind.STRUCTURED, _NATIVE, _INTERNAL),
-    _field("lyricists", EntityKind.WORK, _MANY, ResolverKind.STRUCTURED, _NATIVE, _INTERNAL),
-    _field("producers", EntityKind.RECORDING, _MANY, ResolverKind.STRUCTURED, _DB, _INTERNAL),
-    _field("arrangers", EntityKind.WORK, _MANY, ResolverKind.STRUCTURED, _NATIVE, _INTERNAL),
-    _field("conductors", EntityKind.RECORDING, _MANY, ResolverKind.STRUCTURED, _DB, _INTERNAL),
-    _field("performers", EntityKind.RECORDING, _MANY, ResolverKind.STRUCTURED, _INTERNAL),
-    _field("featured_artists", EntityKind.RECORDING, _MANY, ResolverKind.STRUCTURED, _INTERNAL),
-    _field("guest_artists", EntityKind.RECORDING, _MANY, ResolverKind.STRUCTURED, _INTERNAL),
-    _field("artist_credits", EntityKind.RECORDING, _MANY, ResolverKind.STRUCTURED, _INTERNAL),
-    _field("alternate_titles", EntityKind.RECORDING, _MANY, ResolverKind.STRUCTURED, _INTERNAL),
+    _field(
+        "composers", _WORK_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _NATIVE, _INTERNAL
+    ),
+    _field(
+        "lyricists", _WORK_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _NATIVE, _INTERNAL
+    ),
+    _field(
+        "producers", _RELEASE_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _DB, _INTERNAL
+    ),
+    _field(
+        "arrangers", _WORK_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _NATIVE, _INTERNAL
+    ),
+    _field(
+        "conductors", _RELEASE_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _DB, _INTERNAL
+    ),
+    _field("performers", _RELEASE_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _INTERNAL),
+    _field(
+        "featured_artists", _RELEASE_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _INTERNAL
+    ),
+    _field("guest_artists", _RELEASE_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _INTERNAL),
+    _field(
+        "artist_credits", _RELEASE_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _INTERNAL
+    ),
+    _field("alternate_titles", _TITLE_ENTITIES, _MANY, ResolverKind.STRUCTURED, _INTERNAL),
     _field("language", EntityKind.RELEASE, _ONE, ResolverKind.EXCLUSIVE, _NATIVE),
     _field("script", EntityKind.RELEASE, _ONE, ResolverKind.EXCLUSIVE, _NATIVE),
-    _field("transliterations", EntityKind.RECORDING, _MANY, ResolverKind.STRUCTURED, _INTERNAL),
+    _field("transliterations", _TITLE_ENTITIES, _MANY, ResolverKind.STRUCTURED, _INTERNAL),
     _field("track_version", EntityKind.RECORDING, _ONE, ResolverKind.STRUCTURED, _DB),
     _field("vocal_languages", EntityKind.RECORDING, _MANY, ResolverKind.MULTIVALUE, _DB),
     _field("instrumental", EntityKind.RECORDING, _ONE, ResolverKind.EXCLUSIVE, _DB),
@@ -306,6 +342,7 @@ _CONTRACTS = (
         ResolverKind.ARTWORK,
         TargetClass.ASSET,
         aliases=("cover",),
+        default_enabled=True,
     ),
     _field("back_artwork", EntityKind.RELEASE, _MANY, ResolverKind.ARTWORK, TargetClass.ASSET),
     _field("disc_artwork", EntityKind.MEDIUM, _MANY, ResolverKind.ARTWORK, TargetClass.ASSET),

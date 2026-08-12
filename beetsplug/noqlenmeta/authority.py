@@ -35,6 +35,8 @@ class AuthorityRule:
         object.__setattr__(self, "field", contract.canonical_name)
         if not isinstance(self.asserted_entity, EntityKind):
             raise TypeError("asserted_entity must be an EntityKind")
+        if self.asserted_entity not in contract.allowed_entities:
+            raise ValueError("asserted entity is not among the field's allowed entities")
         if not isinstance(self.acquisition_scope, ProviderScope):
             raise TypeError("acquisition_scope must be a ProviderScope")
         if not isinstance(self.provider, str) or not self.provider.strip():
@@ -126,9 +128,14 @@ def _rule(
     scope: ProviderScope,
     entity: EntityKind | None = None,
 ) -> AuthorityRule:
+    contract = field_contract(field)
+    if entity is None:
+        if len(contract.allowed_entities) != 1:
+            raise ValueError(f"multi-entity authority rule {field!r} requires an entity")
+        entity = next(iter(contract.allowed_entities))
     return AuthorityRule(
         field=field,
-        asserted_entity=entity or field_contract(field).entity,
+        asserted_entity=entity,
         acquisition_scope=scope,
         provider=provider,
         role=role,
@@ -166,16 +173,52 @@ _RULES = (
     _rule("genres", "discogs", AuthorityRole.PRIMARY, ProviderScope.RELEASE, EntityKind.RELEASE),
     _rule("genres", "lastfm", AuthorityRole.FALLBACK, ProviderScope.RELEASE, EntityKind.RELEASE),
     _rule("genres", "itunes", AuthorityRole.FALLBACK, ProviderScope.RELEASE, EntityKind.RELEASE),
-    _rule("genres", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.TRACK),
-    _rule("genres", "lastfm", AuthorityRole.FALLBACK, ProviderScope.TRACK),
+    _rule(
+        "genres",
+        "musicbrainz",
+        AuthorityRole.PRIMARY,
+        ProviderScope.TRACK,
+        EntityKind.RECORDING,
+    ),
+    _rule(
+        "genres",
+        "lastfm",
+        AuthorityRole.FALLBACK,
+        ProviderScope.TRACK,
+        EntityKind.RECORDING,
+    ),
     _rule("genres", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.ARTIST, EntityKind.ARTIST),
     _rule("genres", "lastfm", AuthorityRole.FALLBACK, ProviderScope.ARTIST, EntityKind.ARTIST),
-    _rule("styles", "discogs", AuthorityRole.PRIMARY, ProviderScope.RELEASE),
-    _rule("styles", "lastfm", AuthorityRole.FALLBACK, ProviderScope.RELEASE),
+    _rule(
+        "styles",
+        "discogs",
+        AuthorityRole.PRIMARY,
+        ProviderScope.RELEASE,
+        EntityKind.RELEASE,
+    ),
+    _rule(
+        "styles",
+        "lastfm",
+        AuthorityRole.FALLBACK,
+        ProviderScope.RELEASE,
+        EntityKind.RELEASE,
+    ),
     _rule("styles", "lastfm", AuthorityRole.FALLBACK, ProviderScope.TRACK, EntityKind.RECORDING),
     _rule("styles", "lastfm", AuthorityRole.FALLBACK, ProviderScope.ARTIST, EntityKind.ARTIST),
-    _rule("moods", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.TRACK),
-    _rule("moods", "lastfm", AuthorityRole.SECONDARY, ProviderScope.TRACK),
+    _rule(
+        "moods",
+        "musicbrainz",
+        AuthorityRole.PRIMARY,
+        ProviderScope.TRACK,
+        EntityKind.RECORDING,
+    ),
+    _rule(
+        "moods",
+        "lastfm",
+        AuthorityRole.SECONDARY,
+        ProviderScope.TRACK,
+        EntityKind.RECORDING,
+    ),
     _rule("moods", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.ARTIST, EntityKind.ARTIST),
     _rule("moods", "lastfm", AuthorityRole.SECONDARY, ProviderScope.ARTIST, EntityKind.ARTIST),
     _rule("moods", "lastfm", AuthorityRole.SECONDARY, ProviderScope.RELEASE, EntityKind.RELEASE),

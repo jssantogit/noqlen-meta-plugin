@@ -101,10 +101,10 @@ class MetadataEvidence:
             raise ValueError("canonical numeric value must be finite")
         if not isinstance(self.subject, SubjectRef):
             raise TypeError("subject must be a SubjectRef")
-        if self.subject.entity is not contract.entity:
+        if self.subject.entity not in contract.allowed_entities:
             raise ValueError(
-                f"asserted entity {self.subject.entity.value!r} does not match "
-                f"field entity {contract.entity.value!r}"
+                f"asserted entity {self.subject.entity.value!r} is not allowed for "
+                f"field {contract.canonical_name!r}"
             )
         object.__setattr__(self, "provider", _text(self.provider, "provider"))
         if not isinstance(self.acquisition_scope, ProviderScope):

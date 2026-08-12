@@ -79,7 +79,8 @@ def test_registry_names_and_aliases_are_globally_unique() -> None:
 def test_contracts_have_typed_entity_cardinality_resolver_and_targets() -> None:
     for name, contract in FIELD_CONTRACTS.items():
         assert contract.canonical_name == name
-        assert isinstance(contract.entity, EntityKind)
+        assert contract.allowed_entities
+        assert all(isinstance(entity, EntityKind) for entity in contract.allowed_entities)
         assert isinstance(contract.cardinality, Cardinality)
         assert isinstance(contract.resolver_kind, ResolverKind)
         assert contract.target_classes
@@ -94,7 +95,7 @@ def test_field_contract_is_immutable_and_rejects_invalid_types() -> None:
         FieldContract(
             "invalid",
             (),
-            "release",  # type: ignore[arg-type]
+            frozenset({"release"}),  # type: ignore[arg-type]
             Cardinality.OPTIONAL_ONE,
             ResolverKind.EXCLUSIVE,
             frozenset({TargetClass.INTERNAL}),
@@ -150,9 +151,54 @@ def test_identifier_collection_is_typed_lossless_and_deduplicated() -> None:
 def test_isrc_iswc_and_work_contracts_preserve_multiplicity() -> None:
     for field in ("isrcs", "iswcs", "works"):
         assert FIELD_CONTRACTS[field].cardinality is Cardinality.ZERO_OR_MANY
-    assert FIELD_CONTRACTS["isrcs"].entity is EntityKind.RECORDING
-    assert FIELD_CONTRACTS["iswcs"].entity is EntityKind.WORK
-    assert FIELD_CONTRACTS["works"].entity is EntityKind.RECORDING
+    assert FIELD_CONTRACTS["isrcs"].allowed_entities == frozenset({EntityKind.RECORDING})
+    assert FIELD_CONTRACTS["iswcs"].allowed_entities == frozenset({EntityKind.WORK})
+    assert FIELD_CONTRACTS["works"].allowed_entities == frozenset({EntityKind.RECORDING})
+
+
+@pytest.mark.parametrize(
+    ("field", "entities"),
+    [
+        ("genres", {EntityKind.RECORDING, EntityKind.RELEASE, EntityKind.ARTIST}),
+        ("styles", {EntityKind.RECORDING, EntityKind.RELEASE, EntityKind.ARTIST}),
+        ("moods", {EntityKind.RECORDING, EntityKind.RELEASE, EntityKind.ARTIST}),
+        ("media", {EntityKind.RELEASE, EntityKind.MEDIUM}),
+        ("format_descriptions", {EntityKind.RELEASE, EntityKind.MEDIUM}),
+        ("composers", {EntityKind.WORK, EntityKind.RECORDING}),
+        ("lyricists", {EntityKind.WORK, EntityKind.RECORDING}),
+        ("arrangers", {EntityKind.WORK, EntityKind.RECORDING}),
+        ("producers", {EntityKind.RECORDING, EntityKind.RELEASE}),
+        ("conductors", {EntityKind.RECORDING, EntityKind.RELEASE}),
+        ("performers", {EntityKind.RECORDING, EntityKind.RELEASE}),
+        ("featured_artists", {EntityKind.RECORDING, EntityKind.RELEASE}),
+        ("guest_artists", {EntityKind.RECORDING, EntityKind.RELEASE}),
+        ("artist_credits", {EntityKind.RECORDING, EntityKind.RELEASE}),
+        (
+            "alternate_titles",
+            {EntityKind.RECORDING, EntityKind.RELEASE, EntityKind.WORK},
+        ),
+        (
+            "transliterations",
+            {EntityKind.RECORDING, EntityKind.RELEASE, EntityKind.WORK},
+        ),
+    ],
+)
+def test_multi_entity_contracts_are_explicit(field: str, entities: set[EntityKind]) -> None:
+    assert FIELD_CONTRACTS[field].allowed_entities == frozenset(entities)
+
+
+@pytest.mark.parametrize(
+    ("field", "entity"),
+    [
+        ("isrcs", EntityKind.RECORDING),
+        ("iswcs", EntityKind.WORK),
+        ("recording_date", EntityKind.RECORDING),
+        ("edition", EntityKind.RELEASE),
+        ("release_status", EntityKind.RELEASE),
+    ],
+)
+def test_strict_entity_contracts_remain_strict(field: str, entity: EntityKind) -> None:
+    assert FIELD_CONTRACTS[field].allowed_entities == frozenset({entity})
 
 
 def test_all_public_v2_fields_resolve_to_registered_concepts() -> None:
@@ -160,6 +206,12 @@ def test_all_public_v2_fields_resolve_to_registered_concepts() -> None:
         assert field_contract(field)
     assert field_contract("lyrics_languages") is not field_contract("vocal_languages")
     assert field_contract("year") is not field_contract("date")
+    assert field_contract("originaldate") is field_contract("original_date")
+
+
+def test_public_v2_field_defaults_match_contracts_through_aliases() -> None:
+    for field, enabled in default_config()["fields"].items():
+        assert field_contract(field).default_enabled is enabled
 
 
 def test_all_v3_core_concepts_are_registered() -> None:

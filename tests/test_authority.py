@@ -64,6 +64,17 @@ def test_ineligible_rules_are_implicit_not_stored() -> None:
         AuthorityMatrix((rule("catalog", AuthorityRole.INELIGIBLE),))
 
 
+def test_authority_rejects_entity_outside_field_contract() -> None:
+    with pytest.raises(ValueError, match="allowed entities"):
+        AuthorityRule(
+            field="isrcs",
+            asserted_entity=EntityKind.RELEASE,
+            acquisition_scope=ProviderScope.RELEASE,
+            provider="catalog",
+            role=AuthorityRole.PRIMARY,
+        )
+
+
 def test_v2_ordered_authority_translation_preserves_exact_rank() -> None:
     translated = translate_v2_authority("year", ("itunes", "musicbrainz", "discogs"))
 

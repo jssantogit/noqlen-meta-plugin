@@ -33,6 +33,7 @@ class IdentityPrerequisite(Enum):
 
     NONE = "none"
     EXACT_CANONICAL_ID = "exact_canonical_id"
+    EXACT_PROVIDER_ID = "exact_provider_id"
     STRUCTURALLY_VALIDATED_CONTEXT = "structurally_validated_context"
 
 
@@ -53,7 +54,7 @@ class ProviderCapability:
     field: str
     asserted_entity: EntityKind
     acquisition_scope: ProviderScope
-    identity_prerequisite: IdentityPrerequisite
+    identity_prerequisites: frozenset[IdentityPrerequisite]
     characteristics: frozenset[AcquisitionCharacteristic] = frozenset()
 
     def __post_init__(self) -> None:
@@ -62,10 +63,16 @@ class ProviderCapability:
         object.__setattr__(self, "field", contract.canonical_name)
         if not isinstance(self.asserted_entity, EntityKind):
             raise TypeError("asserted entity must be an EntityKind")
+        if self.asserted_entity not in contract.allowed_entities:
+            raise ValueError("asserted entity is not among the field's allowed entities")
         if not isinstance(self.acquisition_scope, ProviderScope):
             raise TypeError("acquisition scope must be a ProviderScope")
-        if not isinstance(self.identity_prerequisite, IdentityPrerequisite):
-            raise TypeError("identity prerequisite must be an IdentityPrerequisite")
+        prerequisites = frozenset(self.identity_prerequisites)
+        if not prerequisites or not all(
+            isinstance(prerequisite, IdentityPrerequisite) for prerequisite in prerequisites
+        ):
+            raise TypeError("identity_prerequisites must contain IdentityPrerequisite values")
+        object.__setattr__(self, "identity_prerequisites", prerequisites)
         characteristics = frozenset(self.characteristics)
         if not all(
             isinstance(characteristic, AcquisitionCharacteristic)
@@ -232,17 +239,25 @@ def _asserted_entity(spec: ProviderSpec, field: str) -> EntityKind:
     }[spec.scope]
 
 
-def _identity_prerequisite(spec: ProviderSpec) -> IdentityPrerequisite:
+def _identity_prerequisites(spec: ProviderSpec) -> frozenset[IdentityPrerequisite]:
     if spec.name == "musicbrainz":
-        return IdentityPrerequisite.EXACT_CANONICAL_ID
-    return IdentityPrerequisite.STRUCTURALLY_VALIDATED_CONTEXT
+        return frozenset({IdentityPrerequisite.EXACT_CANONICAL_ID})
+    if spec.name in {"discogs", "itunes"}:
+        return frozenset(
+            {
+                IdentityPrerequisite.EXACT_PROVIDER_ID,
+                IdentityPrerequisite.STRUCTURALLY_VALIDATED_CONTEXT,
+            }
+        )
+    return frozenset({IdentityPrerequisite.STRUCTURALLY_VALIDATED_CONTEXT})
 
 
 def _characteristics(spec: ProviderSpec, field: str) -> frozenset[AcquisitionCharacteristic]:
-    values = {AcquisitionCharacteristic.RESPONSE_REUSE}
-    if spec.name == "musicbrainz":
-        values.add(AcquisitionCharacteristic.DIRECT_LOOKUP)
-    else:
+    values = {
+        AcquisitionCharacteristic.DIRECT_LOOKUP,
+        AcquisitionCharacteristic.RESPONSE_REUSE,
+    }
+    if spec.name in {"discogs", "itunes"}:
         values.add(AcquisitionCharacteristic.SEARCH)
     if spec.name == "musicbrainz" and field == "lyrics_languages":
         values.add(AcquisitionCharacteristic.SUPPORTING_TRAVERSAL)
@@ -255,7 +270,7 @@ BUILTIN_PROVIDER_CAPABILITIES = tuple(
         field=field,
         asserted_entity=_asserted_entity(spec, field),
         acquisition_scope=spec.scope,
-        identity_prerequisite=_identity_prerequisite(spec),
+        identity_prerequisites=_identity_prerequisites(spec),
         characteristics=_characteristics(spec, field),
     )
     for spec in _BUILTIN_PROVIDER_CAPABILITIES
