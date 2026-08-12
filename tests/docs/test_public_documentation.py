@@ -156,6 +156,39 @@ def test_default_config_is_fresh_and_complete() -> None:
     }
 
 
+def test_readme_is_concise_project_landing_page() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    headings = [line for line in readme.splitlines() if line.startswith("#")]
+
+    assert headings == ["# Noqlen Meta", "## Capabilities", "## Installation"]
+    assert "## Documentation" not in readme
+    assert "## First Preview" not in readme
+    assert "## License" not in readme
+    assert "Version `" not in readme
+    assert "releases/tag/v" not in readme
+    assert "pip install beets-noqlenmeta" in readme
+    assert 'pip install "beets-noqlenmeta[discogs]"' in readme
+    assert 'pip install "beets-noqlenmeta[audio]"' in readme
+    assert "plugins:\n  - noqlenmeta" in readme
+    assert "beet help noqlenmeta" in readme
+
+
+def test_v2_0_1_release_checklist_is_present() -> None:
+    checklist = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
+
+    assert "## Version 2.0.1 Documentation Release" in checklist
+    assert "Package version is `2.0.1`." in checklist
+    assert (
+        "README contains only the approved summary, Capabilities, and Installation structure."
+        in checklist
+    )
+    assert "Create `v2.0.1` tag on a commit contained in `main`." in checklist
+    assert "Publish `2.0.1` to PyPI through Trusted Publishing." in checklist
+    assert "Create and verify the GitHub Release for `v2.0.1`." in checklist
+    assert "Read the Docs builds `v2.0.1` successfully." in checklist
+    assert "`/en/stable/` displays the redesigned Documentation v2" in checklist
+
+
 def test_public_documentation_gate() -> None:
     result = subprocess.run(
         [sys.executable, "scripts/check_public_docs.py"],
@@ -186,6 +219,9 @@ def test_public_release_state_is_consistent() -> None:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     home = (ROOT / "site-docs/index.md").read_text(encoding="utf-8")
     release = (ROOT / "site-docs/project/release.md").read_text(encoding="utf-8")
+    project_changelog = (ROOT / "site-docs/project/changelog.md").read_text(
+        encoding="utf-8"
+    )
     permissions = (ROOT / "site-docs/advanced/preview-apply-write.md").read_text(
         encoding="utf-8"
     )
@@ -197,32 +233,28 @@ def test_public_release_state_is_consistent() -> None:
     ).casefold()
 
     assert len(readme.splitlines()) < 500
-    assert "[MIT License](LICENSE)" in readme
-    assert "João Pedro Rosa dos Santos" in readme
     assert "MIT licensed" in home
     assert "canonical license text" in home
     assert "GitHub repository is public" in home
     assert "MIT License" in release
-    assert (
-        "[Read the Docs](https://noqlen-meta.readthedocs.io/en/stable/)" in readme
-    )
     assert "canonical public documentation is live" in release_words
-    assert "https://pypi.org/project/beets-noqlenmeta/" in readme
     assert "https://pypi.org/project/beets-noqlenmeta/" in home
     assert (
-        "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.0"
+        "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.1"
         in release
     )
-    assert "Version `2.0.0` is published on" in readme
     assert "## Unreleased" in changelog
+    assert "## 2.0.1 - 2026-08-12" in changelog
     assert "## 2.0.0 - 2026-08-11" in changelog
     assert (
         changelog.index("## Unreleased")
+        < changelog.index("## 2.0.1 - 2026-08-12")
         < changelog.index("## 2.0.0 - 2026-08-11")
         < changelog.index("## 1.0.0 - 2026-08-02")
     )
-    assert "Current stable release: `2.0.0` (2026-08-11)" in release
-    assert "Noqlen Meta 2.0.0 is published on" in release
+    assert "Current stable release: `2.0.1` (2026-08-12)" in release
+    assert "Noqlen Meta 2.0.1 is published on" in release
+    assert "Version 2.0.1 is the current stable release." in project_changelog
     assert "The Read the Docs project slug is `noqlen-meta`." in release
     assert "verified `cover.jpg` sidecars may be written" in combined
     assert "audio files remain unchanged unless `--write`" in combined

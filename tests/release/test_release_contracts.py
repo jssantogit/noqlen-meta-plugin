@@ -62,6 +62,14 @@ def _license_metadata(
     return path
 
 
+def test_active_project_version_is_2_0_1() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+        "project"
+    ]
+
+    assert project["version"] == "2.0.1"
+
+
 def test_requires_python_validation_accepts_semantically_equivalent_order(
     tmp_path: Path,
 ) -> None:
@@ -296,7 +304,7 @@ def test_v2_release_version_is_exact() -> None:
         "project"
     ]
 
-    assert project["version"] == "2.0.0"
+    assert project["version"] == "2.0.1"
 
 
 def test_changelog_orders_unreleased_v2_and_v1() -> None:
@@ -306,7 +314,8 @@ def test_changelog_orders_unreleased_v2_and_v1() -> None:
     )[0]
 
     assert "## Unreleased" in text
-    assert text.index("## Unreleased") < text.index("## 2.0.0 - 2026-08-11")
+    assert text.index("## Unreleased") < text.index("## 2.0.1 - 2026-08-12")
+    assert text.index("## 2.0.1 - 2026-08-12") < text.index("## 2.0.0 - 2026-08-11")
     assert text.index("## 2.0.0 - 2026-08-11") < text.index(
         "## 1.0.0 - 2026-08-02"
     )

@@ -33,5 +33,5 @@ and compatibility contracts.
 - [MIT License](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE)
 
 The GitHub repository is public. Noqlen Meta is MIT licensed, and the root
-`LICENSE` file is the canonical license text. Version 2.0.0 is the current
+`LICENSE` file is the canonical license text. Version 2.0.1 is the current
 stable release.

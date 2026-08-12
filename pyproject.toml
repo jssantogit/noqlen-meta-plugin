@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "beets-noqlenmeta"
-version = "2.0.0"
+version = "2.0.1"
 description = "Multi-provider metadata enrichment and MusicBrainz identity tools for beets"
 readme = "README.md"
 license = "MIT"

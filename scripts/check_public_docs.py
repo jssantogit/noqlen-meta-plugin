@@ -31,7 +31,7 @@ RELEASE_PAGE = DOCS / "project" / "release.md"
 READTHEDOCS_URL = "https://noqlen-meta.readthedocs.io/en/stable/"
 PYPI_URL = "https://pypi.org/project/beets-noqlenmeta/"
 GITHUB_RELEASE_URL = (
-    "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.0"
+    "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.1"
 )
 
 FORBIDDEN_README_TERMS = (
@@ -50,7 +50,9 @@ FORBIDDEN_PUBLIC_LINKS = (
     "handoff.md",
 )
 SECRET_PATTERNS = (
-    re.compile(r"(?i)(?:api[_-]?key|access[_-]?token|password|secret)\s*[:=]\s*[\"'][^\"']{8,}[\"']"),
+    re.compile(
+        r"(?i)(?:api[_-]?key|access[_-]?token|password|secret)\s*[:=]\s*[\"'][^\"']{8,}[\"']"
+    ),
     re.compile(r"/(?:home|Users)/[^/\s]+/"),
     re.compile(r"[A-Za-z]:\\Users\\[^\\\s]+\\"),
 )
@@ -84,7 +86,9 @@ class UniqueKeyLoader(yaml.SafeLoader):
     """YAML loader that rejects duplicate mapping keys."""
 
 
-def _construct_mapping(loader: UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False) -> Any:
+def _construct_mapping(
+    loader: UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False
+) -> Any:
     mapping: dict[Any, Any] = {}
     for key_node, value_node in node.value:
         key = loader.construct_object(key_node, deep=deep)
@@ -150,8 +154,8 @@ def check() -> list[str]:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
         "project"
     ]
-    if project["version"] != "2.0.0":
-        failures.append("active package version is not 2.0.0")
+    if project["version"] != "2.0.1":
+        failures.append("active package version is not 2.0.1")
 
     command = NoqlenMetaPlugin().commands()[0]
     long_options = sorted(
@@ -202,8 +206,23 @@ def check() -> list[str]:
     for term in FORBIDDEN_README_TERMS:
         if term.casefold() in readme_text.casefold():
             failures.append(f"README contains internal term: {term}")
-    if "[MIT License](LICENSE)" not in readme_text:
-        failures.append("README does not identify and link the MIT License")
+    readme_headings = [line for line in readme_text.splitlines() if line.startswith("#")]
+    if readme_headings != ["# Noqlen Meta", "## Capabilities", "## Installation"]:
+        failures.append("README does not use the approved landing-page structure")
+    for forbidden_heading in ("## Documentation", "## First Preview", "## License"):
+        if forbidden_heading in readme_text:
+            failures.append(f"README retains removed section: {forbidden_heading}")
+    if "Version `" in readme_text or "releases/tag/v" in readme_text:
+        failures.append("README contains release-specific version metadata")
+    for required_install_text in (
+        "pip install beets-noqlenmeta",
+        'pip install "beets-noqlenmeta[discogs]"',
+        'pip install "beets-noqlenmeta[audio]"',
+        "plugins:\n  - noqlenmeta",
+        "beet help noqlenmeta",
+    ):
+        if required_install_text not in readme_text:
+            failures.append(f"README installation omits: {required_install_text}")
     if "MIT License" not in release_text:
         failures.append("release documentation does not identify the MIT License")
     if "[x] MIT License selected and added" not in checklist_text:
@@ -217,8 +236,6 @@ def check() -> list[str]:
     for phrase in STALE_VISIBILITY_PHRASES:
         if phrase in public_release_text:
             failures.append(f"public release text retains stale visibility phrase: {phrase}")
-    if f"[Read the Docs]({READTHEDOCS_URL})" not in readme_text:
-        failures.append("README does not link to the canonical live Read the Docs site")
     if READTHEDOCS_URL not in public_text or "canonical public documentation is live" not in folded:
         failures.append("public docs do not identify the canonical live Read the Docs site")
     if STALE_READTHEDOCS_HOST in public_release_text:
@@ -266,26 +283,42 @@ def check() -> list[str]:
         if item not in checklist_text:
             failures.append(f"release checklist omits required state: {item}")
 
-    if PYPI_URL not in readme_text or PYPI_URL not in public_text:
-        failures.append("public release text does not link to the published PyPI project")
+    required_v2_0_1_checklist_phrases = (
+        "## Version 2.0.1 Documentation Release",
+        "Package version is `2.0.1`.",
+        (
+            "README contains only the approved summary, Capabilities, and "
+            "Installation structure."
+        ),
+        "Create `v2.0.1` tag on a commit contained in `main`.",
+        "Publish `2.0.1` to PyPI through Trusted Publishing.",
+        "Create and verify the GitHub Release for `v2.0.1`.",
+        "Read the Docs builds `v2.0.1` successfully.",
+        "`/en/stable/` displays the redesigned Documentation v2",
+    )
+    for phrase in required_v2_0_1_checklist_phrases:
+        if phrase not in checklist_text:
+            failures.append(f"2.0.1 release checklist omits: {phrase}")
+
+    if PYPI_URL not in public_text:
+        failures.append("public docs do not link to the published PyPI project")
     if GITHUB_RELEASE_URL not in public_text:
-        failures.append("public release text does not link to the v2.0.0 GitHub Release")
-    if "version `2.0.0` is published on" not in readme_text.casefold():
-        failures.append("README does not record the v2.0.0 PyPI publication")
+        failures.append("public release text does not link to the v2.0.1 GitHub Release")
     if "## Unreleased" not in changelog_text:
         failures.append("CHANGELOG.md does not contain an Unreleased section")
-    if "## 2.0.0 - 2026-08-11" not in changelog_text:
-        failures.append("CHANGELOG.md does not contain the dated 2.0.0 release section")
+    if "## 2.0.1 - 2026-08-12" not in changelog_text:
+        failures.append("CHANGELOG.md does not contain the dated 2.0.1 release section")
     elif not (
         changelog_text.index("## Unreleased")
+        < changelog_text.index("## 2.0.1 - 2026-08-12")
         < changelog_text.index("## 2.0.0 - 2026-08-11")
         < changelog_text.index("## 1.0.0 - 2026-08-02")
     ):
-        failures.append("CHANGELOG.md must order Unreleased, 2.0.0, then 1.0.0")
+        failures.append("CHANGELOG.md must order Unreleased, 2.0.1, 2.0.0, then 1.0.0")
 
     required_release_state = (
-        "current stable release: `2.0.0` (2026-08-11)",
-        "noqlen meta 2.0.0 is published on",
+        "current stable release: `2.0.1` (2026-08-12)",
+        "noqlen meta 2.0.1 is published on",
         "the read the docs project slug is `noqlen-meta`",
     )
     for phrase in required_release_state:
