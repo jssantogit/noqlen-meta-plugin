@@ -291,7 +291,7 @@ def test_release_checklist_records_completed_v1_release() -> None:
     assert "[ ] Tag workflow builds, checks, and publishes" not in checklist
 
 
-def test_v2_release_candidate_version_is_exact() -> None:
+def test_v2_release_version_is_exact() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
         "project"
     ]
@@ -321,16 +321,25 @@ def test_changelog_orders_unreleased_v2_and_v1() -> None:
         assert phrase in v2
 
 
-def test_v2_release_checklist_prepares_but_does_not_publish() -> None:
+def test_v2_release_checklist_records_completed_publication() -> None:
     text = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
 
-    assert "## Version 2.0.0 Release Candidate" in text
+    assert "## Version 2.0.0 Release" in text
     assert "[x] Package version is `2.0.0`." in text
     assert "[x] Changelog contains `2.0.0 - 2026-08-11`." in text
-    for pending in (
+    for completed in (
         "Merge the v2 release candidate into `main`.",
-        "Create `v2.0.0` tag",
-        "Publish `2.0.0` to PyPI",
-        "Verify the versioned Read the Docs 2.0.0 build",
+        "Confirm final `main` CI.",
+        "Create `v2.0.0` tag on a commit contained in `main`.",
+        "Allow the tag workflow to build and publish through PyPI Trusted Publishing.",
+        "Create and verify the GitHub Release for `v2.0.0`.",
+        "Publish `2.0.0` to PyPI and verify its artifacts.",
+        "Confirm the canonical Read the Docs project at `noqlen-meta.readthedocs.io` and the public `stable` URL.",
     ):
-        assert f"[ ] {pending}" in text
+        assert f"[x] {completed}" in text
+
+    assert (
+        "[ ] Verify the explicit versioned Read the Docs `v2.0.0` build, "
+        "if retained as a public version."
+        in text
+    )
