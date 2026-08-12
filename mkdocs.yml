@@ -68,6 +68,15 @@ nav:
       - AcoustID: configuration/acoustid.md
       - Advanced Resolution: configuration/advanced-resolution.md
       - Full Configuration Example: configuration/full-example.md
+  - Commands:
+      - Command Overview: commands/index.md
+      - Preview Metadata: commands/preview.md
+      - Apply Metadata: commands/apply.md
+      - Write Metadata to Files: commands/write-files.md
+      - Process the Whole Library: commands/whole-library.md
+      - Repair MusicBrainz Identity: commands/identity.md
+      - Use AcoustID: commands/acoustid.md
+      - Sync Identity Tags: commands/identity-tags.md
   - Concepts:
       - concepts/index.md
       - Database, Files, and Navidrome: concepts/database-files-navidrome.md

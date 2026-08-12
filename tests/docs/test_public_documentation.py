@@ -63,6 +63,17 @@ def test_friendly_configuration_covers_mood_relationship() -> None:
     assert "max_moods: 3" in page
 
 
+def test_command_guides_cover_core_user_goals() -> None:
+    docs = ROOT / "site-docs" / "commands"
+
+    assert "beet nm QUERY" in (docs / "preview.md").read_text()
+    assert "beet nm --apply QUERY" in (docs / "apply.md").read_text()
+    assert "beet nm --apply --write QUERY" in (docs / "write-files.md").read_text()
+    assert "beet nm --all" in (docs / "whole-library.md").read_text()
+    assert "beet nm --identity QUERY" in (docs / "identity.md").read_text()
+    assert "beet nm --acoustid QUERY" in (docs / "acoustid.md").read_text()
+
+
 def test_default_config_is_fresh_and_complete() -> None:
     first = default_config()
     second = default_config()
