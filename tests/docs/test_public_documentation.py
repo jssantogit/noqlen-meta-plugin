@@ -156,6 +156,23 @@ def test_default_config_is_fresh_and_complete() -> None:
     }
 
 
+def test_readme_is_concise_project_landing_page() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    headings = [line for line in readme.splitlines() if line.startswith("#")]
+
+    assert headings == ["# Noqlen Meta", "## Capabilities", "## Installation"]
+    assert "## Documentation" not in readme
+    assert "## First Preview" not in readme
+    assert "## License" not in readme
+    assert "Version `" not in readme
+    assert "releases/tag/v" not in readme
+    assert "pip install beets-noqlenmeta" in readme
+    assert 'pip install "beets-noqlenmeta[discogs]"' in readme
+    assert 'pip install "beets-noqlenmeta[audio]"' in readme
+    assert "plugins:\n  - noqlenmeta" in readme
+    assert "beet help noqlenmeta" in readme
+
+
 def test_public_documentation_gate() -> None:
     result = subprocess.run(
         [sys.executable, "scripts/check_public_docs.py"],
@@ -197,23 +214,16 @@ def test_public_release_state_is_consistent() -> None:
     ).casefold()
 
     assert len(readme.splitlines()) < 500
-    assert "[MIT License](LICENSE)" in readme
-    assert "João Pedro Rosa dos Santos" in readme
     assert "MIT licensed" in home
     assert "canonical license text" in home
     assert "GitHub repository is public" in home
     assert "MIT License" in release
-    assert (
-        "[Read the Docs](https://noqlen-meta.readthedocs.io/en/stable/)" in readme
-    )
     assert "canonical public documentation is live" in release_words
-    assert "https://pypi.org/project/beets-noqlenmeta/" in readme
     assert "https://pypi.org/project/beets-noqlenmeta/" in home
     assert (
         "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.0"
         in release
     )
-    assert "Version `2.0.0` is published on" in readme
     assert "## Unreleased" in changelog
     assert "## 2.0.0 - 2026-08-11" in changelog
     assert (
