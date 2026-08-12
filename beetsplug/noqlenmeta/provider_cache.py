@@ -11,14 +11,15 @@ class EntityCacheKey:
     provider: str
     entity_type: str
     entity_id: str
+    schema_version: str = "v1"
 
     def __post_init__(self) -> None:
-        for field in ("provider", "entity_type", "entity_id"):
+        for field in ("provider", "entity_type", "entity_id", "schema_version"):
             value = getattr(self, field)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{field} must be a non-empty string")
             normalized = value.strip()
-            if field != "entity_id":
+            if field in {"provider", "entity_type"}:
                 normalized = normalized.casefold()
             object.__setattr__(self, field, normalized)
 

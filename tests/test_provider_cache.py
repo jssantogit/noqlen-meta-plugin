@@ -19,6 +19,30 @@ def test_successful_payload_is_fetched_once_per_key() -> None:
     assert key == EntityCacheKey("musicbrainz", "recording", "recording-id")
 
 
+def test_different_schema_versions_do_not_collide() -> None:
+    cache = CommandEntityCache()
+    calls = 0
+
+    def fetch() -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        return {"call": calls}
+
+    assert cache.get_or_fetch(
+        EntityCacheKey("musicbrainz", "recording", "recording-id", "v1"), fetch
+    ) == {"call": 1}
+    assert cache.get_or_fetch(
+        EntityCacheKey("musicbrainz", "recording", "recording-id", "v2"), fetch
+    ) == {"call": 2}
+    assert calls == 2
+
+
+def test_schema_version_is_normalized_but_not_case_folded() -> None:
+    assert EntityCacheKey("provider", "entity", "id", " Parser-V1 ").schema_version == (
+        "Parser-V1"
+    )
+
+
 def test_definitive_missing_payload_is_negatively_cached() -> None:
     cache = CommandEntityCache()
     key = EntityCacheKey("musicbrainz", "work", "work-id")
