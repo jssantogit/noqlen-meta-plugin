@@ -283,6 +283,23 @@ def check() -> list[str]:
         if item not in checklist_text:
             failures.append(f"release checklist omits required state: {item}")
 
+    required_v2_0_1_checklist_phrases = (
+        "## Version 2.0.1 Documentation Release",
+        "Package version is `2.0.1`.",
+        (
+            "README contains only the approved summary, Capabilities, and "
+            "Installation structure."
+        ),
+        "Create `v2.0.1` tag on a commit contained in `main`.",
+        "Publish `2.0.1` to PyPI through Trusted Publishing.",
+        "Create and verify the GitHub Release for `v2.0.1`.",
+        "Read the Docs builds `v2.0.1` successfully.",
+        "`/en/stable/` displays the redesigned Documentation v2",
+    )
+    for phrase in required_v2_0_1_checklist_phrases:
+        if phrase not in checklist_text:
+            failures.append(f"2.0.1 release checklist omits: {phrase}")
+
     if PYPI_URL not in public_text:
         failures.append("public docs do not link to the published PyPI project")
     if GITHUB_RELEASE_URL not in public_text:
