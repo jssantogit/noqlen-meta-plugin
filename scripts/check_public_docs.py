@@ -27,11 +27,10 @@ COMMAND_REFERENCE = DOCS / "reference" / "commands.md"
 CONFIG_REFERENCE = DOCS / "reference" / "configuration.md"
 FULL_CONFIG = DOCS / "examples" / "full-config.yaml"
 RELEASE_PAGE = DOCS / "project" / "release.md"
-READTHEDOCS_URL = "https://noqlen-meta-plugin.readthedocs.io/"
-VERSIONED_DOCS_URL = "https://noqlen-meta-plugin.readthedocs.io/en/v1.0.0/"
+READTHEDOCS_URL = "https://noqlen-meta.readthedocs.io/en/stable/"
 PYPI_URL = "https://pypi.org/project/beets-noqlenmeta/"
 GITHUB_RELEASE_URL = (
-    "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v1.0.0"
+    "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.0"
 )
 
 FORBIDDEN_README_TERMS = (
@@ -73,7 +72,11 @@ STALE_RELEASE_STATE_PHRASES = (
     "versioned read the docs `v1.0.0` build does not exist",
     "will not exist until the release tag is created",
     "creation of the `v1.0.0` tag",
+    "repository release candidate: `2.0.0`",
+    "currently published release: `1.0.0` (2026-08-02)",
+    "main merge, tag, publication, and versioned documentation remain pending",
 )
+STALE_READTHEDOCS_HOST = "noqlen-meta-plugin.readthedocs.io"
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
@@ -204,14 +207,17 @@ def check() -> list[str]:
         failures.append("release checklist does not mark public visibility complete")
     if "[ ] Repository visibility changed to public" in checklist_text:
         failures.append("release checklist retains the stale pending visibility gate")
+
     public_release_text = f"{readme_text}\n{public_text}".casefold()
     for phrase in STALE_VISIBILITY_PHRASES:
         if phrase in public_release_text:
             failures.append(f"public release text retains stale visibility phrase: {phrase}")
     if f"[Read the Docs]({READTHEDOCS_URL})" not in readme_text:
-        failures.append("README does not link to the live Read the Docs site")
+        failures.append("README does not link to the canonical live Read the Docs site")
     if READTHEDOCS_URL not in public_text or "canonical public documentation is live" not in folded:
         failures.append("public docs do not identify the canonical live Read the Docs site")
+    if STALE_READTHEDOCS_HOST in public_release_text:
+        failures.append("public docs retain the obsolete Read the Docs hostname")
     for phrase in STALE_EXTERNAL_GATE_PHRASES:
         if phrase in public_release_text:
             failures.append(f"public release text retains stale external gate phrase: {phrase}")
@@ -220,8 +226,7 @@ def check() -> list[str]:
             failures.append(f"public release text retains stale release phrase: {phrase}")
 
     required_checklist_items = (
-        "[x] Read the Docs project imported and public `latest`, `stable`, and "
-        "`v1.0.0` builds passed.",
+        "[x] Read the Docs project imported and public `latest`, `stable`, and `v1.0.0` builds passed.",
         "[x] PyPI project ownership established by the first successful publication.",
         "[x] PyPI Trusted Publisher configured",
         "[x] GitHub environment `pypi` configured with the `v*` deployment tag rule.",
@@ -232,6 +237,14 @@ def check() -> list[str]:
         "[x] Published wheel and sdist hashes match the workflow artifacts",
         "[x] GitHub Release `v1.0.0` was created from the existing tag.",
         "[x] Read the Docs `stable`, `latest`, and `v1.0.0` versions are active and green.",
+        "[x] Merge the v2 release candidate into `main`.",
+        "[x] Confirm final `main` CI.",
+        "[x] Create `v2.0.0` tag on a commit contained in `main`.",
+        "[x] Allow the tag workflow to build and publish through PyPI Trusted Publishing.",
+        "[x] Create and verify the GitHub Release for `v2.0.0`.",
+        "[x] Publish `2.0.0` to PyPI and verify its artifacts.",
+        "[x] Confirm the canonical Read the Docs project at `noqlen-meta.readthedocs.io` and the public `stable` URL.",
+        "[ ] Verify the explicit versioned Read the Docs `v2.0.0` build, if retained as a public version.",
         "[ ] Public wheel installs in a clean environment and beets discovers `noqlenmeta`.",
         "[ ] `beet nm --help` works after the public clean install.",
     )
@@ -242,11 +255,9 @@ def check() -> list[str]:
     if PYPI_URL not in readme_text or PYPI_URL not in public_text:
         failures.append("public release text does not link to the published PyPI project")
     if GITHUB_RELEASE_URL not in public_text:
-        failures.append("public release text does not link to the v1.0.0 GitHub Release")
-    if VERSIONED_DOCS_URL not in public_text:
-        failures.append("public release text does not link to versioned v1.0.0 documentation")
-    if "was published on pypi" not in readme_text.casefold():
-        failures.append("README does not record the v1.0.0 PyPI publication")
+        failures.append("public release text does not link to the v2.0.0 GitHub Release")
+    if "version `2.0.0` is published on" not in readme_text.casefold():
+        failures.append("README does not record the v2.0.0 PyPI publication")
     if "## Unreleased" not in changelog_text:
         failures.append("CHANGELOG.md does not contain an Unreleased section")
     if "## 2.0.0 - 2026-08-11" not in changelog_text:
@@ -259,13 +270,13 @@ def check() -> list[str]:
         failures.append("CHANGELOG.md must order Unreleased, 2.0.0, then 1.0.0")
 
     required_release_state = (
-        "repository release candidate: `2.0.0`",
-        "currently published release: `1.0.0` (2026-08-02)",
-        "main merge, tag, publication, and versioned documentation remain pending",
+        "current stable release: `2.0.0` (2026-08-11)",
+        "noqlen meta 2.0.0 is published on",
+        "the read the docs project slug is `noqlen-meta`",
     )
     for phrase in required_release_state:
         if phrase not in public_words:
-            failures.append(f"public docs omit v2 release-candidate state: {phrase}")
+            failures.append(f"public docs omit v2 published state: {phrase}")
 
     required_distinctions = (
         "`--apply`",
