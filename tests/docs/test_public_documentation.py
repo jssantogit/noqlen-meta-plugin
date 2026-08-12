@@ -83,16 +83,17 @@ def test_public_release_state_is_consistent() -> None:
     assert "canonical license text" in home
     assert "GitHub repository is public" in home
     assert "MIT License" in release
-    assert "[Read the Docs](https://noqlen-meta-plugin.readthedocs.io/)" in readme
+    assert (
+        "[Read the Docs](https://noqlen-meta.readthedocs.io/en/stable/)" in readme
+    )
     assert "canonical public documentation is live" in release_words
     assert "https://pypi.org/project/beets-noqlenmeta/" in readme
     assert "https://pypi.org/project/beets-noqlenmeta/" in home
     assert (
-        "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v1.0.0"
+        "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.0"
         in release
     )
-    assert "https://noqlen-meta-plugin.readthedocs.io/en/v1.0.0/" in release
-    assert "Version `1.0.0` was published on PyPI" in readme
+    assert "Version `2.0.0` is published on" in readme
     assert "## Unreleased" in changelog
     assert "## 2.0.0 - 2026-08-11" in changelog
     assert (
@@ -100,11 +101,9 @@ def test_public_release_state_is_consistent() -> None:
         < changelog.index("## 2.0.0 - 2026-08-11")
         < changelog.index("## 1.0.0 - 2026-08-02")
     )
-    assert "Repository release candidate: `2.0.0`" in release
-    assert "Currently published release: `1.0.0` (2026-08-02)" in release
-    assert "main merge, tag, publication, and versioned documentation remain pending" in (
-        release_words
-    )
+    assert "Current stable release: `2.0.0` (2026-08-11)" in release
+    assert "Noqlen Meta 2.0.0 is published on" in release
+    assert "The Read the Docs project slug is `noqlen-meta`." in release
     assert "verified `cover.jpg` sidecars may be written" in combined
     assert "audio files remain unchanged unless `--write`" in combined
     assert "adding `--write` never triggers another provider call" in combined
@@ -115,9 +114,18 @@ def test_public_release_state_is_consistent() -> None:
     assert "[x] Tag workflow built, checked, and published" in checklist
     assert "[x] GitHub Release `v1.0.0` was created" in checklist
     assert "[x] Read the Docs `stable`, `latest`, and `v1.0.0`" in checklist
+    assert "[x] Create `v2.0.0` tag" in checklist
+    assert "[x] Create and verify the GitHub Release for `v2.0.0`." in checklist
+    assert "[x] Publish `2.0.0` to PyPI and verify its artifacts." in checklist
+    assert (
+        "[x] Confirm the canonical Read the Docs project at "
+        "`noqlen-meta.readthedocs.io` and the public `stable` URL."
+        in checklist
+    )
     assert "[ ] Public wheel installs in a clean environment" in checklist
     assert "[ ] `beet nm --help` works after the public clean install." in checklist
     assert "[ ] Repository visibility changed to public" not in checklist
+    assert "noqlen-meta-plugin.readthedocs.io" not in combined
     stale_phrases = (
         "public visibility remains unconfirmed",
         "not complete until GitHub reports",
@@ -131,5 +139,8 @@ def test_public_release_state_is_consistent() -> None:
         "package has not been published to pypi",
         "first successful oidc publication will create",
         "versioned read the docs `v1.0.0` build does not exist",
+        "repository release candidate: `2.0.0`",
+        "currently published release: `1.0.0` (2026-08-02)",
+        "main merge, tag, publication, and versioned documentation remain pending",
     )
     assert not any(phrase in combined for phrase in stale_phrases)
