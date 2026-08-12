@@ -84,14 +84,15 @@ nav:
       - Strict and Partial: concepts/strict-vs-partial.md
       - Result Statuses: concepts/result-statuses.md
       - Providers and Field Authority: concepts/providers-and-field-authority.md
-  - How-to Guides:
-      - guides/index.md
-      - Import Enrichment: guides/import-enrichment.md
-      - Existing Library: guides/existing-library.md
-      - MusicBrainz Identity: guides/musicbrainz-identity.md
-      - Identity Tags: guides/identity-tags.md
-      - Navidrome Workflow: guides/navidrome.md
-      - Whole Library: guides/whole-library.md
+  - Recipes:
+      - Recipes: recipes/index.md
+      - Enrich an Existing Library: recipes/existing-library.md
+      - Enrich During Import: recipes/import-enrichment.md
+      - Add or Replace Album Covers: recipes/artwork.md
+      - Analyze BPM Locally: recipes/local-bpm.md
+      - Add Lyrics and Language Metadata: recipes/lyrics-languages.md
+      - Repair MusicBrainz IDs: recipes/repair-musicbrainz-ids.md
+      - Safely Update an Entire Library: recipes/whole-library.md
   - Technical Reference:
       - technical-reference/index.md
       - Commands: technical-reference/command-line.md

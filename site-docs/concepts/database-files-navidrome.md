@@ -39,5 +39,5 @@ beet nm --identity-tags --write album:"Example Album"
 
 After file tags change, Navidrome must rescan according to its own behavior.
 Noqlen does not call Navidrome APIs, configure scans, or guarantee when caches
-refresh. Use the [Navidrome workflow guide](../guides/navidrome.md) for the
+refresh. Use the [whole-library recipe](../recipes/whole-library.md) for the
 complete sequence.

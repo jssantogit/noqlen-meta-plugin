@@ -47,7 +47,7 @@ permission. See the [`--write` reference](../technical-reference/command-line.md
 
 Keep the database unchanged and inspect the preview's score, margin,
 assignment, and completeness. Repair requires one unique, strong, complete
-candidate and a fresh target. See the [identity guide](../guides/musicbrainz-identity.md).
+candidate and a fresh target. See the [identity recipe](../recipes/repair-musicbrainz-ids.md).
 
 ## Why Did AcoustID Block MusicBrainz Identity Repair?
 
@@ -106,7 +106,7 @@ including through `--all`. See the [command reference](../technical-reference/co
 Run `beet nm --identity QUERY` and repair only if the result is ready. The
 identity-tag workflow requires complete coherent release, release-group,
 recording, and release-track IDs before it can trust the database. See the
-[identity-tag guide](../guides/identity-tags.md).
+[identity-tag command](../commands/identity-tags.md).
 
 ## Why Was My File Reported Unsupported?
 
@@ -127,7 +127,7 @@ atomic replacement. Unsupported guarantees block before writing. See
 Confirm the file tags changed, then allow or request a Navidrome rescan using
 Navidrome's own administration. `nm --apply` and `nm --acoustid --apply` change
 only the beets database, and Navidrome scans can be delayed or cached. Follow
-the [Navidrome guide](../guides/navidrome.md).
+the [whole-library recipe](../recipes/whole-library.md).
 
 ## Why Did An Enabled Provider Contribute Nothing?
 

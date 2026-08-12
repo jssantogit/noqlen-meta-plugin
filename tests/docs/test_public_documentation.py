@@ -74,6 +74,23 @@ def test_command_guides_cover_core_user_goals() -> None:
     assert "beet nm --acoustid QUERY" in (docs / "acoustid.md").read_text()
 
 
+def test_recipes_replace_legacy_guides() -> None:
+    recipes = ROOT / "site-docs" / "recipes"
+    required = {
+        "index.md",
+        "existing-library.md",
+        "import-enrichment.md",
+        "artwork.md",
+        "local-bpm.md",
+        "lyrics-languages.md",
+        "repair-musicbrainz-ids.md",
+        "whole-library.md",
+    }
+
+    assert required == {path.name for path in recipes.glob("*.md")}
+    assert not (ROOT / "site-docs" / "guides").exists()
+
+
 def test_default_config_is_fresh_and_complete() -> None:
     first = default_config()
     second = default_config()
