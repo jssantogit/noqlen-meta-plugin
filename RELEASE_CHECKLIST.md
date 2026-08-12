@@ -84,7 +84,7 @@
 - [x] README contains no release-version banner, Documentation section, First Preview section, or License section.
 - [x] Documentation v2 remains the public MkDocs information architecture.
 - [x] Release-readiness diff contains no changes under `beetsplug/noqlenmeta`.
-- [ ] Full CI is green on the release pull request.
+- [x] Full CI is green on the release pull request.
 
 ### Owner-Authorized Release Execution
 
