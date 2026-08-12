@@ -73,3 +73,32 @@
 - [ ] Visually review the PyPI-rendered README for `2.0.0`.
 - [ ] Install `beets-noqlenmeta==2.0.0` in a fresh environment and confirm beets discovers `noqlenmeta`.
 - [ ] Run `beet nm --help` from that public clean installation.
+
+## Version 2.0.1 Documentation Release
+
+### Candidate Preparation
+
+- [x] Package version is `2.0.1`.
+- [x] Changelog contains `2.0.1 - 2026-08-12`.
+- [x] README contains only the approved summary, Capabilities, and Installation structure.
+- [x] README contains no release-version banner, Documentation section, First Preview section, or License section.
+- [x] Documentation v2 remains the public MkDocs information architecture.
+- [x] Release-readiness diff contains no changes under `beetsplug/noqlenmeta`.
+- [ ] Full CI is green on the release pull request.
+
+### Owner-Authorized Release Execution
+
+- [ ] Merge the `2.0.1` release candidate into `main`.
+- [ ] Confirm final `main` CI.
+- [ ] Create `v2.0.1` tag on a commit contained in `main`.
+- [ ] Allow the existing tag workflow to verify the tag/version match and publish through PyPI Trusted Publishing.
+- [ ] Publish `2.0.1` to PyPI through Trusted Publishing.
+- [ ] Create and verify the GitHub Release for `v2.0.1`.
+
+### Post-Release Verification
+
+- [ ] Verify the public PyPI `2.0.1` metadata and artifacts.
+- [ ] Visually review the PyPI-rendered simplified README.
+- [ ] Read the Docs builds `v2.0.1` successfully.
+- [ ] `/en/stable/` displays the redesigned Documentation v2 rather than the old v2.0.0 manual.
+- [ ] Public `beets-noqlenmeta==2.0.1` clean install discovers `noqlenmeta` and `beet nm --help` works.
