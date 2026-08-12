@@ -15,8 +15,20 @@ from beetsplug.noqlenmeta.field_contracts import (
     field_contract,
 )
 from beetsplug.noqlenmeta.providers.specs import ProviderScope
+from beetsplug.noqlenmeta.release_catalog import (
+    ReleaseSecondaryType,
+    ReleaseStatus,
+    ReleaseType,
+)
 
-CanonicalValue: TypeAlias = MetadataValue | PartialDate | IdentifierCollection
+CanonicalValue: TypeAlias = (
+    MetadataValue
+    | PartialDate
+    | IdentifierCollection
+    | ReleaseType
+    | ReleaseStatus
+    | tuple[ReleaseSecondaryType, ...]
+)
 
 
 def _text(value: object, label: str) -> str:
@@ -89,14 +101,27 @@ class MetadataEvidence:
         object.__setattr__(self, "field", contract.canonical_name)
         if not isinstance(
             self.value,
-            (str, int, float, bool, tuple, PartialDate, IdentifierCollection),
+            (
+                str,
+                int,
+                float,
+                bool,
+                tuple,
+                PartialDate,
+                IdentifierCollection,
+                ReleaseType,
+                ReleaseStatus,
+            ),
         ):
             raise TypeError("canonical value has an unsupported type")
-        if isinstance(self.value, tuple) and (
-            not self.value
-            or any(not isinstance(value, str) or not value.strip() for value in self.value)
-        ):
-            raise ValueError("canonical multi-value must contain non-empty strings")
+        if isinstance(self.value, tuple):
+            if not self.value:
+                raise ValueError("canonical multi-value must not be empty")
+            if not (
+                all(isinstance(value, str) and value.strip() for value in self.value)
+                or all(isinstance(value, ReleaseSecondaryType) for value in self.value)
+            ):
+                raise ValueError("canonical multi-value contains invalid values")
         if isinstance(self.value, float) and not isfinite(self.value):
             raise ValueError("canonical numeric value must be finite")
         if not isinstance(self.subject, SubjectRef):
