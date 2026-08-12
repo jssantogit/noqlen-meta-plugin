@@ -43,13 +43,12 @@
 - [x] GitHub Release `v1.0.0` was created from the existing tag.
 - [x] Read the Docs `stable`, `latest`, and `v1.0.0` versions are active and green.
 
-## Version 2.0.0 Release Candidate
+## Version 2.0.0 Release
 
 ### Candidate Preparation
 
 - [x] Package version is `2.0.0`.
 - [x] Changelog contains `2.0.0 - 2026-08-11`.
-- [x] Public docs distinguish the prepared `2.0.0` candidate from the currently published `1.0.0` release.
 - [x] Full offline test suite and Ruff pass.
 - [x] Python 3.10 through 3.14 CI matrix passes.
 - [x] beets 2.12.0 and latest below 3 compatibility lanes pass.
@@ -60,10 +59,17 @@
 
 ### Owner-Authorized Release Execution
 
-- [ ] Merge the v2 release candidate into `main`.
-- [ ] Confirm final `main` CI.
-- [ ] Create `v2.0.0` tag on a commit contained in `main`.
-- [ ] Allow the tag workflow to build and publish through PyPI Trusted Publishing.
-- [ ] Create and verify the GitHub Release for `v2.0.0`.
-- [ ] Publish `2.0.0` to PyPI and verify its artifacts.
-- [ ] Verify the versioned Read the Docs 2.0.0 build and stable alias.
+- [x] Merge the v2 release candidate into `main`.
+- [x] Confirm final `main` CI.
+- [x] Create `v2.0.0` tag on a commit contained in `main`.
+- [x] Allow the tag workflow to build and publish through PyPI Trusted Publishing.
+- [x] Create and verify the GitHub Release for `v2.0.0`.
+- [x] Publish `2.0.0` to PyPI and verify its artifacts.
+- [x] Confirm the canonical Read the Docs project at `noqlen-meta.readthedocs.io` and the public `stable` URL.
+- [ ] Verify the explicit versioned Read the Docs `v2.0.0` build, if retained as a public version.
+
+### Post-Release Follow-up
+
+- [ ] Visually review the PyPI-rendered README for `2.0.0`.
+- [ ] Install `beets-noqlenmeta==2.0.0` in a fresh environment and confirm beets discovers `noqlenmeta`.
+- [ ] Run `beet nm --help` from that public clean installation.
