@@ -226,7 +226,10 @@ def check() -> list[str]:
             failures.append(f"public release text retains stale release phrase: {phrase}")
 
     required_checklist_items = (
-        "[x] Read the Docs project imported and public `latest`, `stable`, and `v1.0.0` builds passed.",
+        (
+            "[x] Read the Docs project imported and public `latest`, `stable`, and "
+            "`v1.0.0` builds passed."
+        ),
         "[x] PyPI project ownership established by the first successful publication.",
         "[x] PyPI Trusted Publisher configured",
         "[x] GitHub environment `pypi` configured with the `v*` deployment tag rule.",
@@ -243,8 +246,14 @@ def check() -> list[str]:
         "[x] Allow the tag workflow to build and publish through PyPI Trusted Publishing.",
         "[x] Create and verify the GitHub Release for `v2.0.0`.",
         "[x] Publish `2.0.0` to PyPI and verify its artifacts.",
-        "[x] Confirm the canonical Read the Docs project at `noqlen-meta.readthedocs.io` and the public `stable` URL.",
-        "[ ] Verify the explicit versioned Read the Docs `v2.0.0` build, if retained as a public version.",
+        (
+            "[x] Confirm the canonical Read the Docs project at "
+            "`noqlen-meta.readthedocs.io` and the public `stable` URL."
+        ),
+        (
+            "[ ] Verify the explicit versioned Read the Docs `v2.0.0` build, "
+            "if retained as a public version."
+        ),
         "[ ] Public wheel installs in a clean environment and beets discovers `noqlenmeta`.",
         "[ ] `beet nm --help` works after the public clean install.",
     )
