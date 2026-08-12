@@ -34,5 +34,5 @@ into a proposal, but still grants no write permission.
 
 MusicBrainz enrichment under `providers.musicbrainz.enabled` is not the
 MusicBrainz identity source. Identity audit has separate importer settings and
-separate command flags. See the [provider reference](../reference/providers.md)
-and [configuration reference](../reference/configuration.md).
+separate command flags. See the [provider reference](../technical-reference/providers.md)
+and [configuration reference](../technical-reference/configuration.md).

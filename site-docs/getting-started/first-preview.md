@@ -56,4 +56,4 @@ beet nm --apply --partial album:"Example Album"
 ```
 
 Partial is not force. For complete syntax and invalid combinations, use the
-[command reference](../reference/commands.md).
+[command reference](../technical-reference/command-line.md).

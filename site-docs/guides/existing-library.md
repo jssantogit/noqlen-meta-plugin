@@ -27,5 +27,5 @@ beet nm --apply --partial album:"Example Album"
 
 Application updates mapped Album fields and uses normal beets inheritance for
 database Items. It does not call `Item.write()`, move files, or update cover
-art. Use [native beets write](../reference/beets-interaction.md#2-native-beet-write)
+art. Use [native beets write](../technical-reference/beets-interaction.md#2-native-beet-write)
 separately if generic file tags should follow database metadata.

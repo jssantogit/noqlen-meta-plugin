@@ -62,7 +62,7 @@ bypass Noqlen resolver, identity, or safety rules. In particular, `beet write
 - bypass coherent-database checks or stale guards;
 - bypass identity-tag candidate verification.
 
-Noqlen v1 has no `--force`.
+Noqlen has no `--force`.
 
 ## 3. `beet nm --identity-tags --write`
 
@@ -82,6 +82,7 @@ a replacement for generic `beet write`.
 
 Noqlen passes query terms to beets. Bare terms use normal text matching,
 `field:value` restricts a field, multiple terms use AND, and range/regex/exact
-forms remain native beets behavior. Ordinary mode asks beets for Albums;
-identity modes ask for Items and then expand matching album Items to complete
-Albums. See the [command reference](commands.md#query-semantics).
+forms remain native beets behavior. Ordinary mode evaluates the query against
+Albums and Items for scopes with contributing providers. Identity modes ask for
+Items and then expand matching album Items to complete Albums while retaining
+standalone singleton Items. See the [command reference](command-line.md#query-semantics).

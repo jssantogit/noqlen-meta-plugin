@@ -10,6 +10,14 @@ from beetsplug.noqlenmeta.configuration import default_config
 ROOT = Path(__file__).parents[2]
 
 
+def test_technical_reference_uses_canonical_paths() -> None:
+    docs = ROOT / "site-docs"
+
+    assert (docs / "technical-reference" / "configuration.md").is_file()
+    assert (docs / "technical-reference" / "command-line.md").is_file()
+    assert not (docs / "reference").exists()
+
+
 def test_default_config_is_fresh_and_complete() -> None:
     first = default_config()
     second = default_config()

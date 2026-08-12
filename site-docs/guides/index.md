@@ -10,4 +10,4 @@ Choose the task you want to complete:
 - [Plan a whole-library run](whole-library.md)
 
 Every guide places preview before its write command. For exact defaults and
-invalid combinations, use the [reference](../reference/index.md).
+invalid combinations, use the [technical reference](../technical-reference/index.md).

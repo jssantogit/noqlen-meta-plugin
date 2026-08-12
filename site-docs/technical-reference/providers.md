@@ -6,10 +6,10 @@ behavior. Enabling a provider does not make it support every field.
 | Provider | Enablement/credentials | Scope and fields | Ordinary library | Importer | Identity requirement |
 | --- | --- | --- | ---: | ---: | --- |
 | Discogs | `providers.discogs.enabled`; optional extra and token for search | Release: genres, styles, labels, catalog numbers, barcodes, country, year, media, format descriptions | Yes | Yes | Direct release ID preferred; conservative search otherwise. |
-| MusicBrainz enrichment | `providers.musicbrainz.enabled`; no plugin credential | Release: labels, catalog numbers, barcode, country, year, media | Yes | Yes | Exact existing release MBID; no fuzzy rematching. |
-| Last.fm | `providers.lastfm.enabled`; no user key setting | Release: filtered genres | Yes | Yes | Selected artist/album; community tags filtered through beets genre vocabulary. |
+| MusicBrainz enrichment | `providers.musicbrainz.enabled`; no plugin credential | Release: labels, catalog numbers, barcode, country, year, media, genres; Track: genres, moods, lyrics languages; Artist: genres, moods, countries, areas | Yes | Yes | Exact existing Release/Recording/Work/Artist MBIDs; no fuzzy rematching. Artist languages are derived from current-target Work languages. |
+| Last.fm | `providers.lastfm.enabled`; uses beets' shared API key | Release, Track, Artist: classified genres, styles, moods | Yes | Yes | Scoped fallback while requested semantic fields remain unresolved. |
 | iTunes | `providers.itunes.enabled`; no key; two-letter storefront | Release: genre, year | Yes | Yes | Direct collection/UPC preferred, then exact normalized search. |
-| LRCLIB | `providers.lrclib.enabled`; no key | Track: plain and synchronized lyrics | No | Yes | Exact title/artist/album/duration signature, about two-second duration tolerance. |
+| LRCLIB | `providers.lrclib.enabled`; no key | Track: plain and synchronized lyrics | Items | Yes | Exact title/artist/album/duration signature, about two-second duration tolerance; synchronized lyrics have no lossless writable target. |
 | Cover Art Archive | `providers.coverartarchive.enabled`; no key; enabled by default | Album: one approved main front | Yes | Yes | Exact Release first; Release Group only after definitive absence/no eligible front. |
 | MusicBrainz identity source | Importer `identity.enabled` or CLI `--identity`; no plugin credential | Separate four-MBID audit evidence | Identity mode only | Identity importer only | Structural candidate scoring and complete track assignment. |
 
@@ -42,5 +42,5 @@ No result can also be normal: the provider may not support the enabled field,
 may lack the required identity, may not appear in field authority, or may
 return evidence below confidence. See [field authority](../concepts/providers-and-field-authority.md).
 
-`providers.musicbrainz.enabled` is only the enrichment adapter. It does not
-enable or disable the MusicBrainz identity source.
+`providers.musicbrainz.enabled` is only the enrichment adapter. It neither
+enables nor disables identity audit or the MusicBrainz identity source.

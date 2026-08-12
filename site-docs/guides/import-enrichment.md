@@ -49,4 +49,4 @@ import:
 
 Plain LRCLIB lyrics require `fields.lyrics: true` and
 `providers.lrclib.enabled: true`. Synchronized lyrics can be previewed but are
-mapping-blocked in v1. See [beets interaction](../reference/beets-interaction.md).
+mapping-blocked where no lossless target exists. See [beets interaction](../technical-reference/beets-interaction.md).

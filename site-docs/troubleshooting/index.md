@@ -14,7 +14,7 @@ to decide whether explicit partial mode is appropriate.
 
 Read that field's status and leave it unchanged until its conflict or mapping
 limit is resolved. Partial applies only already-safe ordinary fields; it does
-not accept reviews or reshape blocked values. See the [field reference](../reference/fields.md).
+not accept reviews or reshape blocked values. See the [field reference](../technical-reference/fields.md).
 
 ## Is Partial The Same As Force?
 
@@ -35,13 +35,13 @@ embedding should follow the approved plan. `--apply` alone may write verified
 
 Use native `beet write` for generic beets database-to-file fields; use Noqlen
 identity-tag write only for the verified four-MBID workflow. They have
-different scope and safety behavior. See [beets interaction](../reference/beets-interaction.md).
+different scope and safety behavior. See [beets interaction](../technical-reference/beets-interaction.md).
 
 ## Why Does `--write` Require `--identity-tags`?
 
 Add `--identity-tags` only when four coherent database MBIDs should replace
 their file-tag counterparts. `--write` is deliberately not a generic Noqlen
-permission. See the [`--write` reference](../reference/commands.md).
+permission. See the [`--write` reference](../technical-reference/command-line.md).
 
 ## Why Is MusicBrainz Identity Repair Blocked?
 
@@ -55,7 +55,7 @@ Keep the database unchanged and inspect the identity preview. When decisive
 AcoustID recording evidence contradicts every structurally valid MusicBrainz
 candidate, Noqlen returns `acoustid_recording_conflict` rather than choosing a
 release anyway. AcoustID only removes incompatible candidates; it does not add
-score or relax the normal identity gates. See the [`--identity` reference](../reference/commands.md).
+score or relax the normal identity gates. See the [`--identity` reference](../technical-reference/command-line.md).
 
 ## Why Did AcoustID Not Run During `--identity`?
 
@@ -63,7 +63,7 @@ Check `noqlenmeta.acoustid.enabled`, `use_for_identity`, `lookup`, and whether a
 valid stored fingerprint exists. Existing-library identity intentionally never
 calculates a missing fingerprint, including when `compute_missing` is true.
 Use standalone `--acoustid --fingerprint-missing` when you explicitly want
-missing fingerprints calculated. See the [configuration reference](../reference/configuration.md).
+missing fingerprints calculated. See the [configuration reference](../technical-reference/configuration.md).
 
 ## Why Does AcoustID Say The Client Key Is Missing?
 
@@ -77,7 +77,7 @@ exposing or guessing a key.
 Add `--apply` only after reviewing the standalone preview. `--fingerprint-missing`
 permits local fingerprint calculation; it does not grant database-write
 authority. Standalone AcoustID `--apply` can change only `acoustid_id` and
-`acoustid_fingerprint`, never audio files. See the [`--acoustid` reference](../reference/commands.md).
+`acoustid_fingerprint`, never audio files. See the [`--acoustid` reference](../technical-reference/command-line.md).
 
 ## What Is The Difference Between Chromaprint, `fpcalc`, AcoustID, And beets `chroma`?
 
@@ -92,14 +92,14 @@ feature operates on existing-library targets and does not replace `chroma`.
 
 Narrow the Item query if you selected the wrong album, then preview again.
 Identity consistency is album-wide, so matching any album Item expands to the
-complete Album once. See [query semantics](../reference/commands.md#query-semantics).
+complete Album once. See [query semantics](../technical-reference/command-line.md#query-semantics).
 
 ## Why Was A Singleton Included?
 
 Check whether the matching Item has no Album association. Identity,
-standalone AcoustID, and identity-tag modes support standalone Items, including
-through `--all`. Ordinary enrichment remains Album-only. See the [command
-reference](../reference/commands.md).
+standalone AcoustID, identity-tag, and ordinary enrichment modes support
+standalone Items where the selected scope has a contributing provider,
+including through `--all`. See the [command reference](../technical-reference/command-line.md).
 
 ## Why Is Database Identity Incomplete?
 
@@ -112,7 +112,7 @@ recording, and release-track IDs before it can trust the database. See the
 
 Keep the file unchanged and confirm it is one of the tested formats with a
 regular single-link source. MediaFile support alone does not prove the safe
-replacement workflow. See [media compatibility](../reference/compatibility.md#media-formats).
+replacement workflow. See [media compatibility](../technical-reference/compatibility.md#media-formats).
 
 ## Why Did Identity-Tag Mode Block On My Operating System Or Filesystem?
 
@@ -120,7 +120,7 @@ Use database-only workflows, or move the operation to a supported environment
 without changing the source first. Identity-tag replacement requires
 `O_NOATIME`, `O_NOFOLLOW`, safe metadata preservation, and same-directory
 atomic replacement. Unsupported guarantees block before writing. See
-[operating systems and filesystems](../reference/compatibility.md#operating-systems-and-filesystems).
+[operating systems and filesystems](../technical-reference/compatibility.md#operating-systems-and-filesystems).
 
 ## Why Does Navidrome Still Show Old Metadata?
 
@@ -134,14 +134,14 @@ the [Navidrome guide](../guides/navidrome.md).
 Check field enablement, provider capability, authority, confidence, and the
 required identity. An enabled provider is called only when all these controls
 intersect, and an unavailable service safely contributes nothing. See the
-[provider reference](../reference/providers.md).
+[provider reference](../technical-reference/providers.md).
 
 ## Why Is Synchronized Lyrics Not Written?
 
 Leave `synced_lyrics` disabled unless you want to preview its blocked status.
 LRCLIB can supply synchronized text, but beets' selected track model has no
-lossless v1 target, so Noqlen never collapses it into plain lyrics or writes
-SYLT. See the [field reference](../reference/fields.md).
+lossless target, so Noqlen never collapses it into plain lyrics or writes
+SYLT. See the [field reference](../technical-reference/fields.md).
 
 ## Where Should I Put The Discogs Token?
 
@@ -149,4 +149,4 @@ Set `NOQLENMETA_DISCOGS_TOKEN` in the environment that runs beets and keep
 `user_token` empty in committed examples. A non-empty environment value takes
 precedence over YAML, and output redacts token values. Direct release-ID
 lookup can work without a token; search generally needs one. See the
-[configuration reference](../reference/configuration.md#provider-controls).
+[configuration reference](../technical-reference/configuration.md#provider-controls).

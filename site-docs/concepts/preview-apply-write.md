@@ -54,4 +54,4 @@ tags. The database changes only for operational `mtime` bookkeeping.
 
 Native `beet write` is a fourth concept: it is generic beets database-to-file
 synchronization. Importer `import.write` is a fifth control owned by the beets
-import lifecycle. See [beets interaction](../reference/beets-interaction.md).
+import lifecycle. See [beets interaction](../technical-reference/beets-interaction.md).

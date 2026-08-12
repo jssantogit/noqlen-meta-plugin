@@ -13,13 +13,13 @@ can be represented safely.
 | `country` | on | Discogs, MusicBrainz | Release country | Album country | iTunes storefront is never treated as release country. |
 | `year` | on | MusicBrainz, Discogs, iTunes | Release year | Album year | MusicBrainz uses selected edition date. |
 | `media` | on | Discogs, MusicBrainz | Release media | None | Importer can apply one value; library mode blocks. |
-| `format_descriptions` | on | Discogs | None | None | Can be resolved/previewed but v1 blocks application. |
-| `moods` | on | None currently | Typed track list | Typed Item list | Foundation storage exists; semantic mood normalization is deferred. |
+| `format_descriptions` | on | Discogs | None | None | Can be resolved and previewed, but has no lossless ordinary target. |
+| `moods` | on | MusicBrainz, Last.fm | Typed track list | Typed Item list | Controlled canonical mood classification; bounded by `moods.max_moods`. |
 | `bpm` | on | Optional local Librosa | Numeric track target | Float Item BPM | Existing values are preserved by default; local analysis is opt-in and failures stay track-local. |
-| `lyrics_languages` | on | None currently | Typed track list | Typed Item list | Semantic MusicBrainz lookup is deferred. |
-| `artist_countries` | on | None currently | Typed track/album list | Typed Item/Album list | Artist provider lookup is deferred. |
-| `artist_areas` | off | None currently | Typed track/album list | Typed Item/Album list | Artist provider lookup is deferred. |
-| `artist_languages` | on | None currently | Typed track/album list | Typed Item/Album list | Artist-language derivation is deferred. |
+| `lyrics_languages` | on | MusicBrainz | Typed track list | Typed Item list | Exact Recording-to-Work relationships supply three-letter language codes. |
+| `artist_countries` | on | MusicBrainz | Typed track/album list | Typed Item/Album list | Structurally derived from identified artist area relationships. |
+| `artist_areas` | off | MusicBrainz | Typed track/album list | Typed Item/Album list | Uses trustworthy main artist areas; never inferred from text. |
+| `artist_languages` | on | MusicBrainz-derived Work evidence | Typed track/album list | Typed Item/Album list | Derived only from Work languages reached by tracks in the current target, not a direct artist-provider field. |
 | `lyrics` | off | LRCLIB | Selected `TrackInfo.lyrics` | Item lyrics | Importer and existing-library Items share LRCLIB resolution. |
 | `synced_lyrics` | off | LRCLIB | No lossless target | No lossless target | Previewed as blocked; synchronized lyrics/SYLT are not applied. |
 | `cover` | on | Cover Art Archive | Album sidecar/embed | Album sidecar/embed | Exact approved main front; fixed `cover.jpg`; no singleton artwork. |

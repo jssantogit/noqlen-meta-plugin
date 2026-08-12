@@ -7,7 +7,7 @@ filesystem workflow.
 
 Python 3.10 through 3.14 are supported and covered by release CI. Package
 metadata declares `Requires-Python >=3.10,<3.15`. Python 3.15 is not claimed by
-Noqlen Meta 1.0.0; supporting a future Python release requires a new package
+Noqlen Meta 2.0.0; supporting a future Python release requires a new package
 release after compatibility is tested.
 
 ## beets
@@ -25,10 +25,11 @@ database models, and MediaFile mappings; it does not patch beets.
 
 ## Operating Systems And Filesystems
 
-Ordinary enrichment and database identity operations are Python/beets-based
-and do not perform Noqlen file replacement.
+Ordinary preview and database identity operations are Python/beets-based.
+Ordinary `--apply` may write verified artwork sidecars, and ordinary
+`--apply --write` may perform verified supported audio-file synchronization.
 
-The v1 identity-tag filesystem workflow is supported only on platforms where
+The identity-tag filesystem workflow is supported only on platforms where
 its required no-atime/no-follow and atomic replacement guarantees can be
 proven. It relies on `O_NOATIME`, `O_NOFOLLOW`, same-directory candidate and
 backup files, atomic `os.replace`, regular single-link source files, and safe

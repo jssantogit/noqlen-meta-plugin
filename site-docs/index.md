@@ -33,14 +33,14 @@ beet nm album:"Example Album"
 
 Preview can contact enabled providers but writes neither the database nor
 audio files. Continue with [Getting Started](getting-started/index.md), or use
-the [command reference](reference/commands.md) when you already know beets.
+the [command reference](technical-reference/command-line.md) when you already know beets.
 
 ## Where To Go
 
 - [Getting Started](getting-started/index.md): install through first apply.
 - [Concepts](concepts/index.md): understand databases, tags, modes, and status.
 - [How-to guides](guides/index.md): complete one practical workflow.
-- [Reference](reference/index.md): exact flags, configuration, providers, and fields.
+- [Technical Reference](technical-reference/index.md): exact flags, configuration, providers, and fields.
 - [Troubleshooting](troubleshooting/index.md): resolve a blocked or surprising result.
 - [Advanced safety](advanced/safety.md): inspect write guarantees and limitations.
 
