@@ -91,6 +91,23 @@ def test_recipes_replace_legacy_guides() -> None:
     assert not (ROOT / "site-docs" / "guides").exists()
 
 
+def test_troubleshooting_routes_by_symptom() -> None:
+    troubleshooting = ROOT / "site-docs" / "troubleshooting"
+    required = {
+        "index.md",
+        "nothing-changed.md",
+        "review-blocked.md",
+        "providers.md",
+        "file-writing.md",
+        "acoustid.md",
+    }
+    index = (troubleshooting / "index.md").read_text(encoding="utf-8")
+
+    assert required == {path.name for path in troubleshooting.glob("*.md")}
+    for name in required - {"index.md"}:
+        assert f"({name})" in index
+
+
 def test_default_config_is_fresh_and_complete() -> None:
     first = default_config()
     second = default_config()

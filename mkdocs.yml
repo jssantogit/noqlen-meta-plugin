@@ -101,7 +101,13 @@ nav:
       - Fields: technical-reference/fields.md
       - Compatibility: technical-reference/compatibility.md
       - beets Interaction: technical-reference/beets-interaction.md
-  - Troubleshooting: troubleshooting/index.md
+  - Troubleshooting:
+      - Common Problems: troubleshooting/index.md
+      - Nothing Was Changed: troubleshooting/nothing-changed.md
+      - REVIEW and BLOCKED Results: troubleshooting/review-blocked.md
+      - Provider Problems: troubleshooting/providers.md
+      - File Writing Problems: troubleshooting/file-writing.md
+      - AcoustID Problems: troubleshooting/acoustid.md
   - Advanced:
       - Safety: advanced/safety.md
       - Architecture: advanced/architecture.md
