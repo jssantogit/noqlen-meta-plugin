@@ -57,8 +57,15 @@ The canonical public documentation is live at
 [https://noqlen-meta.readthedocs.io/en/stable/](https://noqlen-meta.readthedocs.io/en/stable/).
 The Read the Docs project slug is `noqlen-meta`.
 
+The explicit `v2.0.0` Read the Docs version remains a separate post-release
+verification item; the `stable` URL above is the canonical public entry point.
+
 The repository root `RELEASE_CHECKLIST.md` remains the operational source for
 post-release verification items.
 
+## License
+
+Noqlen Meta is distributed under the MIT License. The canonical license text is
+available in the repository root [`LICENSE`](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE).
 MIT licensing does not imply endorsement by beets, MusicBrainz, Discogs,
 Navidrome, Last.fm, Apple, LRCLIB, AcoustID, or any provider.
