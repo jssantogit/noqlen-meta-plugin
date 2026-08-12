@@ -334,7 +334,10 @@ def test_v2_release_checklist_records_completed_publication() -> None:
         "Allow the tag workflow to build and publish through PyPI Trusted Publishing.",
         "Create and verify the GitHub Release for `v2.0.0`.",
         "Publish `2.0.0` to PyPI and verify its artifacts.",
-        "Confirm the canonical Read the Docs project at `noqlen-meta.readthedocs.io` and the public `stable` URL.",
+        (
+            "Confirm the canonical Read the Docs project at "
+            "`noqlen-meta.readthedocs.io` and the public `stable` URL."
+        ),
     ):
         assert f"[x] {completed}" in text
 
