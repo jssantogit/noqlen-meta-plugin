@@ -5,8 +5,8 @@ can be represented safely.
 
 | Field | Default | Current providers | Importer target | Library target | Foundation result/limitation |
 | --- | ---: | --- | --- | --- | --- |
-| `genres` | on | Discogs, Last.fm, iTunes | Release list | Album list | Noqlen-resolved classification; one specific trustworthy genre by default, with no implicit parents. |
-| `styles` | on | Discogs | Plural release field | Typed plural Album field | Source style/subgenre metadata remains ordered and lossless; recognized values may also inform `genres`, and scalar `style` is read only as a legacy fallback. |
+| `genres` | on | MusicBrainz, Discogs, Last.fm, iTunes | Release list | Album list | Noqlen-resolved classification; one specific trustworthy genre by default, with no implicit parents. |
+| `styles` | on | Discogs, MusicBrainz, Last.fm | Plural release field | Typed plural Album field | Source style/subgenre metadata and classified semantic style evidence remain ordered and lossless; recognized values may also inform `genres`, and scalar `style` is read only as a legacy fallback. |
 | `labels` | on | Discogs, MusicBrainz | Singular release field | Singular Album field | Multiple values block. |
 | `catalog_numbers` | on | Discogs, MusicBrainz | Singular release field | Singular Album field | Multiple values block. |
 | `barcodes` | on | Discogs, MusicBrainz | Singular release field | Singular Album field | Multiple values block. |
@@ -35,9 +35,9 @@ the resolved genre while remaining present in `styles`; this is intentional,
 because the two fields preserve different semantics.
 
 Ordinary `--apply --write` synchronizes only currently supported MediaFile
-targets from the prepared plan. Identity workflows do not use this table or field switches. They always handle
-exactly four MusicBrainz fields: release, release group, recording, and release
-track IDs.
+targets from the prepared plan. Identity workflows do not use this table or
+field switches. They always handle exactly four MusicBrainz fields: release,
+release group, recording, and release track IDs.
 
 BPM is canonical `float`. `round: true` is useful for formats whose BPM tag
 cannot preserve a fraction. Artwork remains a separate verified binary pipeline,
