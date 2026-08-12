@@ -173,6 +173,7 @@ The `2.0.1` gate must include:
 - release workflow validates the tag/version match;
 - PyPI Trusted Publishing succeeds;
 - public PyPI version/artifacts are verified;
+- GitHub Release `v2.0.1` is created from the published tag and verified;
 - Read the Docs recognizes/builds `v2.0.1`;
 - `/en/stable/` is verified to resolve to the Documentation v2 content after the
   new stable version is available.
@@ -224,6 +225,8 @@ existing Publish Release workflow
     ↓
 PyPI verification
     ↓
+create and verify GitHub Release v2.0.1
+    ↓
 Read the Docs v2.0.1/stable verification
 ```
 
@@ -231,8 +234,8 @@ The existing release workflow remains the publication mechanism. It already
 fails closed unless the release tag is contained in `main` and exactly matches
 `project.version`.
 
-A GitHub Release may be created from the successfully published tag using concise
-release notes derived from the `2.0.1` changelog entry.
+After successful publication, create the GitHub Release from the existing
+`v2.0.1` tag using concise release notes derived from the `2.0.1` changelog entry.
 
 ## Non-Goals
 
@@ -259,5 +262,6 @@ The release is complete when all of the following are true:
 5. `v2.0.1` is published successfully through the existing trusted release
    workflow.
 6. PyPI serves `beets-noqlenmeta==2.0.1` with the simplified README metadata.
-7. Read the Docs has a successful `v2.0.1` build and the public `stable` URL
+7. GitHub Release `v2.0.1` exists and points to the published tag.
+8. Read the Docs has a successful `v2.0.1` build and the public `stable` URL
    displays the redesigned Documentation v2 rather than the old v2.0.0 manual.
