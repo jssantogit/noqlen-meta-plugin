@@ -173,6 +173,22 @@ def test_readme_is_concise_project_landing_page() -> None:
     assert "beet help noqlenmeta" in readme
 
 
+def test_v2_0_1_release_checklist_is_present() -> None:
+    checklist = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
+
+    assert "## Version 2.0.1 Documentation Release" in checklist
+    assert "Package version is `2.0.1`." in checklist
+    assert (
+        "README contains only the approved summary, Capabilities, and Installation structure."
+        in checklist
+    )
+    assert "Create `v2.0.1` tag on a commit contained in `main`." in checklist
+    assert "Publish `2.0.1` to PyPI through Trusted Publishing." in checklist
+    assert "Create and verify the GitHub Release for `v2.0.1`." in checklist
+    assert "Read the Docs builds `v2.0.1` successfully." in checklist
+    assert "`/en/stable/` displays the redesigned Documentation v2" in checklist
+
+
 def test_public_documentation_gate() -> None:
     result = subprocess.run(
         [sys.executable, "scripts/check_public_docs.py"],
