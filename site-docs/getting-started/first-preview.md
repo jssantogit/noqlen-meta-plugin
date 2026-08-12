@@ -43,9 +43,10 @@ After reviewing the exact query:
 beet nm --apply album:"Example Album"
 ```
 
-`--apply` changes eligible ordinary fields in the beets database only. It does
-not change audio-file tags. Strict mode is the default, so one `REVIEW` or
-mapping blocker prevents all ordinary Noqlen changes for that album.
+`--apply` changes eligible ordinary fields in the beets database and may write
+an authorized verified `cover.jpg` sidecar and persist `Album.artpath`. It does
+not mutate audio files without `--write`. Strict mode is the default, so one
+`REVIEW` or mapping blocker prevents all ordinary Noqlen changes for that album.
 
 If you intentionally want safe fields while preserving unresolved ones, read
 [Strict and Partial](../concepts/strict-vs-partial.md) before using:

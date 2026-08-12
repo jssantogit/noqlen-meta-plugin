@@ -67,9 +67,14 @@ def test_public_release_state_is_consistent() -> None:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     home = (ROOT / "site-docs/index.md").read_text(encoding="utf-8")
     release = (ROOT / "site-docs/project/release.md").read_text(encoding="utf-8")
+    permissions = (ROOT / "site-docs/concepts/preview-apply-write.md").read_text(
+        encoding="utf-8"
+    )
     checklist = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
-    release_words = " ".join(release.split())
-    combined = f"{readme}\n{home}\n{release}".casefold()
+    release_words = " ".join(release.split()).casefold()
+    combined = " ".join(
+        f"{readme}\n{home}\n{release}\n{permissions}".split()
+    ).casefold()
 
     assert len(readme.splitlines()) < 500
     assert "[MIT License](LICENSE)" in readme
@@ -89,7 +94,20 @@ def test_public_release_state_is_consistent() -> None:
     assert "https://noqlen-meta-plugin.readthedocs.io/en/v1.0.0/" in release
     assert "Version `1.0.0` was published on PyPI" in readme
     assert "## Unreleased" in changelog
-    assert changelog.index("## Unreleased") < changelog.index("## 1.0.0")
+    assert "## 2.0.0 - 2026-08-11" in changelog
+    assert (
+        changelog.index("## Unreleased")
+        < changelog.index("## 2.0.0 - 2026-08-11")
+        < changelog.index("## 1.0.0 - 2026-08-02")
+    )
+    assert "Repository release candidate: `2.0.0`" in release
+    assert "Currently published release: `1.0.0` (2026-08-02)" in release
+    assert "main merge, tag, publication, and versioned documentation remain pending" in (
+        release_words
+    )
+    assert "verified `cover.jpg` sidecars may be written" in combined
+    assert "audio files remain unchanged unless `--write`" in combined
+    assert "adding `--write` never triggers another provider call" in combined
     assert "[x] MIT License selected and added" in checklist
     assert "[x] Repository visibility changed to public" in checklist
     assert "[x] PyPI project ownership established" in checklist

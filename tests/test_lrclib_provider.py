@@ -258,7 +258,7 @@ def test_production_transport_uses_only_exact_endpoint_and_identifying_user_agen
     }
     assert "/api/search" not in str(captured["url"])
     assert "beets-noqlenmeta/" in str(captured["user_agent"])
-    assert "1.0.0" in str(captured["user_agent"])
+    assert importlib.metadata.version("beets-noqlenmeta") in str(captured["user_agent"])
     assert captured["timeout"] == 10.0
     assert response.read_sizes == [2 * 1024 * 1024 + 1]
 

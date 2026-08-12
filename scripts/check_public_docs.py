@@ -13,6 +13,11 @@ import yaml
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.configuration import default_config
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 CI job
+    import tomli as tomllib
+
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "site-docs"
 README = ROOT / "README.md"
@@ -136,6 +141,13 @@ def check() -> list[str]:
     public_pages = _public_markdown()
     public_text = "\n".join(path.read_text(encoding="utf-8") for path in public_pages)
     folded = public_text.casefold()
+    public_words = " ".join(public_text.split()).casefold()
+
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+        "project"
+    ]
+    if project["version"] != "2.0.0":
+        failures.append("active package version is not 2.0.0")
 
     command = NoqlenMetaPlugin().commands()[0]
     long_options = sorted(
@@ -237,8 +249,23 @@ def check() -> list[str]:
         failures.append("README does not record the v1.0.0 PyPI publication")
     if "## Unreleased" not in changelog_text:
         failures.append("CHANGELOG.md does not contain an Unreleased section")
-    if changelog_text.index("## Unreleased") > changelog_text.index("## 1.0.0"):
-        failures.append("CHANGELOG.md Unreleased section must precede v1.0.0")
+    if "## 2.0.0 - 2026-08-11" not in changelog_text:
+        failures.append("CHANGELOG.md does not contain the dated 2.0.0 release section")
+    elif not (
+        changelog_text.index("## Unreleased")
+        < changelog_text.index("## 2.0.0 - 2026-08-11")
+        < changelog_text.index("## 1.0.0 - 2026-08-02")
+    ):
+        failures.append("CHANGELOG.md must order Unreleased, 2.0.0, then 1.0.0")
+
+    required_release_state = (
+        "repository release candidate: `2.0.0`",
+        "currently published release: `1.0.0` (2026-08-02)",
+        "main merge, tag, publication, and versioned documentation remain pending",
+    )
+    for phrase in required_release_state:
+        if phrase not in public_words:
+            failures.append(f"public docs omit v2 release-candidate state: {phrase}")
 
     required_distinctions = (
         "`--apply`",
@@ -253,12 +280,14 @@ def check() -> list[str]:
     for phrase in required_distinctions:
         if phrase.casefold() not in folded:
             failures.append(f"public docs omit required distinction: {phrase}")
-    database_only_apply = (
-        "--apply` authorizes database changes only",
-        "--apply` changes eligible ordinary fields in the beets database only",
+    required_v2_permissions = (
+        "verified `cover.jpg` sidecars may be written",
+        "audio files remain unchanged unless `--write`",
+        "adding `--write` never triggers another provider call",
     )
-    if not any(statement in folded for statement in database_only_apply):
-        failures.append("public docs do not explicitly state that --apply is database-only")
+    for phrase in required_v2_permissions:
+        if phrase not in public_words:
+            failures.append(f"public docs omit v2 permission boundary: {phrase}")
     separate_musicbrainz = (
         "does not control this identity source",
         "neither enables nor disables identity audit",

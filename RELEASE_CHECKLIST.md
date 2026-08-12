@@ -42,3 +42,28 @@
 - [x] Published wheel and sdist hashes match the workflow artifacts attached to the GitHub Release.
 - [x] GitHub Release `v1.0.0` was created from the existing tag.
 - [x] Read the Docs `stable`, `latest`, and `v1.0.0` versions are active and green.
+
+## Version 2.0.0 Release Candidate
+
+### Candidate Preparation
+
+- [x] Package version is `2.0.0`.
+- [x] Changelog contains `2.0.0 - 2026-08-11`.
+- [x] Public docs distinguish the prepared `2.0.0` candidate from the currently published `1.0.0` release.
+- [x] Full offline test suite and Ruff pass.
+- [x] Python 3.10 through 3.14 CI matrix passes.
+- [x] beets 2.12.0 and latest below 3 compatibility lanes pass.
+- [x] `[audio]` Librosa test lane passes.
+- [x] Public documentation validation and strict MkDocs build pass.
+- [x] Package build, strict Twine check, distribution inspection, and clean-install smoke test pass.
+- [x] Release-readiness diff contains no unintended functional feature work.
+
+### Owner-Authorized Release Execution
+
+- [ ] Merge the v2 release candidate into `main`.
+- [ ] Confirm final `main` CI.
+- [ ] Create `v2.0.0` tag on a commit contained in `main`.
+- [ ] Allow the tag workflow to build and publish through PyPI Trusted Publishing.
+- [ ] Create and verify the GitHub Release for `v2.0.0`.
+- [ ] Publish `2.0.0` to PyPI and verify its artifacts.
+- [ ] Verify the versioned Read the Docs 2.0.0 build and stable alias.
