@@ -1,66 +1,37 @@
 # Noqlen Meta
 
-Noqlen Meta adds multi-provider metadata enrichment and MusicBrainz identity
-tools to beets. You will learn how to preview changes safely, apply selected
-changes to the beets database, and choose the correct file-tag workflow.
+Noqlen Meta enriches music managed by beets. It complements beets' matching and
+library management with release, track, and artist metadata from focused
+sources.
 
-beets remains responsible for matching music and managing the library. Noqlen
-does not rematch ordinary enrichment targets. It enriches releases and tracks
-that beets has already selected, or separately audits their MusicBrainz IDs.
+## What It Can Add
 
-## Why Use It?
+- genres, styles, moods, labels, catalog details, and release dates;
+- plain lyrics plus language and artist geography metadata;
+- verified Cover Art Archive album covers;
+- optional local BPM analysis through Librosa;
+- separate MusicBrainz identity and AcoustID evidence workflows.
 
-- Enrich releases, tracks, and artists with genres, styles, moods, languages,
-  geography, and lyrics from narrow provider contributions.
-- Select verified Cover Art Archive album artwork and optionally analyze local
-  BPM through the `[audio]` Librosa extra.
-- Review conflicts and target limitations before changing anything.
-- Synchronize supported ordinary metadata through a verified
-  `--apply --write` workflow.
-- Repair four MusicBrainz identity fields only when evidence is complete and
-  unambiguous.
-- Synchronize those four confirmed database fields to supported media files
-  through a separate, verified workflow.
+Preview is the default. You can inspect every proposal before authorizing a
+database change, artwork sidecar, or audio-file update.
 
-## Try It Safely
+## Get Started
 
-Install and enable the plugin, enable one provider, then preview an existing
-album:
+Follow [Start Here](start-here/index.md) for one continuous path from
+installation to preview, apply, and optional file synchronization. When you are
+ready to choose fields and providers, continue to the Configuration section.
 
-```bash
-beet nm album:"Example Album"
-```
+Already know what you need? Use the
+[Technical Reference](technical-reference/index.md) for exact options, defaults,
+and compatibility contracts.
 
-Preview can contact enabled providers but writes neither the database nor
-audio files. Continue with [Getting Started](getting-started/index.md), or use
-the [command reference](technical-reference/command-line.md) when you already know beets.
+## Project
 
-## Where To Go
+- [PyPI](https://pypi.org/project/beets-noqlenmeta/)
+- [GitHub repository](https://github.com/jssantogit/noqlen-meta-plugin)
+- [Release information](project/release.md)
+- [MIT License](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE)
 
-- [Getting Started](getting-started/index.md): install through first apply.
-- [Concepts](concepts/index.md): understand databases, tags, modes, and status.
-- [How-to guides](guides/index.md): complete one practical workflow.
-- [Technical Reference](technical-reference/index.md): exact flags, configuration, providers, and fields.
-- [Troubleshooting](troubleshooting/index.md): resolve a blocked or surprising result.
-- [Advanced safety](advanced/safety.md): inspect write guarantees and limitations.
-
-The canonical public documentation is live at
-[https://noqlen-meta.readthedocs.io/en/stable/](https://noqlen-meta.readthedocs.io/en/stable/).
-The Read the Docs project slug is `noqlen-meta`; `stable` is the canonical
-public entry point.
-
-Noqlen Meta `2.0.0` is the current stable release and is published on PyPI and
-GitHub. The explicit versioned Read the Docs `v2.0.0` build remains a separate
-post-release verification item.
-
-## License And Repository Status
-
-Noqlen Meta is MIT licensed. The repository's root
-[`LICENSE`](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE)
-is the canonical license text.
-
-The GitHub repository is public. Version `2.0.0` is available from
-[PyPI](https://pypi.org/project/beets-noqlenmeta/) and the corresponding
-[GitHub Release](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.0).
-The license choice does not imply endorsement by beets, MusicBrainz, Discogs,
-Navidrome, Last.fm, Apple, LRCLIB, AcoustID, or any provider.
+The GitHub repository is public. Noqlen Meta is MIT licensed, and the root
+`LICENSE` file is the canonical license text. Version 2.0.0 is the current
+stable release.

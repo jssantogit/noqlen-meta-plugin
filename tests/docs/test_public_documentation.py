@@ -18,6 +18,27 @@ def test_technical_reference_uses_canonical_paths() -> None:
     assert not (docs / "reference").exists()
 
 
+def test_start_here_is_a_continuous_existing_library_tutorial() -> None:
+    start = ROOT / "site-docs" / "start-here"
+    required = {
+        "index.md",
+        "installation.md",
+        "basic-configuration.md",
+        "first-preview.md",
+        "understanding-results.md",
+        "apply-changes.md",
+        "write-files.md",
+    }
+
+    assert required == {path.name for path in start.glob("*.md")}
+    assert not (ROOT / "site-docs" / "getting-started").exists()
+    assert 'beet nm album:"Discovery"' in (start / "first-preview.md").read_text()
+    assert 'beet nm --apply album:"Discovery"' in (start / "apply-changes.md").read_text()
+    assert 'beet nm --apply --write album:"Discovery"' in (
+        start / "write-files.md"
+    ).read_text()
+
+
 def test_default_config_is_fresh_and_complete() -> None:
     first = default_config()
     second = default_config()

@@ -48,10 +48,14 @@ validation:
 
 nav:
   - Home: index.md
-  - Getting Started:
-      - getting-started/index.md
-      - Installation: getting-started/installation.md
-      - First Preview: getting-started/first-preview.md
+  - Start Here:
+      - What is Noqlen Meta?: start-here/index.md
+      - Installation: start-here/installation.md
+      - Basic Configuration: start-here/basic-configuration.md
+      - Your First Preview: start-here/first-preview.md
+      - Understanding the Results: start-here/understanding-results.md
+      - Apply Your First Changes: start-here/apply-changes.md
+      - Write Changes to Your Files: start-here/write-files.md
   - Concepts:
       - concepts/index.md
       - Database, Files, and Navidrome: concepts/database-files-navidrome.md
