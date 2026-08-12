@@ -26,6 +26,7 @@ RELEASE_CHECKLIST = ROOT / "RELEASE_CHECKLIST.md"
 COMMAND_REFERENCE = DOCS / "technical-reference" / "command-line.md"
 CONFIG_REFERENCE = DOCS / "technical-reference" / "configuration.md"
 FULL_CONFIG = DOCS / "examples" / "full-config.yaml"
+FULL_CONFIG_PAGE = DOCS / "configuration" / "full-example.md"
 RELEASE_PAGE = DOCS / "project" / "release.md"
 READTHEDOCS_URL = "https://noqlen-meta.readthedocs.io/en/stable/"
 PYPI_URL = "https://pypi.org/project/beets-noqlenmeta/"
@@ -169,8 +170,12 @@ def check() -> list[str]:
             failures.append(f"configuration reference omits {path}")
 
     full_config = _load_yaml(FULL_CONFIG)
+    full_config_text = FULL_CONFIG.read_text(encoding="utf-8")
     if not isinstance(full_config, dict) or full_config.get("noqlenmeta") != defaults:
         failures.append("full-config.yaml does not exactly match production defaults")
+    expected_block = f"```yaml\n{full_config_text.strip()}\n```"
+    if expected_block not in FULL_CONFIG_PAGE.read_text(encoding="utf-8"):
+        failures.append("full configuration page does not embed exact production defaults")
     for example in sorted((DOCS / "examples").glob("*.yaml")):
         try:
             parsed = _load_yaml(example)

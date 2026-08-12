@@ -39,6 +39,30 @@ def test_start_here_is_a_continuous_existing_library_tutorial() -> None:
     ).read_text()
 
 
+def test_friendly_configuration_covers_mood_relationship() -> None:
+    configuration = ROOT / "site-docs" / "configuration"
+    required = {
+        "index.md",
+        "fields.md",
+        "providers.md",
+        "genres-styles.md",
+        "moods.md",
+        "artwork.md",
+        "bpm.md",
+        "lyrics-languages.md",
+        "acoustid.md",
+        "advanced-resolution.md",
+        "full-example.md",
+    }
+    page = (configuration / "moods.md").read_text(encoding="utf-8")
+
+    assert required == {path.name for path in configuration.glob("*.md")}
+    assert "fields:" in page
+    assert "moods: true" in page
+    assert "max_moods: 1" in page
+    assert "max_moods: 3" in page
+
+
 def test_default_config_is_fresh_and_complete() -> None:
     first = default_config()
     second = default_config()

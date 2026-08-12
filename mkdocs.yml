@@ -56,6 +56,18 @@ nav:
       - Understanding the Results: start-here/understanding-results.md
       - Apply Your First Changes: start-here/apply-changes.md
       - Write Changes to Your Files: start-here/write-files.md
+  - Configuration:
+      - Configuration Overview: configuration/index.md
+      - Fields: configuration/fields.md
+      - Providers: configuration/providers.md
+      - Genres & Styles: configuration/genres-styles.md
+      - Moods: configuration/moods.md
+      - Artwork: configuration/artwork.md
+      - BPM: configuration/bpm.md
+      - Lyrics & Languages: configuration/lyrics-languages.md
+      - AcoustID: configuration/acoustid.md
+      - Advanced Resolution: configuration/advanced-resolution.md
+      - Full Configuration Example: configuration/full-example.md
   - Concepts:
       - concepts/index.md
       - Database, Files, and Navidrome: concepts/database-files-navidrome.md
