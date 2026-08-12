@@ -5,13 +5,19 @@ behavior. Enabling a provider does not make it support every field.
 
 | Provider | Enablement/credentials | Scope and fields | Ordinary library | Importer | Identity requirement |
 | --- | --- | --- | ---: | ---: | --- |
-| Discogs | `providers.discogs.enabled`; optional extra and token for search | Release: genres, styles, labels, catalog numbers, barcodes, country, year, media, format descriptions | Yes | Yes | Direct release ID preferred; conservative search otherwise. |
-| MusicBrainz enrichment | `providers.musicbrainz.enabled`; no plugin credential | Release: labels, catalog numbers, barcode, country, year, media, genres; Track: genres, moods, lyrics languages; Artist: genres, moods, countries, areas | Yes | Yes | Exact existing Release/Recording/Work/Artist MBIDs; no fuzzy rematching. Artist languages are derived from current-target Work languages. |
+| Discogs | `providers.discogs.enabled`; optional extra and token for search | Release: genres, structured ordered styles, labels, catalog numbers, barcodes, country, year, media, format descriptions | Yes | Yes | Direct release ID preferred; conservative search otherwise. |
+| MusicBrainz enrichment | `providers.musicbrainz.enabled`; no plugin credential | Exact release metadata includes labels, catalog numbers, barcode, country, year, media, and genres. Release/Recording/Artist genres and community tags also provide classified semantic evidence for genres/styles/moods; Recording-to-Work and Artist/Area lookups provide language and geography metadata where enabled. | Yes | Yes | Exact existing Release/Recording/Work/Artist MBIDs; no fuzzy rematching. Artist languages are derived from current-target Work languages. |
 | Last.fm | `providers.lastfm.enabled`; uses beets' shared API key | Release, Track, Artist: classified genres, styles, moods | Yes | Yes | Scoped fallback while requested semantic fields remain unresolved. |
 | iTunes | `providers.itunes.enabled`; no key; two-letter storefront | Release: genre, year | Yes | Yes | Direct collection/UPC preferred, then exact normalized search. |
 | LRCLIB | `providers.lrclib.enabled`; no key | Track: plain and synchronized lyrics | Items | Yes | Exact title/artist/album/duration signature, about two-second duration tolerance; synchronized lyrics have no lossless writable target. |
 | Cover Art Archive | `providers.coverartarchive.enabled`; no key; enabled by default | Album: one approved main front | Yes | Yes | Exact Release first; Release Group only after definitive absence/no eligible front. |
 | MusicBrainz identity source | Importer `identity.enabled` or CLI `--identity`; no plugin credential | Separate four-MBID audit evidence | Identity mode only | Identity importer only | Structural candidate scoring and complete track assignment. |
+
+MusicBrainz has an important distinction: its adapter capability tables describe
+structured fields emitted directly at a scope, while the semantic pipeline can
+also classify exact-entity community tags into canonical genres, styles, and
+moods. Those classified values are still subject to field authority, confidence,
+and mapping rules; unknown tags are not accepted.
 
 ## Requests, Pacing, And Caching
 
@@ -22,8 +28,11 @@ process-local optimizations, not persistent product state or a guarantee that
 a service will be available.
 
 - Discogs prefers a direct release ID; search is bounded and can be ambiguous.
-- MusicBrainz enrichment performs one exact release lookup.
-- Last.fm contributes at most three accepted weighted genres.
+- MusicBrainz enrichment uses exact known MBIDs for the release and any required
+  Recording, Work, Artist, or Area semantic lookups; it does not fuzzy-rematch
+  those entities.
+- Last.fm contributes only vocabulary-classified semantic tags and is used as a
+  scoped fallback while requested semantic fields remain unresolved.
 - iTunes examines at most ten search results and requests no artwork/previews.
 - LRCLIB uses exact `/api/get`, has no search fallback, and preserves raw lyrics
   privately while preview displays counts only.
