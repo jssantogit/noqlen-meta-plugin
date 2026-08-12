@@ -4,6 +4,16 @@ All notable user-facing changes are recorded here.
 
 ## Unreleased
 
+## 2.0.1 - 2026-08-12
+
+### Changed
+
+- Redesigned beginner-first public documentation is included in the new stable
+  release tag.
+- Simplified the project README to a concise summary, capability list, and
+  installation guide instead of duplicating the full manual.
+- Corrected documentation and release metadata carried forward after `2.0.0`.
+
 ## 2.0.0 - 2026-08-11
 
 ### Added
