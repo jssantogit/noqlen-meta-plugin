@@ -203,7 +203,7 @@ def test_python_metadata_docs_and_ci_matrix_agree() -> None:
         if classifier.startswith("Programming Language :: Python :: 3.")
     )
     ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    compatibility = (ROOT / "site-docs/reference/compatibility.md").read_text(
+    compatibility = (ROOT / "site-docs/technical-reference/compatibility.md").read_text(
         encoding="utf-8"
     )
 

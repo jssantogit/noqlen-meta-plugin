@@ -48,36 +48,66 @@ validation:
 
 nav:
   - Home: index.md
-  - Getting Started:
-      - getting-started/index.md
-      - Installation: getting-started/installation.md
-      - First Preview: getting-started/first-preview.md
-  - Concepts:
-      - concepts/index.md
-      - Database, Files, and Navidrome: concepts/database-files-navidrome.md
-      - Preview, Apply, and Write: concepts/preview-apply-write.md
-      - Strict and Partial: concepts/strict-vs-partial.md
-      - Result Statuses: concepts/result-statuses.md
-      - Providers and Field Authority: concepts/providers-and-field-authority.md
-  - How-to Guides:
-      - guides/index.md
-      - Import Enrichment: guides/import-enrichment.md
-      - Existing Library: guides/existing-library.md
-      - MusicBrainz Identity: guides/musicbrainz-identity.md
-      - Identity Tags: guides/identity-tags.md
-      - Navidrome Workflow: guides/navidrome.md
-      - Whole Library: guides/whole-library.md
-  - Reference:
-      - reference/index.md
-      - Commands: reference/commands.md
-      - Configuration: reference/configuration.md
-      - Providers: reference/providers.md
-      - Fields: reference/fields.md
-      - Compatibility: reference/compatibility.md
-      - beets Interaction: reference/beets-interaction.md
-  - Troubleshooting: troubleshooting/index.md
+  - Start Here:
+      - What is Noqlen Meta?: start-here/index.md
+      - Installation: start-here/installation.md
+      - Basic Configuration: start-here/basic-configuration.md
+      - Your First Preview: start-here/first-preview.md
+      - Understanding the Results: start-here/understanding-results.md
+      - Apply Your First Changes: start-here/apply-changes.md
+      - Write Changes to Your Files: start-here/write-files.md
+  - Configuration:
+      - Configuration Overview: configuration/index.md
+      - Fields: configuration/fields.md
+      - Providers: configuration/providers.md
+      - Genres & Styles: configuration/genres-styles.md
+      - Moods: configuration/moods.md
+      - Artwork: configuration/artwork.md
+      - BPM: configuration/bpm.md
+      - Lyrics & Languages: configuration/lyrics-languages.md
+      - AcoustID: configuration/acoustid.md
+      - Advanced Resolution: configuration/advanced-resolution.md
+      - Full Configuration Example: configuration/full-example.md
+  - Commands:
+      - Command Overview: commands/index.md
+      - Preview Metadata: commands/preview.md
+      - Apply Metadata: commands/apply.md
+      - Write Metadata to Files: commands/write-files.md
+      - Process the Whole Library: commands/whole-library.md
+      - Repair MusicBrainz Identity: commands/identity.md
+      - Use AcoustID: commands/acoustid.md
+      - Sync Identity Tags: commands/identity-tags.md
+  - Recipes:
+      - Recipes: recipes/index.md
+      - Enrich an Existing Library: recipes/existing-library.md
+      - Enrich During Import: recipes/import-enrichment.md
+      - Add or Replace Album Covers: recipes/artwork.md
+      - Analyze BPM Locally: recipes/local-bpm.md
+      - Add Lyrics and Language Metadata: recipes/lyrics-languages.md
+      - Repair MusicBrainz IDs: recipes/repair-musicbrainz-ids.md
+      - Safely Update an Entire Library: recipes/whole-library.md
+  - Troubleshooting:
+      - Common Problems: troubleshooting/index.md
+      - Nothing Was Changed: troubleshooting/nothing-changed.md
+      - REVIEW and BLOCKED Results: troubleshooting/review-blocked.md
+      - Provider Problems: troubleshooting/providers.md
+      - File Writing Problems: troubleshooting/file-writing.md
+      - AcoustID Problems: troubleshooting/acoustid.md
+  - Technical Reference:
+      - technical-reference/index.md
+      - Configuration Reference: technical-reference/configuration.md
+      - Command-line Reference: technical-reference/command-line.md
+      - Fields Reference: technical-reference/fields.md
+      - Providers Reference: technical-reference/providers.md
+      - beets Interaction: technical-reference/beets-interaction.md
+      - Compatibility: technical-reference/compatibility.md
   - Advanced:
-      - Safety: advanced/safety.md
+      - advanced/index.md
+      - Database vs File Tags: advanced/database-vs-file-tags.md
+      - Preview, Apply and Write: advanced/preview-apply-write.md
+      - Strict vs Partial: advanced/strict-vs-partial.md
+      - Provider Authority and Resolution: advanced/provider-authority-resolution.md
+      - Safety Guarantees: advanced/safety.md
       - Architecture: advanced/architecture.md
   - Project:
       - Changelog: project/changelog.md

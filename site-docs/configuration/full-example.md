@@ -1,0 +1,104 @@
+# Full Configuration Example
+
+This is a reference example, not a recommended starter configuration.
+
+The block below exactly matches the production defaults represented by
+`full-config.yaml`:
+
+```yaml
+plugins:
+  - noqlenmeta
+
+noqlenmeta:
+  preview: true
+  apply: false
+  apply_mode: strict
+
+  identity:
+    enabled: false
+    preview: true
+    apply: false
+
+  acoustid:
+    enabled: false
+    reuse_existing: true
+    compute_missing: false
+    lookup: true
+    use_for_identity: true
+    min_score: 0.90
+    min_margin: 0.05
+    max_results: 5
+    max_recordings_per_result: 10
+    timeout_seconds: 15.0
+    requests_per_second: 3.0
+    cache_entries: 256
+    fpcalc: fpcalc
+
+  fields:
+    genres: true
+    styles: true
+    labels: true
+    catalog_numbers: true
+    barcodes: true
+    country: true
+    year: true
+    media: true
+    format_descriptions: true
+    moods: true
+    bpm: true
+    lyrics_languages: true
+    artist_countries: true
+    artist_areas: false
+    artist_languages: true
+    lyrics: false
+    synced_lyrics: false
+    cover: true
+
+  genres:
+    num_genres: 1
+    promote_styles: true
+
+  moods:
+    max_moods: 1
+
+  providers:
+    discogs:
+      enabled: false
+      user_token: ""
+    musicbrainz:
+      enabled: true
+    lastfm:
+      enabled: false
+    itunes:
+      enabled: false
+      storefront: us
+    lrclib:
+      enabled: false
+    coverartarchive:
+      enabled: true
+
+  artwork:
+    size: original
+    replace_existing: false
+
+  bpm:
+    round: false
+    recalculate_existing: false
+    octave_normalization: false
+    octave_range:
+      min: 70
+      max: 180
+
+  resolution:
+    authority: {}
+    min_confidence: {}
+    preserve_existing: {}
+
+  local_analysis:
+    bpm:
+      enabled: false
+      analysis_mode: full
+      window_seconds: 90
+    mood:
+      enabled: false
+```

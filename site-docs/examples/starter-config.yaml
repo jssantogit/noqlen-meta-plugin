@@ -1,0 +1,21 @@
+plugins:
+  - noqlenmeta
+
+noqlenmeta:
+  providers:
+    musicbrainz:
+      enabled: true
+    coverartarchive:
+      enabled: true
+
+  fields:
+    genres: true
+    styles: true
+    moods: true
+    cover: true
+
+  genres:
+    num_genres: 1
+
+  moods:
+    max_moods: 1

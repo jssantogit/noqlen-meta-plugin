@@ -4,10 +4,129 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.configuration import default_config
 
 ROOT = Path(__file__).parents[2]
+
+
+def test_technical_reference_uses_canonical_paths() -> None:
+    docs = ROOT / "site-docs"
+
+    assert (docs / "technical-reference" / "configuration.md").is_file()
+    assert (docs / "technical-reference" / "command-line.md").is_file()
+    assert not (docs / "reference").exists()
+
+
+def test_start_here_is_a_continuous_existing_library_tutorial() -> None:
+    start = ROOT / "site-docs" / "start-here"
+    required = {
+        "index.md",
+        "installation.md",
+        "basic-configuration.md",
+        "first-preview.md",
+        "understanding-results.md",
+        "apply-changes.md",
+        "write-files.md",
+    }
+
+    assert required == {path.name for path in start.glob("*.md")}
+    assert not (ROOT / "site-docs" / "getting-started").exists()
+    assert 'beet nm album:"Discovery"' in (start / "first-preview.md").read_text()
+    assert 'beet nm --apply album:"Discovery"' in (start / "apply-changes.md").read_text()
+    assert 'beet nm --apply --write album:"Discovery"' in (
+        start / "write-files.md"
+    ).read_text()
+
+
+def test_friendly_configuration_covers_mood_relationship() -> None:
+    configuration = ROOT / "site-docs" / "configuration"
+    required = {
+        "index.md",
+        "fields.md",
+        "providers.md",
+        "genres-styles.md",
+        "moods.md",
+        "artwork.md",
+        "bpm.md",
+        "lyrics-languages.md",
+        "acoustid.md",
+        "advanced-resolution.md",
+        "full-example.md",
+    }
+    page = (configuration / "moods.md").read_text(encoding="utf-8")
+
+    assert required == {path.name for path in configuration.glob("*.md")}
+    assert "fields:" in page
+    assert "moods: true" in page
+    assert "max_moods: 1" in page
+    assert "max_moods: 3" in page
+
+
+def test_command_guides_cover_core_user_goals() -> None:
+    docs = ROOT / "site-docs" / "commands"
+
+    assert "beet nm QUERY" in (docs / "preview.md").read_text()
+    assert "beet nm --apply QUERY" in (docs / "apply.md").read_text()
+    assert "beet nm --apply --write QUERY" in (docs / "write-files.md").read_text()
+    assert "beet nm --all" in (docs / "whole-library.md").read_text()
+    assert "beet nm --identity QUERY" in (docs / "identity.md").read_text()
+    assert "beet nm --acoustid QUERY" in (docs / "acoustid.md").read_text()
+
+
+def test_recipes_replace_legacy_guides() -> None:
+    recipes = ROOT / "site-docs" / "recipes"
+    required = {
+        "index.md",
+        "existing-library.md",
+        "import-enrichment.md",
+        "artwork.md",
+        "local-bpm.md",
+        "lyrics-languages.md",
+        "repair-musicbrainz-ids.md",
+        "whole-library.md",
+    }
+
+    assert required == {path.name for path in recipes.glob("*.md")}
+    assert not (ROOT / "site-docs" / "guides").exists()
+
+
+def test_troubleshooting_routes_by_symptom() -> None:
+    troubleshooting = ROOT / "site-docs" / "troubleshooting"
+    required = {
+        "index.md",
+        "nothing-changed.md",
+        "review-blocked.md",
+        "providers.md",
+        "file-writing.md",
+        "acoustid.md",
+    }
+    index = (troubleshooting / "index.md").read_text(encoding="utf-8")
+
+    assert required == {path.name for path in troubleshooting.glob("*.md")}
+    for name in required - {"index.md"}:
+        assert f"({name})" in index
+
+
+def test_public_navigation_matches_v2_information_architecture() -> None:
+    mkdocs = yaml.safe_load((ROOT / "mkdocs.yml").read_text(encoding="utf-8"))
+    labels = [next(iter(entry)) for entry in mkdocs["nav"]]
+
+    assert labels == [
+        "Home",
+        "Start Here",
+        "Configuration",
+        "Commands",
+        "Recipes",
+        "Troubleshooting",
+        "Technical Reference",
+        "Advanced",
+        "Project",
+    ]
+    for legacy in ("getting-started", "concepts", "guides", "reference"):
+        assert not (ROOT / "site-docs" / legacy).exists()
 
 
 def test_default_config_is_fresh_and_complete() -> None:
@@ -67,9 +186,10 @@ def test_public_release_state_is_consistent() -> None:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     home = (ROOT / "site-docs/index.md").read_text(encoding="utf-8")
     release = (ROOT / "site-docs/project/release.md").read_text(encoding="utf-8")
-    permissions = (ROOT / "site-docs/concepts/preview-apply-write.md").read_text(
+    permissions = (ROOT / "site-docs/advanced/preview-apply-write.md").read_text(
         encoding="utf-8"
     )
+    assert not (ROOT / "site-docs" / "concepts").exists()
     checklist = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
     release_words = " ".join(release.split()).casefold()
     combined = " ".join(
