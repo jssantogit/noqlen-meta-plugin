@@ -91,9 +91,7 @@ Keep all exact CLI/config/full-config/nav/secret/safety/release-page checks. Mak
 1. After the existing README length/internal-term check, validate headings and forbidden sections:
 
 ```python
-readme_headings = [
-    line for line in readme_text.splitlines() if line.startswith("#")
-]
+readme_headings = [line for line in readme_text.splitlines() if line.startswith("#")]
 if readme_headings != ["# Noqlen Meta", "## Capabilities", "## Installation"]:
     failures.append("README does not use the approved landing-page structure")
 for forbidden_heading in ("## Documentation", "## First Preview", "## License"):
@@ -112,23 +110,9 @@ for required_install_text in (
         failures.append(f"README installation omits: {required_install_text}")
 ```
 
-2. Remove the README-only MIT link requirement:
+2. Remove the README-only MIT link requirement. Do **not** remove the release-page MIT check or license/package tests.
 
-```python
-if "[MIT License](LICENSE)" not in readme_text:
-    ...
-```
-
-Do **not** remove the release-page MIT check or license/package tests.
-
-3. Replace the README Read the Docs requirement with public-docs-only validation. Delete:
-
-```python
-if f"[Read the Docs]({READTHEDOCS_URL})" not in readme_text:
-    failures.append("README does not link to the canonical live Read the Docs site")
-```
-
-Keep:
+3. Remove the README-only Read the Docs requirement. Keep the public-docs check:
 
 ```python
 if READTHEDOCS_URL not in public_text or "canonical public documentation is live" not in folded:
@@ -142,14 +126,7 @@ if PYPI_URL not in public_text:
     failures.append("public docs do not link to the published PyPI project")
 ```
 
-5. Remove the README version-publication assertion:
-
-```python
-if "version `2.0.0` is published on" not in readme_text.casefold():
-    ...
-```
-
-Do not remove release-page/changelog/checklist release validation.
+5. Remove the README version-publication assertion. Do not remove release-page/changelog/checklist release validation.
 
 - [ ] **Step 3: Replace README with the approved concise content**
 
@@ -229,7 +206,7 @@ pytest tests/docs/test_public_documentation.py::test_readme_is_concise_project_l
 python scripts/check_public_docs.py
 ```
 
-Expected: README test PASS. `check_public_docs.py` may still FAIL only on the intentional `2.0.0` release-state/version assertions that Task 2 updates; it must not fail on README Documentation/License/PyPI/Read the Docs requirements.
+Expected: PASS. At this point the active release metadata is still consistently `2.0.0`; Task 1 changes only the approved README contract.
 
 - [ ] **Step 5: Commit**
 
@@ -262,9 +239,7 @@ Add to `tests/release/test_release_contracts.py`:
 
 ```python
 def test_active_project_version_is_2_0_1() -> None:
-    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
-        "project"
-    ]
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
 
     assert project["version"] == "2.0.1"
 ```
@@ -326,12 +301,12 @@ In `site-docs/project/release.md`:
 
 - change `Current stable release: 2.0.0 (2026-08-11)` to `2.0.1 (2026-08-12)`;
 - change the current PyPI/GitHub Release wording and URL to `v2.0.1`;
-- add a short `## Version 2.0.1` section before the historical `## Version 2.0.0` section explaining that 2.0.1 is a documentation-only patch containing Documentation v2, the concise README, and release/documentation metadata corrections;
+- add a short `## Version 2.0.1` section before the historical `## Version 2.0.0` section;
 - retain the full `## Version 2.0.0` feature history;
-- change the explicit versioned Read the Docs verification note to `v2.0.1` for the active release, while leaving `v2.0.0` historical references only where they describe that historical release;
+- change the explicit versioned Read the Docs verification note to `v2.0.1` for the active release;
 - preserve Publication, Documentation, and License facts.
 
-Use this exact `2.0.1` paragraph:
+Use this exact new section:
 
 ```markdown
 ## Version 2.0.1
@@ -342,7 +317,7 @@ PyPI README to a concise project landing page, and carries forward documentation
 and release-metadata corrections made after 2.0.0. Runtime behavior is unchanged.
 ```
 
-In `site-docs/project/changelog.md`, replace the stale text about `1.0.0` being the current published release with:
+In `site-docs/project/changelog.md`, replace the stale publication paragraph with:
 
 ```markdown
 The canonical changelog contains an empty `Unreleased` section followed by the
@@ -352,13 +327,15 @@ records. Version 2.0.1 is the current stable release.
 
 - [ ] **Step 5: Update `scripts/check_public_docs.py` to the active 2.0.1 contract**
 
-Make these exact release-state changes:
+Change the current release URL:
 
 ```python
 GITHUB_RELEASE_URL = (
     "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.1"
 )
 ```
+
+Change the active version check:
 
 ```python
 if project["version"] != "2.0.1":
@@ -389,27 +366,20 @@ required_release_state = (
 )
 ```
 
-Change the GitHub Release failure wording from v2.0.0 to v2.0.1. Do not add the version back to README validation.
-
-Keep historical v1.0.0/v2.0.0 checklist requirements as historical facts.
+Change the GitHub Release failure wording from v2.0.0 to v2.0.1. Do not add the version back to README validation. Keep historical v1.0.0/v2.0.0 checklist requirements as historical facts.
 
 - [ ] **Step 6: Update the public release-state pytest contract**
 
-In `test_public_release_state_is_consistent()`:
+In `test_public_release_state_is_consistent()`, remove these README-specific requirements because Task 1 intentionally removed them:
 
-Remove these README-specific assertions because Task 1 intentionally removed them:
-
-```python
-assert "[MIT License](LICENSE)" in readme
-assert "João Pedro Rosa dos Santos" in readme
-assert "[Read the Docs](https://noqlen-meta.readthedocs.io/en/stable/)" in readme
-assert "https://pypi.org/project/beets-noqlenmeta/" in readme
-assert "Version `2.0.0` is published on" in readme
-```
+- README MIT License link and copyright-holder text;
+- README Read the Docs link;
+- README PyPI link;
+- README `Version 2.0.0 is published` text.
 
 Do not remove the home/release MIT, PyPI, Read the Docs, permission-boundary, stale-host, or stale-state assertions.
 
-Replace active-release assertions with:
+Replace the active-release assertions with:
 
 ```python
 assert "## 2.0.1 - 2026-08-12" in changelog
@@ -427,7 +397,7 @@ assert "Version 2.0.1 is the current stable release." in (
 ).read_text(encoding="utf-8")
 ```
 
-Keep the assertions that historical `2.0.0` changelog/checklist records still exist.
+Keep assertions that historical `2.0.0` changelog/checklist records still exist.
 
 - [ ] **Step 7: Run release-state tests**
 
@@ -439,7 +409,7 @@ pytest tests/docs/test_public_documentation.py -q
 python scripts/check_public_docs.py
 ```
 
-Expected: PASS except for any intentionally missing `2.0.1` checklist requirements introduced in Task 3; no README/manual duplication failure is acceptable.
+Expected: PASS.
 
 - [ ] **Step 8: Commit**
 
@@ -489,7 +459,7 @@ Expected: FAIL because the `2.0.1` section does not exist yet.
 
 - [ ] **Step 2: Append the focused `2.0.1` checklist section**
 
-Append exactly this section to `RELEASE_CHECKLIST.md`; do not rewrite historical v1/v2.0.0 sections:
+Append this section to `RELEASE_CHECKLIST.md`; do not rewrite historical v1/v2.0.0 sections:
 
 ```markdown
 ## Version 2.0.1 Documentation Release
@@ -502,7 +472,7 @@ Append exactly this section to `RELEASE_CHECKLIST.md`; do not rewrite historical
 - [x] README contains no release-version banner, Documentation section, First Preview section, or License section.
 - [x] Documentation v2 remains the public MkDocs information architecture.
 - [x] Release-readiness diff contains no changes under `beetsplug/noqlenmeta`.
-- [x] Full CI is green on the release pull request.
+- [ ] Full CI is green on the release pull request.
 
 ### Owner-Authorized Release Execution
 
@@ -522,11 +492,11 @@ Append exactly this section to `RELEASE_CHECKLIST.md`; do not rewrite historical
 - [ ] Public `beets-noqlenmeta==2.0.1` clean install discovers `noqlenmeta` and `beet nm --help` works.
 ```
 
-The release-PR implementation may mark the first six Candidate Preparation items complete only after their corresponding changes/checks are true. Mark `Full CI is green on the release pull request` only after the PR CI is actually green; if the checklist is committed before PR CI, leave that one unchecked and update it in a final PR commit after CI succeeds.
+The first six Candidate Preparation items are checked only because Tasks 1-3 and the runtime-diff check establish them. Leave the PR-CI item unchecked until the PR actually passes.
 
 - [ ] **Step 3: Make checklist validation state-tolerant for owner-controlled steps**
 
-Do not require `[ ]` or `[x]` for `2.0.1` external steps, because their state changes after publication. In `scripts/check_public_docs.py`, add semantic phrase checks like:
+Do not require `[ ]` or `[x]` for `2.0.1` external steps, because their state changes after publication. In `scripts/check_public_docs.py`, add semantic phrase checks:
 
 ```python
 required_v2_0_1_checklist_phrases = (
@@ -570,9 +540,9 @@ git commit -m "release: add v2.0.1 publication checklist"
 ### Task 4: Run the complete candidate verification gate and open the release PR
 
 **Files:**
-- Verify: entire repository
-- Verify read-only runtime scope: `beetsplug/noqlenmeta/**`
-- Potentially modify only: `RELEASE_CHECKLIST.md` to mark PR CI complete after it actually succeeds
+- Verify: entire repository.
+- Verify read-only runtime scope: `beetsplug/noqlenmeta/**`.
+- Potentially modify only: `RELEASE_CHECKLIST.md` to mark PR CI complete after it actually succeeds.
 
 **Interfaces:**
 - Consumes: Tasks 1-3.
@@ -614,21 +584,20 @@ git diff main...HEAD -- beetsplug/noqlenmeta
 
 Expected: no output.
 
-Also inspect changed paths:
+Inspect changed paths:
 
 ```bash
 git diff --name-only main...HEAD
 ```
 
-Expected changed implementation/release paths are limited to README, version/changelog/release docs/checklist/tests/validator and the approved Superpowers spec/plan. `.github/workflows/release.yml` should be unchanged.
+Expected implementation/release changes are limited to README, version/changelog/release docs/checklist/tests/validator and the approved Superpowers spec/plan. `.github/workflows/release.yml` must remain unchanged.
 
-- [ ] **Step 4: Remove generated artifacts before committing/opening PR**
+- [ ] **Step 4: Remove generated artifacts before PR**
 
 Run:
 
 ```bash
 rm -rf build dist *.egg-info site
-
 git status --short
 ```
 
@@ -642,7 +611,7 @@ Use title:
 release: prepare Noqlen Meta 2.0.1
 ```
 
-Use a body that states:
+Use body:
 
 ```markdown
 ## Summary
@@ -664,7 +633,7 @@ Use a body that states:
 After this PR is green and merged, verify final main CI, create `v2.0.1` on that main commit, allow the existing Trusted Publishing workflow to publish, create the GitHub Release, and verify Read the Docs `v2.0.1` plus `/en/stable/`.
 ```
 
-- [ ] **Step 6: Wait for and inspect the complete PR CI matrix**
+- [ ] **Step 6: Require the complete PR CI matrix**
 
 Required green lanes:
 
@@ -681,15 +650,15 @@ Required green lanes:
 
 If any lane fails, fix the cause; do not weaken a test or validator unless it is enforcing a requirement explicitly removed by the approved README design.
 
-- [ ] **Step 7: Mark the PR-CI candidate gate complete only after CI is green**
+- [ ] **Step 7: Record green candidate CI only after it is true**
 
-If `RELEASE_CHECKLIST.md` still contains:
+Change:
 
 ```markdown
 - [ ] Full CI is green on the release pull request.
 ```
 
-change it to:
+to:
 
 ```markdown
 - [x] Full CI is green on the release pull request.
@@ -709,7 +678,7 @@ git add RELEASE_CHECKLIST.md
 git commit -m "release: record green v2.0.1 candidate CI"
 ```
 
-Then wait for the fresh CI on that final head and require it to be fully green too.
+Then require the fresh CI on that final commit to become fully green as well.
 
 - [ ] **Step 8: Return the release-candidate handoff**
 
