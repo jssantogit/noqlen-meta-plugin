@@ -47,6 +47,7 @@ class MusicBrainzSemanticClient:
         *,
         cache: CommandEntityCache | None = None,
         fetch_release: EntityFetcher | None = None,
+        fetch_release_group: EntityFetcher | None = None,
         fetch_recording: EntityFetcher | None = None,
         fetch_work: EntityFetcher | None = None,
         fetch_artist: EntityFetcher | None = None,
@@ -55,6 +56,7 @@ class MusicBrainzSemanticClient:
         self.cache = cache or CommandEntityCache()
         self._fetchers = {
             "release": fetch_release or _fetch_release,
+            "release_group": fetch_release_group or _fetch_release_group,
             "recording": fetch_recording or _fetch_recording,
             "work": fetch_work or _fetch_work,
             "artist": fetch_artist or _fetch_artist,
@@ -86,6 +88,9 @@ class MusicBrainzSemanticClient:
     def lookup_release(self, entity_id: str) -> Mapping[str, object] | None:
         return self._lookup("release", entity_id)
 
+    def lookup_release_group(self, entity_id: str) -> Mapping[str, object] | None:
+        return self._lookup("release_group", entity_id)
+
     def lookup_recording(self, entity_id: str) -> Mapping[str, object] | None:
         return self._lookup("recording", entity_id)
 
@@ -112,9 +117,7 @@ class MusicBrainzTrackProvider:
         self.client = client or MusicBrainzSemanticClient()
         self.enabled_fields = set(enabled_fields or self.supported_fields | {"artist_languages"})
 
-    def get_semantic_evidence(
-        self, context: TrackEnrichmentContext
-    ) -> SemanticEvidenceBundle:
+    def get_semantic_evidence(self, context: TrackEnrichmentContext) -> SemanticEvidenceBundle:
         recording_id = _context_mbid(context.external_ids, "musicbrainz.recording")
         if recording_id is None:
             return SemanticEvidenceBundle()
@@ -156,9 +159,7 @@ class MusicBrainzTrackProvider:
                     _PUBLIC_URL.format("recording", recording_id),
                 ),
             )
-        return SemanticEvidenceBundle(
-            metadata, genres, tags, frozenset(unavailable_fields)
-        )
+        return SemanticEvidenceBundle(metadata, genres, tags, frozenset(unavailable_fields))
 
 
 class MusicBrainzArtistProvider:
@@ -174,9 +175,7 @@ class MusicBrainzArtistProvider:
         self.client = client or MusicBrainzSemanticClient()
         self.enabled_fields = set(enabled_fields or self.supported_fields)
 
-    def get_semantic_evidence(
-        self, context: ArtistEnrichmentContext
-    ) -> SemanticEvidenceBundle:
+    def get_semantic_evidence(self, context: ArtistEnrichmentContext) -> SemanticEvidenceBundle:
         artist_id = _context_mbid(context.external_ids, "musicbrainz.artist")
         if artist_id is None:
             return SemanticEvidenceBundle()
@@ -193,9 +192,7 @@ class MusicBrainzArtistProvider:
             )
         area = None
         if self.enabled_fields & {"artist_areas", "artist_countries"}:
-            area = _area_mapping(payload.get("area")) or _area_mapping(
-                payload.get("begin-area")
-            )
+            area = _area_mapping(payload.get("area")) or _area_mapping(payload.get("begin-area"))
         fields: list[tuple[str, tuple[str, ...]]] = []
         unavailable_fields: set[str] = set()
         if area is not None:
@@ -224,13 +221,9 @@ class MusicBrainzArtistProvider:
             )
             for field, value in fields
         )
-        return SemanticEvidenceBundle(
-            metadata, genres, tags, frozenset(unavailable_fields)
-        )
+        return SemanticEvidenceBundle(metadata, genres, tags, frozenset(unavailable_fields))
 
-    def _country_for_area(
-        self, initial_area: Mapping[str, object]
-    ) -> tuple[str | None, bool]:
+    def _country_for_area(self, initial_area: Mapping[str, object]) -> tuple[str | None, bool]:
         country = _structural_country(initial_area)
         if country:
             return country, False
@@ -256,9 +249,7 @@ class MusicBrainzArtistProvider:
             if country:
                 return country, unavailable
             pending.extend(
-                related_id
-                for related_id in _related_ids(area, "area")
-                if related_id not in visited
+                related_id for related_id in _related_ids(area, "area") if related_id not in visited
             )
         return None, unavailable
 
@@ -337,11 +328,15 @@ def _context_mbid(identifiers: Sequence[object], namespace: str) -> str | None:
 
 
 def _work_languages(payload: Mapping[str, object]) -> tuple[str, ...]:
-    attributes = {
-        _text(value).casefold()
-        for value in payload.get("attributes", ())
-        if isinstance(value, str)
-    } if _is_sequence(payload.get("attributes")) else set()
+    attributes = (
+        {
+            _text(value).casefold()
+            for value in payload.get("attributes", ())
+            if isinstance(value, str)
+        }
+        if _is_sequence(payload.get("attributes"))
+        else set()
+    )
     if {"instrumental", "no lyrics"} & attributes:
         return ()
     raw = payload.get("languages")
@@ -425,6 +420,10 @@ def _fetch_release(entity_id: str) -> Mapping[str, object]:
         entity_id,
         includes=["labels", "media", "genres", "tags", "recordings", "artist-credits"],
     )
+
+
+def _fetch_release_group(entity_id: str) -> Mapping[str, object]:
+    return _fetch_generic("release-group", entity_id, [])
 
 
 def _fetch_recording(entity_id: str) -> Mapping[str, object]:

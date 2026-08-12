@@ -3,15 +3,23 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import TypeGuard
 
 from beetsplug.noqlenmeta.domain import (
+    ExternalIdentifier,
     MetadataCandidate,
     ReleaseEnrichmentContext,
     SemanticEvidenceBundle,
     canonical_uuid,
 )
+from beetsplug.noqlenmeta.evidence import (
+    AcquisitionMethod,
+    AcquisitionProvenance,
+    MetadataEvidence,
+    SubjectRef,
+)
+from beetsplug.noqlenmeta.field_contracts import EntityKind
 from beetsplug.noqlenmeta.provider_cache import CommandEntityCache
 from beetsplug.noqlenmeta.providers.base import ProviderError
 from beetsplug.noqlenmeta.providers.musicbrainz_semantic import (
@@ -19,9 +27,17 @@ from beetsplug.noqlenmeta.providers.musicbrainz_semantic import (
     semantic_tags_from_payload,
 )
 from beetsplug.noqlenmeta.providers.specs import MUSICBRAINZ_SPEC, ProviderScope
+from beetsplug.noqlenmeta.release_catalog import (
+    normalize_release_secondary_types,
+    normalize_release_status,
+    normalize_release_type,
+    parse_partial_date,
+)
 
 _MUSICBRAINZ_RELEASE_NAMESPACE = "musicbrainz.release"
 _PUBLIC_RELEASE_URL = "https://musicbrainz.org/release/{}"
+_PUBLIC_RELEASE_GROUP_URL = "https://musicbrainz.org/release-group/{}"
+_RELEASE_GROUP_FIELDS = frozenset({"original_date", "release_type", "release_secondary_types"})
 
 # Confidence represents association with the exact selected release, not a claim
 # that MusicBrainz data can never contain errors.
@@ -38,15 +54,16 @@ class MusicBrainzProvider:
         self,
         *,
         fetch_release: Callable[[str], Mapping[str, object]] | None = None,
+        fetch_release_group: Callable[[str], Mapping[str, object] | None] | None = None,
         cache: CommandEntityCache | None = None,
     ) -> None:
         self._semantic_client = MusicBrainzSemanticClient(
-            cache=cache, fetch_release=fetch_release or _fetch_release
+            cache=cache,
+            fetch_release=fetch_release or _fetch_release,
+            fetch_release_group=fetch_release_group,
         )
 
-    def get_candidates(
-        self, context: ReleaseEnrichmentContext
-    ) -> Sequence[MetadataCandidate]:
+    def get_candidates(self, context: ReleaseEnrichmentContext) -> Sequence[MetadataCandidate]:
         release_mbid = _release_mbid(context)
         if release_mbid is None:
             return ()
@@ -56,9 +73,7 @@ class MusicBrainzProvider:
             raise ProviderError("MusicBrainz release response is invalid")
         return _normalize_release(payload, release_mbid)
 
-    def get_semantic_evidence(
-        self, context: ReleaseEnrichmentContext
-    ) -> SemanticEvidenceBundle:
+    def get_semantic_evidence(self, context: ReleaseEnrichmentContext) -> SemanticEvidenceBundle:
         release_mbid = _release_mbid(context)
         if release_mbid is None:
             return SemanticEvidenceBundle()
@@ -72,6 +87,53 @@ class MusicBrainzProvider:
             scope=ProviderScope.RELEASE,
         )
         return SemanticEvidenceBundle(genres=genres, tags=tags)
+
+    def get_release_catalog_evidence(
+        self,
+        context: ReleaseEnrichmentContext,
+        enabled_fields: Collection[str],
+    ) -> tuple[MetadataEvidence, ...]:
+        """Return requested V3 catalog evidence without changing V2 acquisition."""
+        release_mbid = _release_mbid(context)
+        requested = set(enabled_fields) & {
+            "date",
+            "original_date",
+            "release_type",
+            "release_secondary_types",
+            "release_status",
+        }
+        if release_mbid is None or not requested:
+            return ()
+        payload = self._semantic_client.lookup_release(release_mbid)
+        if not isinstance(payload, Mapping):
+            raise ProviderError("MusicBrainz release response is invalid")
+
+        evidence = list(_release_catalog_evidence(payload, release_mbid, requested))
+        group_fields = requested & _RELEASE_GROUP_FIELDS
+        if not group_fields:
+            return tuple(evidence)
+        nested = payload.get("release_group")
+        if not isinstance(nested, Mapping):
+            return tuple(evidence)
+        group_id = canonical_uuid(nested.get("id"))
+        if group_id is None:
+            return tuple(evidence)
+        missing = group_fields - {item.field for item in evidence}
+        group_payload = nested
+        if missing:
+            try:
+                looked_up = self._semantic_client.lookup_release_group(group_id)
+            except ProviderError:
+                return tuple(evidence)
+            if not isinstance(looked_up, Mapping):
+                return tuple(evidence)
+            group_payload = looked_up
+        evidence.extend(
+            item
+            for item in _release_group_catalog_evidence(group_payload, group_id, missing)
+            if item.field not in {existing.field for existing in evidence}
+        )
+        return tuple(evidence)
 
 
 def _fetch_release(release_mbid: str) -> Mapping[str, object]:
@@ -131,6 +193,98 @@ def _normalize_release(
             source_url=_PUBLIC_RELEASE_URL.format(release_mbid),
         )
         for field, value in fields
+    )
+
+
+def _release_catalog_evidence(
+    payload: Mapping[str, object], release_mbid: str, requested: set[str]
+) -> tuple[MetadataEvidence, ...]:
+    fields: list[tuple[str, object]] = []
+    if "date" in requested and (date := parse_partial_date(payload.get("date"))):
+        fields.append(("date", date))
+    if "release_status" in requested and (
+        status := normalize_release_status(payload.get("status"))
+    ):
+        fields.append(("release_status", status))
+    nested = payload.get("release_group")
+    if isinstance(nested, Mapping) and (group_id := canonical_uuid(nested.get("id"))):
+        return tuple(
+            _catalog_evidence(
+                field,
+                value,
+                EntityKind.RELEASE,
+                release_mbid,
+                _PUBLIC_RELEASE_URL.format(release_mbid),
+            )
+            for field, value in fields
+        ) + _release_group_catalog_evidence(nested, group_id, requested & _RELEASE_GROUP_FIELDS)
+    return tuple(
+        _catalog_evidence(
+            field,
+            value,
+            EntityKind.RELEASE,
+            release_mbid,
+            _PUBLIC_RELEASE_URL.format(release_mbid),
+        )
+        for field, value in fields
+    )
+
+
+def _release_group_catalog_evidence(
+    payload: Mapping[str, object], group_id: str, requested: Collection[str]
+) -> tuple[MetadataEvidence, ...]:
+    if canonical_uuid(payload.get("id")) != group_id:
+        return ()
+    fields: list[tuple[str, object]] = []
+    if "original_date" in requested and (
+        date := parse_partial_date(payload.get("first_release_date"))
+    ):
+        fields.append(("original_date", date))
+    if "release_type" in requested and (
+        release_type := normalize_release_type(payload.get("primary_type"))
+    ):
+        fields.append(("release_type", release_type))
+    if "release_secondary_types" in requested and (
+        secondary := normalize_release_secondary_types(payload.get("secondary_types"))
+    ):
+        fields.append(("release_secondary_types", secondary))
+    return tuple(
+        _catalog_evidence(
+            field,
+            value,
+            EntityKind.RELEASE_GROUP,
+            group_id,
+            _PUBLIC_RELEASE_GROUP_URL.format(group_id),
+        )
+        for field, value in fields
+    )
+
+
+def _catalog_evidence(
+    field: str,
+    value: object,
+    entity: EntityKind,
+    source_id: str,
+    source_url: str,
+) -> MetadataEvidence:
+    return MetadataEvidence(
+        field=field,
+        value=value,  # type: ignore[arg-type]
+        subject=SubjectRef(
+            entity,
+            (
+                ExternalIdentifier(
+                    f"musicbrainz.{entity.value}",
+                    source_id,
+                ),
+            ),
+        ),
+        provider="musicbrainz",
+        acquisition_scope=ProviderScope.RELEASE,
+        source_id=source_id,
+        source_url=source_url,
+        provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+        confidence=_DIRECT_CONFIDENCE,
     )
 
 
