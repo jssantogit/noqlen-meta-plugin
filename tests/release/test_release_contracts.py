@@ -63,7 +63,9 @@ def _license_metadata(
 
 
 def test_active_project_version_is_2_0_1() -> None:
-    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+        "project"
+    ]
 
     assert project["version"] == "2.0.1"
 
@@ -262,3 +264,94 @@ def test_release_workflow_requires_tag_on_main_before_single_build() -> None:
     assert "pypa/gh-action-pypi-publish@release/v1" in workflow
     assert "uses:" not in publish_boundary
     assert "run:" not in publish_boundary
+
+
+def test_release_checklist_records_completed_v1_release() -> None:
+    checklist = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
+
+    completed = (
+        "[x] Read the Docs project imported and public `latest`, `stable`, and "
+        "`v1.0.0` builds passed.",
+        "[x] PyPI project ownership established by the first successful publication.",
+        "[x] PyPI Trusted Publisher configured",
+        "[x] GitHub environment `pypi` configured with the `v*` deployment tag rule.",
+        "[x] Repository security/private vulnerability reporting route confirmed.",
+        "[x] `v1.0.0` tag created",
+        "[x] Tag version exactly matches",
+        "[x] Tag resolves to a commit contained in remote `main`",
+        "[x] Tag workflow built, checked, and published",
+        "[x] No API token or long-lived publishing credential was used.",
+        "[x] PyPI project name, version, `Requires-Python`, filenames, and file count are correct.",
+        "[x] Published wheel and sdist hashes match the workflow artifacts",
+        "[x] GitHub Release `v1.0.0` was created from the existing tag.",
+        "[x] Read the Docs `stable`, `latest`, and `v1.0.0` versions are active and green.",
+    )
+    pending = (
+        "[ ] PyPI rendered README has been visually reviewed.",
+        "[ ] Public wheel installs in a clean environment and beets discovers `noqlenmeta`.",
+        "[ ] `beet nm --help` works after the public clean install.",
+    )
+
+    assert all(item in checklist for item in completed)
+    assert all(item in checklist for item in pending)
+    assert "[ ] PyPI project ownership established by first publication." not in checklist
+    assert "[ ] `v1.0.0` tag created" not in checklist
+    assert "[ ] Tag workflow builds, checks, and publishes" not in checklist
+
+
+def test_v2_release_version_is_exact() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+        "project"
+    ]
+
+    assert project["version"] == "2.0.1"
+
+
+def test_changelog_orders_unreleased_v2_and_v1() -> None:
+    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    v2 = text.split("## 2.0.0 - 2026-08-11", 1)[1].split(
+        "## 1.0.0 - 2026-08-02", 1
+    )[0]
+
+    assert "## Unreleased" in text
+    assert text.index("## Unreleased") < text.index("## 2.0.1 - 2026-08-12")
+    assert text.index("## 2.0.1 - 2026-08-12") < text.index("## 2.0.0 - 2026-08-11")
+    assert text.index("## 2.0.0 - 2026-08-11") < text.index(
+        "## 1.0.0 - 2026-08-02"
+    )
+    for phrase in (
+        "semantic enrichment",
+        "Cover Art Archive",
+        "Librosa",
+        "file synchronization",
+        "AcoustID",
+        "no force mode",
+    ):
+        assert phrase in v2
+
+
+def test_v2_release_checklist_records_completed_publication() -> None:
+    text = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
+
+    assert "## Version 2.0.0 Release" in text
+    assert "[x] Package version is `2.0.0`." in text
+    assert "[x] Changelog contains `2.0.0 - 2026-08-11`." in text
+    for completed in (
+        "Merge the v2 release candidate into `main`.",
+        "Confirm final `main` CI.",
+        "Create `v2.0.0` tag on a commit contained in `main`.",
+        "Allow the tag workflow to build and publish through PyPI Trusted Publishing.",
+        "Create and verify the GitHub Release for `v2.0.0`.",
+        "Publish `2.0.0` to PyPI and verify its artifacts.",
+        (
+            "Confirm the canonical Read the Docs project at "
+            "`noqlen-meta.readthedocs.io` and the public `stable` URL."
+        ),
+    ):
+        assert f"[x] {completed}" in text
+
+    assert (
+        "[ ] Verify the explicit versioned Read the Docs `v2.0.0` build, "
+        "if retained as a public version."
+        in text
+    )
