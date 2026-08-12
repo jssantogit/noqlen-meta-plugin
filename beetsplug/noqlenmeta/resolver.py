@@ -10,7 +10,7 @@ from math import isfinite
 from types import MappingProxyType
 
 from beetsplug.noqlenmeta.domain import MetadataCandidate, MetadataValue
-from beetsplug.noqlenmeta.providers.specs import BUILTIN_PROVIDER_SPECS, DISCOGS_SPEC
+from beetsplug.noqlenmeta.providers.specs import BUILTIN_PROVIDER_NAMES, DISCOGS_SPEC
 
 
 def _name(value: object, label: str) -> str:
@@ -139,19 +139,24 @@ class FieldDecision:
 
 
 _DEFAULT_AUTHORITY: dict[str, tuple[str, ...]] = {
-    "genres": ("discogs", "lastfm", "deezer", "itunes"),
-    "styles": ("discogs", "beatport", "lastfm"),
-    "labels": ("discogs", "musicbrainz", "deezer", "itunes"),
-    "catalog_numbers": ("discogs", "musicbrainz", "deezer", "itunes"),
-    "barcodes": ("discogs", "musicbrainz", "deezer", "itunes"),
-    "country": ("discogs", "musicbrainz", "deezer", "itunes"),
-    "year": ("musicbrainz", "discogs", "itunes", "deezer"),
-    "media": ("discogs", "musicbrainz", "deezer", "itunes"),
+    "genres": ("musicbrainz", "discogs", "lastfm", "itunes"),
+    "styles": ("discogs", "lastfm", "musicbrainz"),
+    "labels": ("discogs", "musicbrainz", "itunes"),
+    "catalog_numbers": ("discogs", "musicbrainz", "itunes"),
+    "barcodes": ("discogs", "musicbrainz", "itunes"),
+    "country": ("discogs", "musicbrainz", "itunes"),
+    "year": ("musicbrainz", "discogs", "itunes"),
+    "media": ("discogs", "musicbrainz", "itunes"),
     "format_descriptions": ("discogs",),
-    "mood": ("lastfm", "deezer"),
-    "lyrics": ("local", "lrclib"),
-    "synced_lyrics": ("local", "lrclib"),
-    "cover": ("local", "coverartarchive", "itunes", "deezer", "discogs"),
+    "moods": ("lastfm", "musicbrainz"),
+    "bpm": (),
+    "lyrics_languages": ("musicbrainz",),
+    "artist_countries": ("musicbrainz",),
+    "artist_areas": ("musicbrainz",),
+    "artist_languages": ("musicbrainz",),
+    "lyrics": ("lrclib",),
+    "synced_lyrics": ("lrclib",),
+    "cover": ("itunes", "discogs"),
 }
 def default_resolution_policy() -> ResolutionPolicy:
     """Return the operational field policy with production providers disabled."""
@@ -165,7 +170,7 @@ def default_resolution_policy() -> ResolutionPolicy:
             )
             for field, authority in _DEFAULT_AUTHORITY.items()
         },
-        providers={name: False for name in BUILTIN_PROVIDER_SPECS},
+        providers={name: False for name in BUILTIN_PROVIDER_NAMES},
     )
 
 

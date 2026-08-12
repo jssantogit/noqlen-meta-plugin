@@ -1,7 +1,7 @@
 import copy
+import importlib.util
 import json
 import os
-import sys
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -10,19 +10,26 @@ from urllib.parse import parse_qs, urlsplit
 import beets.plugins
 import pytest
 
-from beetsplug.noqlenmeta.domain import ReleaseEnrichmentContext
+from beetsplug.noqlenmeta.domain import (
+    ArtistEnrichmentContext,
+    ExternalIdentifier,
+    ReleaseEnrichmentContext,
+    SemanticCategory,
+    TrackEnrichmentContext,
+)
+from beetsplug.noqlenmeta.genre_taxonomy import DEFAULT_GENRE_TAXONOMY
 from beetsplug.noqlenmeta.providers import ProviderError, ReleaseMetadataProvider
 from beetsplug.noqlenmeta.providers.lastfm import (
+    LastFmArtistProvider,
     LastFmProvider,
+    LastFmTrackProvider,
     _LastFmTransport,
-    load_beets_genre_vocabulary,
 )
-from beetsplug.noqlenmeta.providers.specs import LASTFM_SPEC
+from beetsplug.noqlenmeta.providers.specs import LASTFM_SPEC, ProviderScope
+from beetsplug.noqlenmeta.resolver import FieldRule, ResolutionPolicy
+from beetsplug.noqlenmeta.semantic_enrichment import collect_semantic_enrichment
 
 FIXTURES = Path(__file__).parent / "fixtures" / "lastfm"
-TEST_VOCABULARY = frozenset(
-    {"progressive metal", "death metal", "groove metal", "thrash metal", "rock"}
-)
 FAKE_KEY = "fake-test-key"
 
 
@@ -50,10 +57,7 @@ class FetchTopTags:
 
 
 def provider(fetch: FetchTopTags | None = None) -> LastFmProvider:
-    return LastFmProvider(
-        fetch_top_tags=fetch or FetchTopTags(),
-        genre_vocabulary=TEST_VOCABULARY,
-    )
+    return LastFmProvider(fetch_top_tags=fetch or FetchTopTags())
 
 
 def test_community_tags_are_weight_and_vocabulary_filtered() -> None:
@@ -62,7 +66,7 @@ def test_community_tags_are_weight_and_vocabulary_filtered() -> None:
     assert len(candidates) == 1
     candidate = candidates[0]
     assert candidate.field == "genres"
-    assert candidate.value == ("progressive metal", "death metal")
+    assert candidate.value == ("Progressive Metal", "Death Metal")
     assert candidate.provider == "lastfm"
     assert candidate.confidence == 0.85
     assert candidate.source_id == "Gojira / From Mars to Sirius"
@@ -80,7 +84,7 @@ def test_at_most_first_three_eligible_genres_are_emitted() -> None:
 
     candidates = provider(FetchTopTags(payload)).get_candidates(context())
 
-    assert candidates[0].value == ("rock", "death metal", "thrash metal")
+    assert candidates[0].value == ("Rock", "Death Metal", "Thrash Metal")
 
 
 def test_no_accepted_genres_is_normal_empty_result() -> None:
@@ -110,7 +114,7 @@ def test_malformed_tag_entries_are_skipped_without_losing_good_tags() -> None:
 
     candidates = provider(FetchTopTags(payload)).get_candidates(context())
 
-    assert candidates[0].value == ("progressive metal",)
+    assert candidates[0].value == ("Progressive Metal",)
 
 
 @pytest.mark.parametrize(
@@ -239,7 +243,7 @@ def test_distinct_transport_requests_are_paced_without_real_sleep() -> None:
         monotonic=clock.monotonic,
         sleep=clock.sleep,
     )
-    lastfm = LastFmProvider(transport=transport, genre_vocabulary=TEST_VOCABULARY)
+    lastfm = LastFmProvider(transport=transport)
 
     lastfm.get_candidates(context())
     lastfm.get_candidates(context(album_title="The Way of All Flesh"))
@@ -256,7 +260,7 @@ def test_cache_hit_does_not_trigger_transport_pacing_sleep() -> None:
         monotonic=clock.monotonic,
         sleep=clock.sleep,
     )
-    lastfm = LastFmProvider(transport=transport, genre_vocabulary=TEST_VOCABULARY)
+    lastfm = LastFmProvider(transport=transport)
 
     lastfm.get_candidates(context())
     lastfm.get_candidates(context())
@@ -283,9 +287,7 @@ def test_expected_transport_failures_hide_underlying_details(error: Exception) -
     transport = _LastFmTransport(api_key=FAKE_KEY, request_json=fail_request)
 
     with pytest.raises(ProviderError) as raised:
-        LastFmProvider(
-            transport=transport, genre_vocabulary=TEST_VOCABULARY
-        ).get_candidates(context())
+        LastFmProvider(transport=transport).get_candidates(context())
 
     assert str(raised.value) == "Last.fm API request failed"
     assert "fake-test-key" not in str(raised.value)
@@ -298,9 +300,7 @@ def test_programming_error_is_not_disguised_as_provider_error() -> None:
     transport = _LastFmTransport(api_key=FAKE_KEY, request_json=fail_request)
 
     with pytest.raises(AttributeError, match="programming defect"):
-        LastFmProvider(
-            transport=transport, genre_vocabulary=TEST_VOCABULARY
-        ).get_candidates(context())
+        LastFmProvider(transport=transport).get_candidates(context())
 
 
 def test_production_http_boundary_uses_shared_beets_key_and_top_tags_only(
@@ -328,7 +328,7 @@ def test_production_http_boundary_uses_shared_beets_key_and_top_tags_only(
     monkeypatch.setattr(beets.plugins, "LASTFM_KEY", fake_key)
     monkeypatch.setattr("beetsplug.noqlenmeta.providers.lastfm.urlopen", fake_urlopen)
 
-    candidates = LastFmProvider(genre_vocabulary=TEST_VOCABULARY).get_candidates(context())
+    candidates = LastFmProvider().get_candidates(context())
     query = parse_qs(urlsplit(str(captured["url"])).query)
 
     assert candidates
@@ -366,7 +366,7 @@ def test_oversized_production_response_is_fixed_provider_error(
     )
 
     with pytest.raises(ProviderError, match=r"^Last.fm API request failed$"):
-        LastFmProvider(genre_vocabulary=TEST_VOCABULARY).get_candidates(context())
+        LastFmProvider().get_candidates(context())
 
 
 def test_pathological_bounded_json_is_fixed_provider_error(
@@ -388,20 +388,32 @@ def test_pathological_bounded_json_is_fixed_provider_error(
     )
 
     with pytest.raises(ProviderError, match=r"^Last.fm API request failed$"):
-        LastFmProvider(genre_vocabulary=TEST_VOCABULARY).get_candidates(context())
+        LastFmProvider().get_candidates(context())
 
 
-def test_supported_beets_vocabulary_loads_without_importing_pylast(
+def test_provider_uses_packaged_taxonomy_without_discovering_lastgenre(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delitem(sys.modules, "pylast", raising=False)
-    load_beets_genre_vocabulary.cache_clear()
+    payload = fixture()
+    payload["toptags"]["tag"] = [
+        {"name": "K-pop", "count": 80},
+        {"name": "Technical Death Metal", "count": 60},
+        {"name": "seen live", "count": 50},
+        {"name": "2024", "count": 40},
+        {"name": "Energetic", "count": 30},
+    ]
 
-    vocabulary = load_beets_genre_vocabulary()
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("external vocabulary discovery is forbidden")
+        ),
+    )
 
-    assert vocabulary
-    assert "rock" in vocabulary
-    assert "pylast" not in sys.modules
+    candidates = LastFmProvider(fetch_top_tags=FetchTopTags(payload)).get_candidates(context())
+
+    assert candidates[0].value == ("K-pop", "Technical Death Metal")
 
 
 def test_lastfm_provider_satisfies_metadata_provider_contract() -> None:
@@ -412,14 +424,100 @@ def test_lastfm_provider_satisfies_metadata_provider_contract() -> None:
     assert lastfm.supported_fields is LASTFM_SPEC.supported_fields
 
 
+def test_scoped_semantic_tags_preserve_provenance_and_category() -> None:
+    payload = {
+        "toptags": {
+            "@attr": {"artist": "Synthetic Artist", "track": "Synthetic Track"},
+            "tag": [
+                {"name": "k-pop", "count": "80"},
+                {"name": "dreamy", "count": "70"},
+                {"name": "seen live", "count": "60"},
+            ],
+        }
+    }
+    bundle = LastFmTrackProvider(
+        fetch_top_tags=lambda artist, title, mbid: payload
+    ).get_semantic_evidence(
+        TrackEnrichmentContext(
+            "Synthetic Artist",
+            "Synthetic Track",
+            external_ids=(
+                ExternalIdentifier(
+                    "musicbrainz.recording", "11111111-1111-4111-8111-111111111111"
+                ),
+            ),
+        )
+    )
+    assert [(item.genre, item.scope, item.weight) for item in bundle.genres] == [
+        ("K-pop", ProviderScope.TRACK, 80)
+    ]
+    assert [(item.canonical_term, item.category, item.scope) for item in bundle.tags] == [
+        ("Dreamy", SemanticCategory.MOOD, ProviderScope.TRACK)
+    ]
+    assert bundle.tags[0].provider == "lastfm"
+    assert bundle.tags[0].source_id == "Synthetic Artist / Synthetic Track"
+    assert bundle.tags[0].raw_tag == "dreamy"
+
+
+def test_release_and_artist_semantic_tags_keep_their_scopes() -> None:
+    release_payload = {
+        "toptags": {
+            "@attr": {"artist": "Gojira", "album": "From Mars to Sirius"},
+            "tag": [{"name": "dreamy", "count": 50}],
+        }
+    }
+    release = LastFmProvider(
+        fetch_top_tags=FetchTopTags(release_payload)
+    ).get_semantic_evidence(context())
+    artist_payload = {
+        "toptags": {
+            "@attr": {"artist": "Synthetic Artist"},
+            "tag": [{"name": "alternative metal", "count": 40}],
+        }
+    }
+    artist = LastFmArtistProvider(
+        fetch_top_tags=lambda name, mbid: artist_payload
+    ).get_semantic_evidence(ArtistEnrichmentContext("Synthetic Artist"))
+
+    assert release.tags[0].scope is ProviderScope.RELEASE
+    assert release.tags[0].category is SemanticCategory.MOOD
+    assert artist.genres[0].scope is ProviderScope.ARTIST
+    assert artist.genres[0].genre == "Alternative Metal"
+
+
+def test_production_community_style_reaches_orchestration_without_discogs() -> None:
+    payload = {
+        "toptags": {
+            "@attr": {"artist": "Gojira", "album": "From Mars to Sirius"},
+            "tag": [{"name": "Acoustic", "count": 80}],
+        }
+    }
+    lastfm = LastFmProvider(fetch_top_tags=FetchTopTags(payload))
+    policy = ResolutionPolicy(
+        field_rules={"styles": FieldRule(True, ("lastfm",))},
+        providers={"lastfm": True},
+    )
+
+    result = collect_semantic_enrichment(
+        {"styles"},
+        policy=policy,
+        lastfm_release=lambda: lastfm.get_semantic_evidence(context()),
+    )
+
+    assert len(result.candidates) == 1
+    candidate = result.candidates[0]
+    assert candidate.field == "styles"
+    assert candidate.value == ("Acoustic",)
+    assert candidate.provider == "lastfm"
+    assert result.outcomes["styles"].provenance == ("lastfm",)
+
+
 @pytest.mark.live
 @pytest.mark.skipif(
     os.environ.get("NOQLEN_LIVE_TESTS") != "1",
     reason="set NOQLEN_LIVE_TESTS=1 to run live provider tests",
 )
 def test_live_lastfm_album_genres_pass_production_vocabulary() -> None:
-    vocabulary = load_beets_genre_vocabulary()
-
     candidates = LastFmProvider().get_candidates(context())
 
     assert len(candidates) == 1
@@ -428,4 +526,4 @@ def test_live_lastfm_album_genres_pass_production_vocabulary() -> None:
     assert candidate.field == "genres"
     assert isinstance(candidate.value, tuple) and candidate.value
     assert all(isinstance(genre, str) for genre in candidate.value)
-    assert all(genre.casefold() in vocabulary for genre in candidate.value)
+    assert all(DEFAULT_GENRE_TAXONOMY.is_genre(genre) for genre in candidate.value)

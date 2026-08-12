@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
+from typing import TypeAlias
 
 
 def _canonical_name(value: object, label: str) -> str:
@@ -22,6 +23,7 @@ class ProviderScope(Enum):
 
     RELEASE = "release"
     TRACK = "track"
+    ARTIST = "artist"
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,16 +83,47 @@ MUSICBRAINZ_SPEC = ProviderSpec(
             "country",
             "year",
             "media",
+            "genres",
         }
     ),
     scope=ProviderScope.RELEASE,
 )
 
+MUSICBRAINZ_TRACK_SPEC = ProviderSpec(
+    name="musicbrainz",
+    display_name="MusicBrainz",
+    supported_fields=frozenset({"genres", "moods", "lyrics_languages"}),
+    scope=ProviderScope.TRACK,
+)
+
+MUSICBRAINZ_ARTIST_SPEC = ProviderSpec(
+    name="musicbrainz",
+    display_name="MusicBrainz",
+    supported_fields=frozenset(
+        {"genres", "moods", "artist_countries", "artist_areas"}
+    ),
+    scope=ProviderScope.ARTIST,
+)
+
 LASTFM_SPEC = ProviderSpec(
     name="lastfm",
     display_name="Last.fm",
-    supported_fields=frozenset({"genres"}),
+    supported_fields=frozenset({"genres", "styles", "moods"}),
     scope=ProviderScope.RELEASE,
+)
+
+LASTFM_TRACK_SPEC = ProviderSpec(
+    name="lastfm",
+    display_name="Last.fm",
+    supported_fields=frozenset({"genres", "styles", "moods"}),
+    scope=ProviderScope.TRACK,
+)
+
+LASTFM_ARTIST_SPEC = ProviderSpec(
+    name="lastfm",
+    display_name="Last.fm",
+    supported_fields=frozenset({"genres", "styles", "moods"}),
+    scope=ProviderScope.ARTIST,
 )
 
 ITUNES_SPEC = ProviderSpec(
@@ -107,35 +140,49 @@ LRCLIB_SPEC = ProviderSpec(
     scope=ProviderScope.TRACK,
 )
 
-BUILTIN_PROVIDER_SPECS: Mapping[str, ProviderSpec] = MappingProxyType(
-    {
-        spec.name: spec
-        for spec in (
-            DISCOGS_SPEC,
-            MUSICBRAINZ_SPEC,
-            LASTFM_SPEC,
-            ITUNES_SPEC,
-            LRCLIB_SPEC,
-        )
-    }
+ProviderKey: TypeAlias = tuple[str, ProviderScope]
+_BUILTIN_PROVIDER_CAPABILITIES = (
+    DISCOGS_SPEC,
+    MUSICBRAINZ_SPEC,
+    MUSICBRAINZ_TRACK_SPEC,
+    MUSICBRAINZ_ARTIST_SPEC,
+    LASTFM_SPEC,
+    LASTFM_TRACK_SPEC,
+    LASTFM_ARTIST_SPEC,
+    ITUNES_SPEC,
+    LRCLIB_SPEC,
 )
+BUILTIN_PROVIDER_SPECS: Mapping[ProviderKey, ProviderSpec] = MappingProxyType(
+    {(spec.name, spec.scope): spec for spec in _BUILTIN_PROVIDER_CAPABILITIES}
+)
+BUILTIN_PROVIDER_NAMES = frozenset(spec.name for spec in _BUILTIN_PROVIDER_CAPABILITIES)
 BUILTIN_RELEASE_PROVIDER_SPECS: Mapping[str, ProviderSpec] = MappingProxyType(
     {
-        name: spec
-        for name, spec in BUILTIN_PROVIDER_SPECS.items()
+        spec.name: spec
+        for spec in _BUILTIN_PROVIDER_CAPABILITIES
         if spec.scope is ProviderScope.RELEASE
     }
 )
 BUILTIN_TRACK_PROVIDER_SPECS: Mapping[str, ProviderSpec] = MappingProxyType(
     {
-        name: spec
-        for name, spec in BUILTIN_PROVIDER_SPECS.items()
+        spec.name: spec
+        for spec in _BUILTIN_PROVIDER_CAPABILITIES
         if spec.scope is ProviderScope.TRACK
+    }
+)
+BUILTIN_ARTIST_PROVIDER_SPECS: Mapping[str, ProviderSpec] = MappingProxyType(
+    {
+        spec.name: spec
+        for spec in _BUILTIN_PROVIDER_CAPABILITIES
+        if spec.scope is ProviderScope.ARTIST
     }
 )
 
 
 def provider_display_name(name: str) -> str:
     """Return built-in branding with a safe generic fallback for unknown names."""
-    spec = BUILTIN_PROVIDER_SPECS.get(name.casefold())
+    normalized = name.casefold()
+    spec = next(
+        (spec for spec in _BUILTIN_PROVIDER_CAPABILITIES if spec.name == normalized), None
+    )
     return spec.display_name if spec is not None else name.title()

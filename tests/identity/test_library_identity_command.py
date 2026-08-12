@@ -612,7 +612,7 @@ def test_bare_apply_keeps_existing_ordinary_enrichment_behavior(
         NoqlenMetaPlugin,
         "_discogs_candidates",
         lambda *args: (
-            MetadataCandidate("genres", ("Synthetic Genre",), "discogs", 0.95, "1"),
+            MetadataCandidate("genres", ("Ambient",), "discogs", 0.95, "1"),
         ),
     )
     capture_output(monkeypatch)
@@ -621,7 +621,7 @@ def test_bare_apply_keeps_existing_ordinary_enrichment_behavior(
 
     fresh = library.get_album(album.id)
     assert fresh is not None
-    assert fresh.genres == ["Synthetic Genre"]
+    assert fresh.genres == ["Ambient"]
 
 
 def test_identity_output_omits_paths_queries_local_keys_and_raw_malformed_values(

@@ -4,7 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 from beets import config, ui
-from beets.autotag.hooks import AlbumInfo
+from beets.autotag import AlbumMatch
+from beets.autotag.hooks import AlbumInfo, TrackInfo
 from beets.importer.actions import Action
 from beets.importer.tasks import ImportTask
 from beets.library import Album, Item, Library
@@ -13,7 +14,14 @@ from beets.ui import Subcommand
 import beetsplug.noqlenmeta as plugin_module
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.changeplan import ChangePlan
-from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
+from beetsplug.noqlenmeta.domain import (
+    ArtistEnrichmentContext,
+    MetadataCandidate,
+    ReleaseEnrichmentContext,
+    SemanticEvidenceBundle,
+    TrackEnrichmentContext,
+)
+from beetsplug.noqlenmeta.genre_evidence import GenreEvidence, GenreEvidenceKind
 from beetsplug.noqlenmeta.library_integration import (
     context_from_library_album,
     current_values_from_library_album,
@@ -21,9 +29,17 @@ from beetsplug.noqlenmeta.library_integration import (
 from beetsplug.noqlenmeta.library_mapping import LibraryMappingError
 from beetsplug.noqlenmeta.providers import ProviderError
 from beetsplug.noqlenmeta.providers.base import ProviderContractError
+from beetsplug.noqlenmeta.providers.lastfm import LastFmProvider
+from beetsplug.noqlenmeta.providers.specs import ProviderScope
 
 TOKEN = "test-personal-token"
 RELEASE_MBID = "6ea45c08-3cfa-461a-aa4d-4cc404fcfa86"
+ALBUM_GENRES = {
+    "Album A": "Rock",
+    "Album B": "Metal",
+    "Album C": "Jazz",
+    "Album D": "Blues",
+}
 
 
 @pytest.fixture(autouse=True)
@@ -57,6 +73,8 @@ def configure_enabled(
         "preview": preview,
         "apply": apply,
         "apply_mode": apply_mode,
+        "genres": {"num_genres": 2, "promote_styles": True},
+        "fields": {"cover": False},
         "providers": {
             "discogs": {"enabled": discogs, "user_token": TOKEN},
             "musicbrainz": {"enabled": musicbrainz},
@@ -88,6 +106,22 @@ def candidate(
             "lastfm": "Gojira / From Mars to Sirius",
             "itunes": "1097861387",
         }[provider],
+    )
+
+
+def lastfm_genre_bundle(*genres: str) -> SemanticEvidenceBundle:
+    return SemanticEvidenceBundle(
+        genres=tuple(
+            GenreEvidence(
+                genre,
+                "lastfm",
+                ProviderScope.RELEASE,
+                GenreEvidenceKind.COMMUNITY_TAG,
+                0.85,
+                "Gojira / From Mars to Sirius",
+            )
+            for genre in genres
+        )
     )
 
 
@@ -155,13 +189,13 @@ def test_no_query_fails_before_provider_or_library_work(
     )
     lib = SimpleNamespace(albums=lambda query: pytest.fail("library queried without consent"))
 
-    with pytest.raises(ui.UserError, match="provide an album query or use --all"):
+    with pytest.raises(ui.UserError, match="provide a query or use --all"):
         invoke(plugin, lib, [])
 
-    with pytest.raises(ui.UserError, match="provide an album query or use --all"):
+    with pytest.raises(ui.UserError, match="provide a query or use --all"):
         invoke(plugin, lib, ["   "])
 
-    with pytest.raises(ui.UserError, match="provide an album query or use --all"):
+    with pytest.raises(ui.UserError, match="provide a query or use --all"):
         invoke(plugin, lib, ["--apply"])
 
 
@@ -183,6 +217,8 @@ def test_all_is_allowed_and_query_plus_all_is_rejected(
 def test_no_useful_provider_avoids_library_query(monkeypatch: pytest.MonkeyPatch) -> None:
     output: list[str] = []
     plugin = NoqlenMetaPlugin()
+    plugin.config["providers"]["musicbrainz"]["enabled"].set(False)
+    plugin.config["fields"]["cover"].set(False)
     monkeypatch.setattr(plugin_module.ui, "print_", output.append)
     lib = SimpleNamespace(albums=lambda query: pytest.fail("library must not be queried"))
 
@@ -193,7 +229,7 @@ def test_no_useful_provider_avoids_library_query(monkeypatch: pytest.MonkeyPatch
     ]
 
 
-def test_album_cli_does_not_execute_lrclib_when_it_is_only_provider(
+def test_track_only_provider_skips_album_selection_and_queries_items(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -204,7 +240,8 @@ def test_album_cli_does_not_execute_lrclib_when_it_is_only_provider(
     configure_enabled(plugin, discogs=False, lrclib=True)
     plugin.config["fields"]["lyrics"].set(True)
     lib = SimpleNamespace(
-        albums=lambda query: pytest.fail("track-only provider must not query albums")
+        albums=lambda query: pytest.fail("track-only provider must not query albums"),
+        items=lambda query: (),
     )
 
     invoke(plugin, lib, ["--all"])
@@ -244,7 +281,7 @@ def test_no_match_reports_without_provider_call(
 
     invoke(plugin, library, ["album:Missing"])
 
-    assert output == ["Noqlen Meta: no albums matched"]
+    assert output == ["Noqlen Meta: no albums or items matched"]
 
 
 def test_library_album_adapters_preserve_canonical_shapes_without_splitting() -> None:
@@ -260,6 +297,9 @@ def test_library_album_adapters_preserve_canonical_shapes_without_splitting() ->
         style="Progressive Metal / Groove Metal",
         label="Label A / Label B",
         country=" FR ",
+        artist_countries=["Brazil", " Japan "],
+        artist_areas=["Salvador", " Tokyo "],
+        artist_languages=["por", " jpn "],
     )
 
     context = context_from_library_album(album)
@@ -284,6 +324,9 @@ def test_library_album_adapters_preserve_canonical_shapes_without_splitting() ->
         "barcodes": ("0123456789012",),
         "country": "FR",
         "year": 2005,
+        "artist_countries": ("Brazil", "Japan"),
+        "artist_areas": ("Salvador", "Tokyo"),
+        "artist_languages": ("por", "jpn"),
     }
     assert "media" not in current_values_from_library_album(album)
 
@@ -295,6 +338,19 @@ def test_library_adapter_omits_invalid_year(year: object) -> None:
 
     assert context_from_library_album(album).year is None
     assert "year" not in current_values_from_library_album(album)
+
+
+def test_library_adapter_prefers_plural_styles_over_legacy_style() -> None:
+    album = Album(albumartist="Artist", album="Album", style="Legacy")
+    album["styles"] = ["Modern A", "Modern B"]
+
+    assert current_values_from_library_album(album)["styles"] == ("Modern A", "Modern B")
+
+
+def test_library_adapter_falls_back_to_legacy_style() -> None:
+    album = Album(albumartist="Artist", album="Album", style="Legacy")
+
+    assert current_values_from_library_album(album)["styles"] == ("Legacy",)
 
 
 @pytest.mark.parametrize("field", ["albumartist", "album"])
@@ -408,8 +464,9 @@ def test_cli_preserves_authority_and_provider_failure_fallback(
 
     invoke(plugin, library, ["artist:Gojira"])
 
-    assert "source: Discogs" in output[0]
-    assert "proposed: Progressive Metal, Groove Metal" in output[0]
+    assert "source: Noqlen" in output[0]
+    assert "discogs genre" in output[0]
+    assert "proposed: Groove Metal, Progressive Metal" in output[0]
 
     output.clear()
     monkeypatch.setattr(
@@ -420,7 +477,8 @@ def test_cli_preserves_authority_and_provider_failure_fallback(
     with caplog.at_level(logging.WARNING, logger="beets.noqlenmeta"):
         invoke(plugin, library, ["artist:Gojira"])
 
-    assert "source: iTunes" in output[0]
+    assert "source: Noqlen" in output[0]
+    assert "itunes genre" in output[0]
     assert TOKEN not in caplog.text
     assert TOKEN not in output[0]
 
@@ -564,9 +622,11 @@ def test_importer_and_cli_invoke_the_same_planning_helper(
         context: ReleaseEnrichmentContext,
         current_values: object,
         policy: object,
-    ) -> ChangePlan:
+        *,
+        track_contexts: object,
+    ) -> plugin_module.ReleasePlanningResult:
         calls.append((context, current_values, policy))
-        return ChangePlan()
+        return plugin_module.ReleasePlanningResult(ChangePlan(), {})
 
     monkeypatch.setattr(NoqlenMetaPlugin, "_build_change_plan_for_release", record_plan)
     monkeypatch.setattr(
@@ -591,6 +651,153 @@ def test_importer_and_cli_invoke_the_same_planning_helper(
     assert calls[0][2] == calls[1][2]
 
 
+def test_importer_and_existing_album_semantic_aggregation_have_three_field_parity(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    from beetsplug.noqlenmeta.providers.musicbrainz_semantic import (
+        MusicBrainzArtistProvider,
+        MusicBrainzTrackProvider,
+    )
+
+    artist_ids = (
+        "22222222-2222-4222-8222-222222222222",
+        "33333333-3333-4333-8333-333333333333",
+        "44444444-4444-4444-8444-444444444444",
+    )
+    recording_ids = (
+        "55555555-5555-4555-8555-555555555555",
+        "66666666-6666-4666-8666-666666666666",
+    )
+    languages = {"Track One": ("eng", "fra"), "Track Two": ("jpn", "eng")}
+    origins = {
+        "Artist A": ("Brazil", "Salvador"),
+        "Artist B": ("Japan", "Tokyo"),
+        "Artist C": ("France", "Paris"),
+    }
+    observed_tracks: list[str] = []
+    observed_artists: list[str] = []
+
+    def track_evidence(
+        provider: MusicBrainzTrackProvider, context: TrackEnrichmentContext
+    ) -> SemanticEvidenceBundle:
+        observed_tracks.append(context.title)
+        return SemanticEvidenceBundle(
+            metadata=(
+                MetadataCandidate(
+                    "lyrics_languages",
+                    languages[context.title],
+                    "musicbrainz",
+                    0.99,
+                    context.external_ids[0].value,
+                ),
+            )
+        )
+
+    def artist_evidence(
+        provider: MusicBrainzArtistProvider, context: ArtistEnrichmentContext
+    ) -> SemanticEvidenceBundle:
+        observed_artists.append(context.name)
+        country, area = origins[context.name]
+        return SemanticEvidenceBundle(
+            metadata=(
+                MetadataCandidate(
+                    "artist_countries", (country,), "musicbrainz", 0.99, context.name
+                ),
+                MetadataCandidate(
+                    "artist_areas", (area,), "musicbrainz", 0.99, context.name
+                ),
+            )
+        )
+
+    monkeypatch.setattr(MusicBrainzTrackProvider, "get_semantic_evidence", track_evidence)
+    monkeypatch.setattr(MusicBrainzArtistProvider, "get_semantic_evidence", artist_evidence)
+    output: list[str] = []
+    monkeypatch.setattr(plugin_module.ui, "print_", output.append)
+
+    def configured_plugin() -> NoqlenMetaPlugin:
+        plugin = NoqlenMetaPlugin()
+        configure_enabled(plugin, discogs=False, musicbrainz=True)
+        plugin.config["fields"].set(
+            {
+                field: field
+                in {"artist_countries", "artist_areas", "artist_languages"}
+                for field in plugin.config["fields"]
+            }
+        )
+        return plugin
+
+    track_infos = (
+        TrackInfo(
+            title="Track One",
+            artist="Artist A feat. Artist B",
+            mb_trackid=recording_ids[0],
+            artists=["Artist A", "Artist B"],
+            artists_ids=list(artist_ids[:2]),
+        ),
+        TrackInfo(
+            title="Track Two",
+            artist="Artist B feat. Artist C",
+            mb_trackid=recording_ids[1],
+            artists=["Artist B", "Artist C"],
+            artists_ids=list(artist_ids[1:]),
+        ),
+    )
+    selected_items = (Item(title="Local One"), Item(title="Local Two"))
+    info = AlbumInfo(
+        list(track_infos), artist="Various Artists", album="Target Album"
+    )
+    task = ImportTask(None, [], [*selected_items, Item(title="Unselected")])
+    task.choice_flag = Action.APPLY
+    task.match = AlbumMatch(
+        None, info, dict(zip(selected_items, track_infos, strict=True))
+    )  # type: ignore[arg-type]
+
+    configured_plugin()._import_task_choice(None, task)
+    importer_preview = next(
+        value for value in output if value.startswith("Noqlen Meta / beets target plan:")
+    )
+
+    target_items = [
+        Item(
+            path=f"{index}.flac".encode(),
+            albumartist="Various Artists",
+            album="Target Album",
+            title=track.title,
+            artist=track.artist,
+            mb_trackid=recording_ids[index - 1],
+            artists=list(track.get("artists")),
+            mb_artistids=list(
+                artist_ids[:2] if index == 1 else artist_ids[1:]
+            ),
+        )
+        for index, track in enumerate(track_infos, 1)
+    ]
+    library.add_album(target_items)
+    add_album(library, album="Other Album", title="Outsider", artist="Outsider")
+    output.clear()
+    observed_tracks.clear()
+    observed_artists.clear()
+
+    invoke(configured_plugin(), library, ["album:Target Album"])
+    library_preview = next(
+        value
+        for value in output
+        if value.startswith("Noqlen Meta / library target preview:")
+    )
+
+    for preview in (importer_preview, library_preview):
+        assert "artist_countries\n    PROPOSE" in preview
+        assert "proposed: Brazil, Japan, France" in preview
+        assert "artist_areas\n    PROPOSE" in preview
+        assert "proposed: Salvador, Tokyo, Paris" in preview
+        assert "artist_languages\n    PROPOSE" in preview
+        assert "proposed: eng, fra, jpn" in preview
+    assert observed_tracks == ["Track One", "Track Two"]
+    assert observed_artists == ["Artist A", "Artist B", "Artist C"]
+    assert "Outsider" not in observed_tracks
+    assert "Outsider" not in observed_artists
+
+
 def test_cli_apply_persists_even_when_importer_apply_is_false(
     monkeypatch: pytest.MonkeyPatch, library: Library
 ) -> None:
@@ -608,8 +815,8 @@ def test_cli_apply_persists_even_when_importer_apply_is_false(
     invoke(plugin, library, ["artist:Gojira", "--apply"])
 
     reloaded = library.get_album(album.id)
-    assert reloaded.genres == ["Rock", "Metal"]
-    assert [item.genres for item in reloaded.items()] == [["Rock", "Metal"]]
+    assert reloaded.genres == ["Metal", "Rock"]
+    assert [item.genres for item in reloaded.items()] == [["Metal", "Rock"]]
     assert "application: stored in library database (1 fields)" in output[0]
     assert "file tags: unchanged" in output[0]
 
@@ -625,6 +832,11 @@ def test_musicbrainz_candidate_flows_through_shared_cli_plan_and_safe_apply(
         NoqlenMetaPlugin,
         "_musicbrainz_candidates",
         lambda *args: (candidate("year", 2005, provider="musicbrainz"),),
+    )
+    monkeypatch.setattr(
+        plugin,
+        "_musicbrainz_release_semantics",
+        lambda *args: SemanticEvidenceBundle(),
     )
     monkeypatch.setattr("beetsplug.noqlenmeta.library_integration.ui.print_", output.append)
 
@@ -645,15 +857,15 @@ def test_lastfm_candidate_previews_then_flows_through_existing_cli_apply(
     plugin = NoqlenMetaPlugin()
     configure_enabled(plugin, discogs=False, lastfm=True)
     monkeypatch.setattr(
-        NoqlenMetaPlugin,
-        "_lastfm_candidates",
-        lambda *args: (
-            candidate(
-                value=("Progressive Metal", "Death Metal"),
-                confidence=0.85,
-                provider="lastfm",
-            ),
-        ),
+        plugin,
+        "_lastfm_release_semantics",
+        lambda *args: lastfm_genre_bundle("Progressive Metal", "Death Metal"),
+    )
+    monkeypatch.setattr(
+        plugin, "_lastfm_track_semantics", lambda *args: SemanticEvidenceBundle()
+    )
+    monkeypatch.setattr(
+        plugin, "_lastfm_artist_semantics", lambda *args: SemanticEvidenceBundle()
     )
     monkeypatch.setattr("beetsplug.noqlenmeta.library_integration.ui.print_", output.append)
 
@@ -661,20 +873,54 @@ def test_lastfm_candidate_previews_then_flows_through_existing_cli_apply(
 
     assert library.get_album(album.id).genres == []
     assert "genres\n    PROPOSE" in output[0]
-    assert "source: Last.fm" in output[0]
+    assert "source: Noqlen" in output[0]
+    assert "lastfm community tag" in output[0]
     assert "application: disabled (preview only)" in output[0]
 
     output.clear()
     invoke(plugin, library, ["artist:Gojira", "--apply"])
 
     reloaded = library.get_album(album.id)
-    assert reloaded.genres == ["Progressive Metal", "Death Metal"]
+    assert reloaded.genres == ["Death Metal", "Progressive Metal"]
     assert [item.genres for item in reloaded.items()] == [
-        ["Progressive Metal", "Death Metal"]
+        ["Death Metal", "Progressive Metal"]
     ]
-    assert "source: Last.fm" in output[0]
+    assert "source: Noqlen" in output[0]
+    assert "lastfm community tag" in output[0]
     assert "application: stored in library database (1 fields)" in output[0]
     assert "file tags: unchanged" in output[0]
+
+
+def test_real_lastfm_community_style_flows_through_album_cli(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    plugin = NoqlenMetaPlugin()
+    monkeypatch.setitem(Album._types, "styles", plugin.album_types["styles"])
+    album = add_album(library)
+    lastfm = LastFmProvider(
+        fetch_top_tags=lambda artist, title: {
+            "toptags": {
+                "@attr": {"artist": artist, "album": title},
+                "tag": [{"name": "Acoustic", "count": 80}],
+            }
+        }
+    )
+    configure_enabled(plugin, discogs=False, lastfm=True)
+    plugin.config["fields"].set(
+        {field: field == "styles" for field in plugin.config["fields"]}
+    )
+    monkeypatch.setattr(
+        plugin,
+        "_lastfm_release_semantics",
+        lastfm.get_semantic_evidence,
+    )
+    monkeypatch.setattr(
+        "beetsplug.noqlenmeta.library_integration.ui.print_", lambda output: None
+    )
+
+    invoke(plugin, library, ["artist:Gojira", "--apply"])
+
+    assert library.get_album(album.id).styles == ["Acoustic"]
 
 
 def test_importer_config_does_not_authorize_cli_database_writes(
@@ -876,7 +1122,7 @@ def test_all_apply_is_strict_per_album(
         context: ReleaseEnrichmentContext,
         token: str | None,
     ) -> tuple[MetadataCandidate, ...]:
-        values = [candidate(value=(context.album_title,))]
+        values = [candidate(value=(ALBUM_GENRES[context.album_title],))]
         if context.album_title == "Album B":
             values.append(candidate("media", ("CD",)))
         return tuple(values)
@@ -886,9 +1132,9 @@ def test_all_apply_is_strict_per_album(
 
     invoke(plugin, library, ["--all", "--apply"])
 
-    assert library.get_album(albums[0].id).genres == ["Album A"]
+    assert library.get_album(albums[0].id).genres == ["Rock"]
     assert library.get_album(albums[1].id).genres == []
-    assert library.get_album(albums[2].id).genres == ["Album C"]
+    assert library.get_album(albums[2].id).genres == ["Jazz"]
     assert ["application: blocked" in entry for entry in output] == [False, True, False]
 
 
@@ -915,7 +1161,7 @@ def test_all_partial_applies_each_album_independently_after_planning(
         planned.append(context.album_title)
         if context.album_title == "Album C":
             return (candidate("media", ("CD",)),)
-        values = [candidate(value=(context.album_title,))]
+        values = [candidate(value=(ALBUM_GENRES[context.album_title],))]
         if context.album_title == "Album B":
             values.append(candidate("media", ("CD",)))
         return tuple(values)
@@ -935,10 +1181,10 @@ def test_all_partial_applies_each_album_independently_after_planning(
 
     assert stores == ["Album A", "Album B", "Album D"]
     assert [library.get_album(album.id).genres for album in albums] == [
-        ["Album A"],
-        ["Album B"],
+        ["Rock"],
+        ["Metal"],
         [],
-        ["Album D"],
+        ["Blues"],
     ]
     assert "partially stored" in output[1]
     assert "no eligible changes stored" in output[2]
@@ -993,7 +1239,7 @@ def test_store_failure_aborts_later_albums_without_global_rollback(
         context: ReleaseEnrichmentContext,
         token: str | None,
     ) -> tuple[MetadataCandidate, ...]:
-        return (candidate(value=(context.album_title,)),)
+        return (candidate(value=(ALBUM_GENRES[context.album_title],)),)
 
     monkeypatch.setattr(NoqlenMetaPlugin, "_discogs_candidates", candidates)
     monkeypatch.setattr(
@@ -1014,6 +1260,6 @@ def test_store_failure_aborts_later_albums_without_global_rollback(
         invoke(plugin, library, ["--all", "--apply", "--partial"])
 
     assert store_attempts == ["Album A", "Album B"]
-    assert library.get_album(albums[0].id).genres == ["Album A"]
+    assert library.get_album(albums[0].id).genres == ["Rock"]
     assert library.get_album(albums[1].id).genres == []
     assert library.get_album(albums[2].id).genres == []

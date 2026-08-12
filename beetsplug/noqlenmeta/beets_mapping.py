@@ -47,7 +47,10 @@ class BeetsFieldTarget:
 
 _TARGETS = (
     BeetsFieldTarget("genres", "genres", BeetsTargetShape.STRING_LIST),
-    BeetsFieldTarget("styles", "style", BeetsTargetShape.SCALAR_STRING),
+    BeetsFieldTarget("styles", "styles", BeetsTargetShape.STRING_LIST),
+    BeetsFieldTarget("artist_countries", "artist_countries", BeetsTargetShape.STRING_LIST),
+    BeetsFieldTarget("artist_areas", "artist_areas", BeetsTargetShape.STRING_LIST),
+    BeetsFieldTarget("artist_languages", "artist_languages", BeetsTargetShape.STRING_LIST),
     BeetsFieldTarget("labels", "label", BeetsTargetShape.SCALAR_STRING),
     BeetsFieldTarget("catalog_numbers", "catalognum", BeetsTargetShape.SCALAR_STRING),
     BeetsFieldTarget("barcodes", "barcode", BeetsTargetShape.SCALAR_STRING),

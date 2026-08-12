@@ -13,8 +13,9 @@ beet nm [OPTIONS] [QUERY]
 | Invocation | Network | beets database | Audio files |
 | --- | --- | --- | --- |
 | `beet nm QUERY` | Enabled enrichment providers | No | No |
-| `beet nm --apply QUERY` | Enabled enrichment providers | Ordinary metadata | No |
+| `beet nm --apply QUERY` | Enabled enrichment providers | Ordinary metadata and verified artwork `artpath` | Verified `cover.jpg`; no audio-file mutation |
 | `beet nm --apply --partial QUERY` | Enabled enrichment providers | Safe ordinary fields | No |
+| `beet nm --apply --write QUERY` | Same prepared provider/analysis work | Ordinary metadata, artwork, and operational `mtime` | Supported metadata/BPM tags plus prepared cover embedding |
 | `beet nm --identity QUERY` | MusicBrainz identity source | No | No |
 | `beet nm --identity --apply QUERY` | MusicBrainz identity source | Four MBID columns | No |
 | `beet nm --acoustid QUERY` | Configured AcoustID lookup | No | No |
@@ -24,7 +25,8 @@ beet nm [OPTIONS] [QUERY]
 
 ## Query Semantics
 
-Ordinary mode uses a native beets **Album query** and returns Albums only:
+Ordinary mode evaluates the same native beets query against Albums and Items,
+independently skipping a scope when no enabled provider can contribute:
 
 ```bash
 beet nm album:"Example Album"
@@ -45,7 +47,7 @@ one argument; it is not part of the query language.
 
 - Type: boolean flag; default off.
 - Query: replaces a query; query plus `--all` is invalid.
-- Ordinary selection: every Album.
+- Ordinary selection: every Album and Item for contributing scopes.
 - Identity/tag selection: every complete Album and standalone Item once.
 - Network: follows the selected mode.
 - Database/files: grants no write permission by itself.
@@ -62,8 +64,8 @@ beet nm --identity --all
 - Query: required unless `--all` is used.
 - Ordinary mode: strict database application; provider network enabled.
 - Identity mode: coherent four-MBID database repair; MusicBrainz network enabled.
-- File effect: none in every mode.
-- Valid with: ordinary mode, `--partial`, `--identity`, or `--acoustid`.
+- File effect: verified `cover.jpg` sidecars may be written; audio files remain unchanged unless `--write` is also present.
+- Valid with: ordinary mode, `--partial`, `--write`, `--identity`, or `--acoustid`.
 - Invalid with: `--identity-tags`.
 - Common block: ordinary `REVIEW`/mapping blocker, or identity ambiguity.
 
@@ -78,7 +80,7 @@ beet nm --apply album:"Example Album"
 - Query: required unless `--all` is used.
 - Network: enabled ordinary providers.
 - Database: applies only safe, losslessly mapped ordinary fields.
-- Files: unchanged.
+- Files: unchanged unless `--write` is also present; unsupported fields remain explicit blockers.
 - Valid combination: `--apply --partial`.
 - Invalid without `--apply` and invalid with either identity mode.
 - Common block: no safe mapped fields remain after withholding unresolved ones.
@@ -99,7 +101,7 @@ identity, or file guards.
 - Database: preview is read-only; `--apply` repairs four MBID columns.
 - Files: never read or written for tags.
 - Valid with: `--apply` or `--all`.
-- Invalid with: `--identity-tags`, `--acoustid`, or `--partial`.
+- Invalid with: `--identity-tags`, `--acoustid`, `--partial`, or `--write`.
 - Common block: candidate evidence is ambiguous, weak, incomplete, or stale.
 
 ```bash
@@ -157,16 +159,16 @@ beet nm --identity-tags album:"Example Album"
 ## `--write`
 
 - Type: boolean permission flag; default off.
-- Mode: requires `--identity-tags`.
+- Mode: ordinary metadata requires `--apply`; legacy identity synchronization requires `--identity-tags`.
 - Query: required unless `--all` is used.
-- Network: none.
-- Database: only successful Item `mtime` bookkeeping.
-- Files: verified replacement of eligible files; exactly four MBID tags.
-- Invalid without: `--identity-tags`.
+- Network/analysis: does not enable or expand CAA lookup, image selection, or Librosa work.
+- Database: ordinary changes come from `--apply`; successful file replacement also updates Item `mtime`.
+- Files: verified replacement using only the already prepared plan, including BPM tags and one primary front image; legacy identity mode still writes exactly four MBID tags.
+- Invalid without: either ordinary `--apply` or `--identity-tags`.
 - Common block: candidate round trip or required filesystem guarantee fails.
 
 ```bash
-beet nm --identity-tags --write album:"Example Album"
+beet nm --apply --write album:"Example Album"
 ```
 
 ## Invalid Combinations
@@ -174,7 +176,7 @@ beet nm --identity-tags --write album:"Example Album"
 | Invalid input | Result |
 | --- | --- |
 | `--partial` without `--apply` | `--partial requires --apply` |
-| `--write` without `--identity-tags` | `--write requires --identity-tags` |
+| ordinary `--write` without `--apply` | `--write requires --apply for ordinary metadata` |
 | `--identity --identity-tags` | modes are mutually exclusive |
 | `--acoustid --identity` | AcoustID and identity are mutually exclusive |
 | `--acoustid --identity-tags` | AcoustID and identity tags are mutually exclusive |
@@ -184,8 +186,9 @@ beet nm --identity-tags --write album:"Example Album"
 | `--identity-tags --apply` | identity tags cannot use apply |
 | `--identity-tags --partial` | identity tags cannot use partial |
 | `--identity --partial` | identity cannot use partial |
+| `--identity --write` | identity file sync requires `--identity-tags --write` instead |
 | query plus `--all` | choose query or all, not both |
 | no query and no `--all` | mode-specific query requirement |
 
 Invalid combinations fail before provider, library-selection, or file work.
-Noqlen v1 has no `--force`.
+Noqlen has no `--force`.

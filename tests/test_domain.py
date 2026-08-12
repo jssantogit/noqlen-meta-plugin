@@ -3,6 +3,7 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from beetsplug.noqlenmeta.domain import (
+    ArtistEnrichmentContext,
     ExternalIdentifier,
     MetadataCandidate,
     ReleaseEnrichmentContext,
@@ -41,6 +42,28 @@ def test_release_context_is_immutable() -> None:
 
     with pytest.raises(FrozenInstanceError):
         context.album_title = "Changed"  # type: ignore[misc]
+
+
+def test_artist_context_preserves_credit_identity() -> None:
+    identifier = ExternalIdentifier(
+        "musicbrainz.artist", "00000000-0000-0000-0000-000000000001"
+    )
+    context = ArtistEnrichmentContext(
+        "Synthetic Artist",
+        sort_name="Artist, Synthetic",
+        credit_name="Synthetic Artist feat.",
+        credit_index=2,
+        external_ids=(identifier,),
+    )
+
+    assert context.name == "Synthetic Artist"
+    assert context.credit_index == 2
+    assert context.external_ids == (identifier,)
+
+
+def test_artist_context_rejects_non_positive_credit_index() -> None:
+    with pytest.raises(ValueError, match="credit index"):
+        ArtistEnrichmentContext("Synthetic Artist", credit_index=0)
 
 
 @pytest.mark.parametrize("value", ["Synthetic Label", 42, 4.5, True])

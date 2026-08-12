@@ -10,9 +10,13 @@ that beets has already selected, or separately audits their MusicBrainz IDs.
 
 ## Why Use It?
 
-- Combine narrow metadata contributions from Discogs, MusicBrainz, Last.fm,
-  iTunes, and LRCLIB.
+- Enrich releases, tracks, and artists with genres, styles, moods, languages,
+  geography, and lyrics from narrow provider contributions.
+- Select verified Cover Art Archive album artwork and optionally analyze local
+  BPM through the `[audio]` Librosa extra.
 - Review conflicts and target limitations before changing anything.
+- Synchronize supported ordinary metadata through a verified
+  `--apply --write` workflow.
 - Repair four MusicBrainz identity fields only when evidence is complete and
   unambiguous.
 - Synchronize those four confirmed database fields to supported media files
@@ -43,6 +47,10 @@ the [command reference](reference/commands.md) when you already know beets.
 The canonical public documentation is live at
 [https://noqlen-meta-plugin.readthedocs.io/](https://noqlen-meta-plugin.readthedocs.io/).
 The public `latest`, `stable`, and versioned `v1.0.0` builds have passed.
+
+The repository is preparing the `2.0.0` release candidate. The currently
+published PyPI/GitHub release remains `1.0.0` until the owner-authorized v2
+release workflow runs after merge to `main`.
 
 ## License And Repository Status
 

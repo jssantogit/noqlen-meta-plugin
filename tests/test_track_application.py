@@ -7,6 +7,7 @@ from beets.autotag.hooks import AlbumInfo, TrackInfo
 from beets.library import Item
 
 import beetsplug.noqlenmeta.track_application as application_module
+from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
 from beetsplug.noqlenmeta.domain import MetadataCandidate, TrackEnrichmentContext
 from beetsplug.noqlenmeta.resolver import FieldRule, ResolutionPolicy
 from beetsplug.noqlenmeta.track_application import (
@@ -16,7 +17,7 @@ from beetsplug.noqlenmeta.track_application import (
     parse_track_application_mode,
 )
 from beetsplug.noqlenmeta.track_integration import SelectedImportTrack
-from beetsplug.noqlenmeta.track_mapping import TrackTargetPlan
+from beetsplug.noqlenmeta.track_mapping import TrackTargetPlan, map_change_plan_to_track_info
 from beetsplug.noqlenmeta.track_planning import build_import_track_planning_result
 
 REMOTE_PLAIN = "Synthetic remote line one\nSynthetic remote line two"
@@ -110,6 +111,38 @@ def test_strict_clean_apply_mutates_only_selected_track_info() -> None:
     assert not applied.has_withheld_fields
     with pytest.raises(FrozenInstanceError):
         applied.applied_changes = ()  # type: ignore[misc]
+
+
+def test_v2_shapes_materialize_only_on_selected_track_info() -> None:
+    selected = SelectedImportTrack(Item(), _track(), None)
+    changes = tuple(
+        PlannedChange(
+            field,
+            None,
+            candidate.value,
+            candidate,
+            f"resolved {field}",
+        )
+        for field, candidate in (
+            (
+                "bpm",
+                MetadataCandidate("bpm", 126.4, "catalog", 0.95, "bpm-1"),
+            ),
+            (
+                "moods",
+                MetadataCandidate(
+                    "moods", ("Dark", "Energetic"), "catalog", 0.95, "mood-1"
+                ),
+            ),
+        )
+    )
+    plan = map_change_plan_to_track_info(ChangePlan(changes=changes))
+
+    result = apply_track_target_plan(selected, plan, from_scratch=False)
+
+    assert selected.track_info.bpm == 126.4
+    assert selected.track_info["moods"] == ["Dark", "Energetic"]
+    assert result.has_applied_changes
 
 
 def test_strict_review_blocks_without_mutation() -> None:

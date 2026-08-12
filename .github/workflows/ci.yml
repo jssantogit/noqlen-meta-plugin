@@ -63,6 +63,19 @@ jobs:
           tests/identity/test_library_identity_command.py
           tests/identity/test_identity_tag_command.py
 
+  audio-analysis:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: python -m pip install -e ".[audio,dev]"
+      - run: pytest -q tests/test_tempo.py tests/test_tempo_librosa.py
+
   documentation:
     runs-on: ubuntu-24.04
     steps:

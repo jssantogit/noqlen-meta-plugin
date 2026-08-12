@@ -55,6 +55,38 @@ def test_lyrics_maps_losslessly_to_track_info() -> None:
     assert not result.requires_review
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "target", "shape"),
+    [
+        ("bpm", 126.4, "bpm", TrackTargetShape.SCALAR_FLOAT),
+        ("moods", ("Dark", "Energetic"), "moods", TrackTargetShape.STRING_LIST),
+        (
+            "lyrics_languages",
+            ("English", "Korean"),
+            "lyrics_languages",
+            TrackTargetShape.STRING_LIST,
+        ),
+        (
+            "artist_countries",
+            ("BR", "US"),
+            "artist_countries",
+            TrackTargetShape.STRING_LIST,
+        ),
+    ],
+)
+def test_v2_track_targets_are_lossless(
+    field: str, value: object, target: str, shape: TrackTargetShape
+) -> None:
+    result = map_change_plan_to_track_info(
+        ChangePlan(changes=(planned_change(field, value),))
+    )
+
+    mapped = result.mapped_changes[0]
+    assert mapped.target_field == target
+    assert mapped.target_shape is shape
+    assert mapped.target_value == value
+
+
 def test_actual_track_info_exposes_lossless_plain_lyrics_item_data_target() -> None:
     value = "Synthetic line one\nSynthetic line two"
     track = TrackInfo(artist="Synthetic Artist", title="Synthetic Track")
@@ -142,7 +174,22 @@ def test_mapping_is_deterministic_and_does_not_mutate_source() -> None:
 
 def test_target_registry_and_mapping_results_are_immutable() -> None:
     assert TRACK_FIELD_TARGETS == {
-        "lyrics": TrackFieldTarget("lyrics", "lyrics", TrackTargetShape.SCALAR_STRING)
+        "lyrics": TrackFieldTarget("lyrics", "lyrics", TrackTargetShape.SCALAR_STRING),
+        "bpm": TrackFieldTarget("bpm", "bpm", TrackTargetShape.SCALAR_FLOAT),
+        "genres": TrackFieldTarget("genres", "genres", TrackTargetShape.STRING_LIST),
+        "moods": TrackFieldTarget("moods", "moods", TrackTargetShape.STRING_LIST),
+        "lyrics_languages": TrackFieldTarget(
+            "lyrics_languages", "lyrics_languages", TrackTargetShape.STRING_LIST
+        ),
+        "artist_countries": TrackFieldTarget(
+            "artist_countries", "artist_countries", TrackTargetShape.STRING_LIST
+        ),
+        "artist_areas": TrackFieldTarget(
+            "artist_areas", "artist_areas", TrackTargetShape.STRING_LIST
+        ),
+        "artist_languages": TrackFieldTarget(
+            "artist_languages", "artist_languages", TrackTargetShape.STRING_LIST
+        ),
     }
     result = map_change_plan_to_track_info(
         ChangePlan(changes=(planned_change("lyrics", "Synthetic plain line"),))

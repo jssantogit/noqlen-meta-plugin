@@ -16,7 +16,13 @@ from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.beets_application import BeetsApplicationError
 from beetsplug.noqlenmeta.beets_mapping import BeetsMappingError
 from beetsplug.noqlenmeta.changeplan import ChangePlanError
-from beetsplug.noqlenmeta.domain import MetadataCandidate, ReleaseEnrichmentContext
+from beetsplug.noqlenmeta.domain import (
+    ArtistEnrichmentContext,
+    MetadataCandidate,
+    ReleaseEnrichmentContext,
+    SemanticEvidenceBundle,
+)
+from beetsplug.noqlenmeta.genre_evidence import GenreEvidence, GenreEvidenceKind
 from beetsplug.noqlenmeta.integration import (
     context_from_album_info,
     current_values_from_album_info,
@@ -25,7 +31,10 @@ from beetsplug.noqlenmeta.integration import (
 )
 from beetsplug.noqlenmeta.providers import ProviderError
 from beetsplug.noqlenmeta.providers.base import ProviderContractError
-from beetsplug.noqlenmeta.providers.specs import BUILTIN_RELEASE_PROVIDER_SPECS
+from beetsplug.noqlenmeta.providers.specs import (
+    BUILTIN_RELEASE_PROVIDER_SPECS,
+    ProviderScope,
+)
 from beetsplug.noqlenmeta.resolver import default_resolution_policy
 
 TOKEN = "test-personal-token"
@@ -41,7 +50,7 @@ DISCOGS_FIELDS = (
     "media",
     "format_descriptions",
 )
-FUTURE_FIELDS = ("mood", "lyrics", "synced_lyrics", "cover")
+DISABLED_V2_FIELDS = ("artist_areas", "lyrics", "synced_lyrics")
 
 
 @pytest.fixture(autouse=True)
@@ -90,6 +99,22 @@ def candidate(
     )
 
 
+def lastfm_genre_bundle(*genres: str) -> SemanticEvidenceBundle:
+    return SemanticEvidenceBundle(
+        genres=tuple(
+            GenreEvidence(
+                genre,
+                "lastfm",
+                ProviderScope.RELEASE,
+                GenreEvidenceKind.COMMUNITY_TAG,
+                0.85,
+                "Selected Artist / Selected Album",
+            )
+            for genre in genres
+        )
+    )
+
+
 def configure_enabled(
     plugin: NoqlenMetaPlugin,
     *,
@@ -105,10 +130,13 @@ def configure_enabled(
     storefront: str = "us",
     resolution: dict[str, object] | None = None,
 ) -> None:
+    configured_fields = {"cover": False}
+    configured_fields.update(fields or {})
     settings: dict[str, object] = {
         "preview": preview,
         "apply": apply,
-        "fields": fields or {},
+        "genres": {"num_genres": 2, "promote_styles": True},
+        "fields": configured_fields,
         "providers": {
             "discogs": {"enabled": discogs, "user_token": TOKEN},
             "musicbrainz": {"enabled": musicbrainz},
@@ -131,14 +159,20 @@ def test_configuration_defaults_and_redacts_user_token() -> None:
     assert plugin.config["apply"].get(bool) is False
     assert plugin.config["apply_mode"].as_str() == "strict"
     assert all(plugin.config["fields"][field].get(bool) for field in DISCOGS_FIELDS)
-    assert all(not plugin.config["fields"][field].get(bool) for field in FUTURE_FIELDS)
+    assert all(
+        not plugin.config["fields"][field].get(bool) for field in DISABLED_V2_FIELDS
+    )
+    assert plugin.config["fields"]["moods"].get(bool) is True
+    assert plugin.config["fields"]["bpm"].get(bool) is True
+    assert plugin.config["fields"]["cover"].get(bool) is True
     assert plugin.config["providers"]["discogs"]["enabled"].get(bool) is False
     assert plugin.config["providers"]["discogs"]["user_token"].redact is True
-    assert plugin.config["providers"]["musicbrainz"]["enabled"].get(bool) is False
+    assert plugin.config["providers"]["musicbrainz"]["enabled"].get(bool) is True
     assert plugin.config["providers"]["lastfm"]["enabled"].get(bool) is False
     assert plugin.config["providers"]["itunes"]["enabled"].get(bool) is False
     assert plugin.config["providers"]["itunes"]["storefront"].as_str() == "us"
     assert plugin.config["providers"]["lrclib"]["enabled"].get(bool) is False
+    assert plugin.config["providers"]["coverartarchive"]["enabled"].get(bool) is True
     assert plugin.config["resolution"]["authority"].get(dict) == {}
     assert plugin.config["resolution"]["min_confidence"].get(dict) == {}
     assert plugin.config["resolution"]["preserve_existing"].get(dict) == {}
@@ -247,6 +281,9 @@ def test_current_values_map_album_info_to_canonical_shapes() -> None:
         country=" NL ",
         year=2024,
         media=" CD ",
+        artist_countries=["Brazil", " Japan "],
+        artist_areas=["Salvador", " Tokyo "],
+        artist_languages=["por", " jpn "],
     )
 
     assert current_values_from_album_info(info) == {
@@ -258,6 +295,9 @@ def test_current_values_map_album_info_to_canonical_shapes() -> None:
         "country": "NL",
         "year": 2024,
         "media": ("CD",),
+        "artist_countries": ("Brazil", "Japan"),
+        "artist_areas": ("Salvador", "Tokyo"),
+        "artist_languages": ("por", "jpn"),
     }
 
 
@@ -275,6 +315,19 @@ def test_current_values_omit_empty_invalid_and_unmapped_values() -> None:
 
     assert current_values_from_album_info(info) == {}
     assert "format_descriptions" not in current_values_from_album_info(info)
+
+
+def test_current_values_prefer_plural_styles_over_legacy_style() -> None:
+    info = album_info(style="Legacy")
+    info["styles"] = ["Modern A", "Modern B"]
+
+    assert current_values_from_album_info(info)["styles"] == ("Modern A", "Modern B")
+
+
+def test_current_values_fall_back_to_legacy_style() -> None:
+    assert current_values_from_album_info(album_info(style="Legacy"))["styles"] == (
+        "Legacy",
+    )
 
 
 def test_settings_only_override_known_policy_enablement() -> None:
@@ -301,11 +354,11 @@ def test_settings_only_override_known_policy_enablement() -> None:
 
 
 def test_settings_can_enable_provider_and_future_field_without_granting_authority() -> None:
-    policy = resolution_policy_from_settings({"mood": True}, {"discogs": True})
+    policy = resolution_policy_from_settings({"moods": True}, {"discogs": True})
 
     assert policy.is_provider_enabled("discogs")
-    assert policy.is_field_enabled("mood")
-    assert policy.authority_rank("mood", "discogs") is None
+    assert policy.is_field_enabled("moods")
+    assert policy.authority_rank("moods", "discogs") is None
 
 
 def test_policy_provider_map_includes_all_production_providers_disabled_by_default() -> None:
@@ -333,7 +386,10 @@ def test_actual_plugin_policy_accepts_enabled_lrclib_and_custom_authority() -> N
     plugin = NoqlenMetaPlugin()
     plugin.config.set(
         {
-            "providers": {"lrclib": {"enabled": True}},
+            "providers": {
+                "lrclib": {"enabled": True},
+                "musicbrainz": {"enabled": False},
+            },
             "fields": {"lyrics": True, "synced_lyrics": True},
             "resolution": {"authority": {"lyrics": ["lrclib"]}},
         }
@@ -500,7 +556,7 @@ def test_enabled_provider_is_not_invoked_when_no_authoritative_field_is_enabled(
     )
     plugin = NoqlenMetaPlugin()
     configure_enabled(plugin, fields={field: False for field in DISCOGS_FIELDS})
-    plugin.config["fields"]["mood"].set(True)
+    plugin.config["fields"]["moods"].set(True)
 
     plugin._import_task_choice(None, import_task(album_info()))
 
@@ -524,7 +580,7 @@ def test_itunes_is_not_invoked_when_only_styles_can_be_enriched(
     plugin._import_task_choice(None, import_task(album_info()))
 
 
-@pytest.mark.parametrize("field", ["styles", "mood"])
+@pytest.mark.parametrize("field", ["styles", "moods"])
 def test_lastfm_is_not_invoked_for_future_classification_fields(
     monkeypatch: pytest.MonkeyPatch, field: str
 ) -> None:
@@ -536,7 +592,7 @@ def test_lastfm_is_not_invoked_for_future_classification_fields(
     plugin = NoqlenMetaPlugin()
     configure_enabled(
         plugin,
-        fields={known: known == field for known in (*DISCOGS_FIELDS, "mood")},
+        fields={known: known == field for known in (*DISCOGS_FIELDS, "moods")},
         discogs=False,
         lastfm=True,
     )
@@ -550,21 +606,13 @@ def test_lastfm_genres_join_shared_importer_plan_without_preview_mutation(
     output: list[str] = []
     contexts: list[ReleaseEnrichmentContext] = []
 
-    def lastfm_candidates(
-        self: NoqlenMetaPlugin, context: ReleaseEnrichmentContext
-    ) -> tuple[MetadataCandidate, ...]:
+    def lastfm_semantics(context: ReleaseEnrichmentContext) -> SemanticEvidenceBundle:
         contexts.append(context)
-        return (
-            candidate(
-                value=("Progressive Metal", "Death Metal"),
-                confidence=0.85,
-                provider="lastfm",
-            ),
-        )
+        return lastfm_genre_bundle("Progressive Metal", "Death Metal")
 
-    monkeypatch.setattr(NoqlenMetaPlugin, "_lastfm_candidates", lastfm_candidates)
     monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
     plugin = NoqlenMetaPlugin()
+    monkeypatch.setattr(plugin, "_lastfm_release_semantics", lastfm_semantics)
     configure_enabled(plugin, discogs=False, lastfm=True)
     info = album_info()
     snapshot = copy.deepcopy(dict(info))
@@ -573,8 +621,9 @@ def test_lastfm_genres_join_shared_importer_plan_without_preview_mutation(
 
     assert contexts == [ReleaseEnrichmentContext("Selected Artist", "Selected Album")]
     assert "genres\n    PROPOSE" in output[0]
-    assert "source: Last.fm" in output[0]
-    assert "proposed: Progressive Metal, Death Metal" in output[0]
+    assert "source: Noqlen" in output[0]
+    assert "Death Metal: lastfm community tag" in output[0]
+    assert "proposed: Death Metal, Progressive Metal" in output[0]
     assert "application: disabled (preview only)" in output[0]
     assert dict(info) == snapshot
 
@@ -759,7 +808,7 @@ def test_discogs_is_not_loaded_or_invoked_for_cover_only_configuration(
     plugin._import_task_choice(None, import_task(album_info()))
 
 
-def test_both_providers_feed_one_resolver_pass_and_discogs_authority_wins(
+def test_genres_bypass_generic_resolver_and_rejoin_one_change_plan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from beetsplug.noqlenmeta.beets_mapping import (
@@ -780,7 +829,7 @@ def test_both_providers_feed_one_resolver_pass_and_discogs_authority_wins(
         token: str | None,
     ) -> tuple[MetadataCandidate, ...]:
         provider_calls.append(("discogs", token))
-        return (candidate(value=("Rock", "Alternative"), confidence=0.88),)
+        return (candidate(value=("Rock", "Electronic"), confidence=0.88),)
 
     def itunes_candidates(
         self: NoqlenMetaPlugin,
@@ -788,7 +837,7 @@ def test_both_providers_feed_one_resolver_pass_and_discogs_authority_wins(
         storefront: str,
     ) -> tuple[MetadataCandidate, ...]:
         provider_calls.append(("itunes", storefront))
-        return (candidate(value=("Alternative",), confidence=0.99, provider="itunes"),)
+        return (candidate(value=("Electronic",), confidence=0.99, provider="itunes"),)
 
     def record_resolution(
         current_values: object, candidates: object, policy: object
@@ -811,7 +860,7 @@ def test_both_providers_feed_one_resolver_pass_and_discogs_authority_wins(
     monkeypatch.setattr("beetsplug.noqlenmeta.map_change_plan_to_beets", record_mapping)
     monkeypatch.setattr(
         "beetsplug.noqlenmeta.render_beets_target_plan",
-        lambda plan, application_result: rendered.append(plan),
+        lambda plan, application_result, semantic_outcomes: rendered.append(plan),
     )
     plugin = NoqlenMetaPlugin()
     configure_enabled(plugin, discogs=True, itunes=True, storefront="gb")
@@ -826,12 +875,13 @@ def test_both_providers_feed_one_resolver_pass_and_discogs_authority_wins(
 
     assert provider_calls == [("discogs", TOKEN), ("itunes", "gb")]
     assert len(resolution_calls) == 1
-    assert [item.provider for item in resolution_calls[0]] == ["discogs", "itunes"]
+    assert resolution_calls[0] == ()
     assert len(plan_calls) == 1
     decisions = plan_calls[0]
     decision = decisions[0]  # type: ignore[index]
-    assert decision.selected.provider == "discogs"
-    assert [item.provider for item in decision.alternatives] == ["itunes"]
+    assert decision.selected.provider == "noqlen"
+    assert decision.selected.value == ("Electronic", "Rock")
+    assert decision.alternatives == ()
     assert len(mapping_calls) == 1
     assert mapping_calls[0].changes[0].source is decision.selected  # type: ignore[attr-defined]
     target_plan = rendered[0]
@@ -857,7 +907,7 @@ def test_itunes_wins_when_discogs_has_no_eligible_genres_candidate(
         NoqlenMetaPlugin,
         "_itunes_candidates",
         lambda self, context, storefront: (
-            candidate(value=("Alternative",), confidence=0.99, provider="itunes"),
+            candidate(value=("K-pop",), confidence=0.99, provider="itunes"),
         ),
     )
     monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
@@ -866,9 +916,9 @@ def test_itunes_wins_when_discogs_has_no_eligible_genres_candidate(
 
     plugin._import_task_choice(None, import_task(album_info()))
 
-    assert "source: iTunes" in output[0]
+    assert "source: Noqlen" in output[0]
     assert "source: Itunes" not in output[0]
-    assert "selected 'itunes' by field authority" in output[0]
+    assert "K-pop: itunes genre" in output[0]
 
 
 def test_discogs_failure_does_not_suppress_itunes(
@@ -898,7 +948,8 @@ def test_discogs_failure_does_not_suppress_itunes(
         plugin._import_task_choice(None, import_task(album_info()))
 
     assert "Discogs enrichment unavailable" in caplog.text
-    assert "source: iTunes" in output[0]
+    assert "source: Noqlen" in output[0]
+    assert "itunes genre" in output[0]
 
 
 def test_lastfm_failure_hides_key_detail_and_itunes_continues(
@@ -907,10 +958,11 @@ def test_lastfm_failure_hides_key_detail_and_itunes_continues(
 ) -> None:
     output: list[str] = []
     fake_key = "fake-shared-key-in-underlying-error"
-    monkeypatch.setattr(
-        NoqlenMetaPlugin,
-        "_lastfm_candidates",
-        lambda *args: (_ for _ in ()).throw(ProviderError(f"unsafe {fake_key}")),
+    plugin = NoqlenMetaPlugin()
+    plugin._lastfm_provider = SimpleNamespace(
+        get_semantic_evidence=lambda *args: (_ for _ in ()).throw(
+            ProviderError(f"unsafe {fake_key}")
+        )
     )
     monkeypatch.setattr(
         NoqlenMetaPlugin,
@@ -918,14 +970,14 @@ def test_lastfm_failure_hides_key_detail_and_itunes_continues(
         lambda *args: (candidate(provider="itunes"),),
     )
     monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
-    plugin = NoqlenMetaPlugin()
     configure_enabled(plugin, discogs=False, lastfm=True, itunes=True)
 
     with caplog.at_level(logging.WARNING, logger="beets.noqlenmeta"):
         plugin._import_task_choice(None, import_task(album_info()))
 
     assert "Last.fm enrichment unavailable" in caplog.text
-    assert "source: iTunes" in output[0]
+    assert "source: Noqlen" in output[0]
+    assert "itunes genre" in output[0]
     assert fake_key not in caplog.text
     assert fake_key not in output[0]
 
@@ -935,21 +987,26 @@ def test_lastfm_missing_album_is_quiet_and_itunes_continues(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     output: list[str] = []
-    monkeypatch.setattr(NoqlenMetaPlugin, "_lastfm_candidates", lambda *args: ())
+    plugin = NoqlenMetaPlugin()
+    monkeypatch.setattr(
+        plugin,
+        "_lastfm_release_semantics",
+        lambda *args: SemanticEvidenceBundle(),
+    )
     monkeypatch.setattr(
         NoqlenMetaPlugin,
         "_itunes_candidates",
         lambda *args: (candidate(provider="itunes"),),
     )
     monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
-    plugin = NoqlenMetaPlugin()
     configure_enabled(plugin, discogs=False, lastfm=True, itunes=True)
 
     with caplog.at_level(logging.WARNING, logger="beets.noqlenmeta"):
         plugin._import_task_choice(None, import_task(album_info()))
 
     assert "Last.fm enrichment unavailable" not in caplog.text
-    assert "source: iTunes" in output[0]
+    assert "source: Noqlen" in output[0]
+    assert "itunes genre" in output[0]
 
 
 def test_itunes_failure_does_not_suppress_discogs(
@@ -979,7 +1036,8 @@ def test_itunes_failure_does_not_suppress_discogs(
         plugin._import_task_choice(None, import_task(album_info()))
 
     assert "iTunes enrichment unavailable" in caplog.text
-    assert "source: Discogs" in output[0]
+    assert "source: Noqlen" in output[0]
+    assert "discogs genre" in output[0]
 
 
 def test_musicbrainz_failure_warns_and_discogs_continues(
@@ -1210,13 +1268,85 @@ def test_preview_is_visible_and_selected_info_remains_unchanged(
     assert "target: genres" in output[0]
     assert "target shape: string-list" in output[0]
     assert "proposed: Electronic, Rock" in output[0]
-    assert "source: Discogs" in output[0]
+    assert "source: Noqlen" in output[0]
+    assert "discogs genre" in output[0]
     assert "confidence: 0.98" in output[0]
     assert "labels\n    REVIEW" in output[0]
     assert "current: Roadrunner Records" in output[0]
     assert "candidate: Listenable Records" in output[0]
     assert "existing conflicting value is preserved" in output[0]
     assert TOKEN not in output[0]
+
+
+def test_importer_preview_retains_semantic_no_evidence_and_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from beetsplug.noqlenmeta.providers.musicbrainz_semantic import (
+        MusicBrainzArtistProvider,
+        MusicBrainzTrackProvider,
+    )
+
+    artist_ids = (
+        "22222222-2222-4222-8222-222222222222",
+        "33333333-3333-4333-8333-333333333333",
+    )
+    output: list[str] = []
+
+    monkeypatch.setattr(
+        MusicBrainzTrackProvider,
+        "get_semantic_evidence",
+        lambda *args: SemanticEvidenceBundle(),
+    )
+
+    def artist_evidence(
+        provider: MusicBrainzArtistProvider, context: ArtistEnrichmentContext
+    ) -> SemanticEvidenceBundle:
+        if context.external_ids[0].value == artist_ids[1]:
+            raise ProviderError("network")
+        return SemanticEvidenceBundle(
+            metadata=(
+                MetadataCandidate(
+                    "artist_countries",
+                    ("Brazil",),
+                    "musicbrainz",
+                    0.99,
+                    artist_ids[0],
+                ),
+            )
+        )
+
+    monkeypatch.setattr(MusicBrainzArtistProvider, "get_semantic_evidence", artist_evidence)
+    monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(
+        plugin,
+        fields={
+            field: field in {"artist_countries", "artist_areas", "artist_languages"}
+            for field in plugin.config["fields"]
+        },
+        discogs=False,
+        musicbrainz=True,
+    )
+    track = TrackInfo(
+        title="Selected Track",
+        artist="Artist A feat. Artist B",
+        artists=["Artist A", "Artist B"],
+        artists_ids=list(artist_ids),
+    )
+    info = album_info(tracks=[track], artist_countries=["Existing"])
+    item = Item(title="Local Track")
+    task = ImportTask(None, [], [item])
+    task.choice_flag = Action.APPLY
+    task.match = AlbumMatch(None, info, {item: track})  # type: ignore[arg-type]
+
+    plugin._import_task_choice(None, task)
+
+    release_preview = output[0]
+    assert "artist_languages: no-evidence" in release_preview
+    assert "artist_areas: unavailable" in release_preview
+    assert "artist_countries: unavailable" in release_preview
+    assert "partial semantic evidence retained" in release_preview
+    assert "raw_tag" not in release_preview
 
 
 def test_importer_uses_preserve_override_but_preview_does_not_mutate_selected_info(
@@ -1768,7 +1898,7 @@ def test_provider_failure_allows_strict_fallback_application(
         NoqlenMetaPlugin,
         "_itunes_candidates",
         lambda self, context, storefront: (
-            candidate(value=("Alternative",), provider="itunes"),
+            candidate(value=("K-pop",), provider="itunes"),
         ),
     )
     plugin = NoqlenMetaPlugin()
@@ -1779,7 +1909,7 @@ def test_provider_failure_allows_strict_fallback_application(
         plugin._import_task_choice(None, import_task(info))
 
     assert "Discogs enrichment unavailable" in caplog.text
-    assert info.genres == ["Alternative"]
+    assert info.genres == ["K-pop"]
 
 
 def test_provider_failure_allows_valid_partial_subset_application(
@@ -1795,7 +1925,7 @@ def test_provider_failure_allows_valid_partial_subset_application(
         NoqlenMetaPlugin,
         "_itunes_candidates",
         lambda self, context, storefront: (
-            candidate(value=("Alternative",), provider="itunes"),
+            candidate(value=("K-pop",), provider="itunes"),
             candidate("year", 2005, provider="itunes"),
         ),
     )
@@ -1813,7 +1943,7 @@ def test_provider_failure_allows_valid_partial_subset_application(
         plugin._import_task_choice(None, import_task(info))
 
     assert "Discogs enrichment unavailable" in caplog.text
-    assert info.genres == ["Alternative"]
+    assert info.genres == ["K-pop"]
     assert info.year == 1999
 
 
@@ -1837,12 +1967,12 @@ def test_normal_later_beets_application_consumes_enriched_selected_info(
 
     plugin._import_task_choice(None, task)
 
-    assert info.genres == ["Rock", "Metal"]
+    assert info.genres == ["Metal", "Rock"]
     assert item.genres == []
 
     task.apply_metadata()
 
-    assert item.genres == ["Rock", "Metal"]
+    assert item.genres == ["Metal", "Rock"]
 
 
 def test_normal_later_beets_application_consumes_only_partial_mapped_subset(
@@ -1868,13 +1998,13 @@ def test_normal_later_beets_application_consumes_only_partial_mapped_subset(
 
     plugin._import_task_choice(None, task)
 
-    assert info.genres == ["Rock", "Metal"]
+    assert info.genres == ["Metal", "Rock"]
     assert info.label is None
     assert item.genres == []
 
     task.apply_metadata()
 
-    assert item.genres == ["Rock", "Metal"]
+    assert item.genres == ["Metal", "Rock"]
     assert item.label == ""
     assert item.label not in {"Label A", "Label B", "Label A, Label B"}
 
@@ -1911,10 +2041,10 @@ def test_resolved_integration_produces_keep_and_skip_actions(
     monkeypatch.setattr(
         NoqlenMetaPlugin,
         "_discogs_candidates",
-        lambda self, context, token: (
-            candidate("genres", ("Electronic", "Rock")),
-            candidate("styles", ("Ambient",)),
-        ),
+            lambda self, context, token: (
+                candidate("genres", ("Electronic", "Rock")),
+                candidate("styles", ("Unrecognized Style",)),
+            ),
     )
     monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
     plugin = NoqlenMetaPlugin()
@@ -1922,7 +2052,11 @@ def test_resolved_integration_produces_keep_and_skip_actions(
 
     plugin._import_task_choice(
         None,
-        import_task(album_info(genres=["Electronic", "Rock"], style="Ambient")),
+        import_task(
+            album_info(
+                genres=["Electronic", "Rock"], style="Unrecognized Style"
+            )
+        ),
     )
 
     assert "genres\n    KEEP" in output[0]

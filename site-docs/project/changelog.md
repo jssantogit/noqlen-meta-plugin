@@ -4,5 +4,7 @@ The repository root [`CHANGELOG.md`](https://github.com/jssantogit/noqlen-meta-p
 is the canonical changelog. It summarizes user-facing capabilities and safety
 changes without internal development history.
 
-Version 1.0.0 was released on 2026-08-02. The canonical changelog now contains
-an `Unreleased` section for future user-facing changes.
+The canonical changelog contains an empty `Unreleased` section followed by the
+prepared `2.0.0 - 2026-08-11` release record and the historical `1.0.0` record.
+Version 1.0.0 remains the currently published release until the owner-authorized
+v2 release workflow is executed.

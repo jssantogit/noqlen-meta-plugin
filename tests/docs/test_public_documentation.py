@@ -17,7 +17,24 @@ def test_default_config_is_fresh_and_complete() -> None:
     first["fields"]["genres"] = False
 
     assert second["fields"]["genres"] is True
+    assert second["genres"] == {"num_genres": 1, "promote_styles": True}
     assert second["providers"]["discogs"]["user_token"] == ""
+    assert second["fields"]["moods"] is True
+    assert "mood" not in second["fields"]
+    assert second["fields"]["artist_areas"] is False
+    assert second["providers"]["musicbrainz"]["enabled"] is True
+    assert second["providers"]["coverartarchive"]["enabled"] is True
+    assert second["artwork"] == {"size": "original", "replace_existing": False}
+    assert second["bpm"] == {
+        "round": False,
+        "recalculate_existing": False,
+        "octave_normalization": False,
+        "octave_range": {"min": 70, "max": 180},
+    }
+    assert second["local_analysis"] == {
+        "bpm": {"enabled": False, "analysis_mode": "full", "window_seconds": 90},
+        "mood": {"enabled": False},
+    }
 
 
 def test_public_documentation_gate() -> None:
@@ -39,7 +56,7 @@ def test_command_help_explains_modes_and_write_boundaries() -> None:
     assert "--identity" in help_text
     assert "--identity-tags" in help_text
     assert "--apply" in help_text
-    assert "never writes files" in help_text
+    assert "ordinary file sync with --apply" in help_text
     assert "ordinary metadata only" in help_text
     assert "--write" in help_text
     assert "all targets in the selected mode" in help_text
@@ -50,9 +67,14 @@ def test_public_release_state_is_consistent() -> None:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     home = (ROOT / "site-docs/index.md").read_text(encoding="utf-8")
     release = (ROOT / "site-docs/project/release.md").read_text(encoding="utf-8")
+    permissions = (ROOT / "site-docs/concepts/preview-apply-write.md").read_text(
+        encoding="utf-8"
+    )
     checklist = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
-    release_words = " ".join(release.split())
-    combined = f"{readme}\n{home}\n{release}".casefold()
+    release_words = " ".join(release.split()).casefold()
+    combined = " ".join(
+        f"{readme}\n{home}\n{release}\n{permissions}".split()
+    ).casefold()
 
     assert len(readme.splitlines()) < 500
     assert "[MIT License](LICENSE)" in readme
@@ -72,7 +94,20 @@ def test_public_release_state_is_consistent() -> None:
     assert "https://noqlen-meta-plugin.readthedocs.io/en/v1.0.0/" in release
     assert "Version `1.0.0` was published on PyPI" in readme
     assert "## Unreleased" in changelog
-    assert changelog.index("## Unreleased") < changelog.index("## 1.0.0")
+    assert "## 2.0.0 - 2026-08-11" in changelog
+    assert (
+        changelog.index("## Unreleased")
+        < changelog.index("## 2.0.0 - 2026-08-11")
+        < changelog.index("## 1.0.0 - 2026-08-02")
+    )
+    assert "Repository release candidate: `2.0.0`" in release
+    assert "Currently published release: `1.0.0` (2026-08-02)" in release
+    assert "main merge, tag, publication, and versioned documentation remain pending" in (
+        release_words
+    )
+    assert "verified `cover.jpg` sidecars may be written" in combined
+    assert "audio files remain unchanged unless `--write`" in combined
+    assert "adding `--write` never triggers another provider call" in combined
     assert "[x] MIT License selected and added" in checklist
     assert "[x] Repository visibility changed to public" in checklist
     assert "[x] PyPI project ownership established" in checklist

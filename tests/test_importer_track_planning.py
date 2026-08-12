@@ -1,5 +1,7 @@
 import copy
 import logging
+import shutil
+from pathlib import Path
 
 import pytest
 from beets import config
@@ -14,12 +16,16 @@ from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.domain import MetadataCandidate, TrackEnrichmentContext
 from beetsplug.noqlenmeta.providers import ProviderError
 from beetsplug.noqlenmeta.providers.base import ProviderContractError
+from beetsplug.noqlenmeta.tempo import LocalBpmSettings, TempoObservation
 
 PRIVATE_LYRIC = "PRIVATE-SYNTHETIC-LYRIC-CONTENT-DO-NOT-DISPLAY"
+FIXTURE = Path(__file__).parent / "fixtures" / "identity_tags" / "silence.flac"
 
 
 @pytest.fixture(autouse=True)
 def restore_beets_config() -> object:
+    config["import"]["from_scratch"].get()
+    config["artist_credit"].get()
     sources = list(config.sources)
     yield
     config.sources[:] = sources
@@ -109,6 +115,94 @@ def _silence_preview(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     monkeypatch.setattr("beetsplug.noqlenmeta.track_preview.ui.print_", output.append)
     monkeypatch.setattr("beetsplug.noqlenmeta.integration.ui.print_", output.append)
     return output
+
+
+def _configure_bpm(plugin: NoqlenMetaPlugin, *, recalculate: bool = False) -> None:
+    plugin.config.set(
+        {
+            "preview": True,
+            "apply": True,
+            "fields": {"bpm": True, "lyrics": False, "synced_lyrics": False},
+            "providers": {
+                "discogs": {"enabled": False, "user_token": ""},
+                "musicbrainz": {"enabled": False},
+                "lastfm": {"enabled": False},
+                "itunes": {"enabled": False, "storefront": "us"},
+                "lrclib": {"enabled": False},
+            },
+            "bpm": {
+                "round": True,
+                "recalculate_existing": recalculate,
+                "octave_normalization": False,
+                "octave_range": {"min": 70, "max": 180},
+            },
+            "local_analysis": {
+                "bpm": {
+                    "enabled": True,
+                    "analysis_mode": "full",
+                    "window_seconds": 90,
+                },
+                "mood": {"enabled": False},
+            },
+        }
+    )
+
+
+class TempoAnalyzer:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def analyze(self, path: bytes, settings: LocalBpmSettings) -> TempoObservation:
+        self.calls += 1
+        return TempoObservation(127.63, "synthetic")
+
+
+def test_importer_local_bpm_uses_shared_canonical_policy(tmp_path: Path) -> None:
+    path = tmp_path / "track.flac"
+    shutil.copy2(FIXTURE, path)
+    item = Item(path=bytes(path), artist="Synthetic Artist", title="Local")
+    track = _track("Selected", 1)
+    plugin = NoqlenMetaPlugin()
+    _configure_bpm(plugin)
+    analyzer = TempoAnalyzer()
+    plugin._tempo_analyzer = analyzer
+
+    plugin._import_task_choice(None, _singleton_task(item, track))
+
+    assert analyzer.calls == 1
+    assert track.bpm == 128.0
+
+
+def test_importer_preserves_existing_bpm_without_analysis(tmp_path: Path) -> None:
+    path = tmp_path / "track.flac"
+    shutil.copy2(FIXTURE, path)
+    item = Item(path=bytes(path), artist="Synthetic Artist", title="Local", bpm=126.0)
+    track = _track("Selected", 1, bpm=126.0)
+    plugin = NoqlenMetaPlugin()
+    _configure_bpm(plugin)
+    analyzer = TempoAnalyzer()
+    plugin._tempo_analyzer = analyzer
+
+    plugin._import_task_choice(None, _singleton_task(item, track))
+
+    assert analyzer.calls == 0
+    assert track.bpm == 126.0
+
+
+def test_importer_recalculates_existing_bpm_when_enabled(tmp_path: Path) -> None:
+    path = tmp_path / "track.flac"
+    shutil.copy2(FIXTURE, path)
+    item = Item(path=bytes(path), artist="Synthetic Artist", title="Local", bpm=126.0)
+    track = _track("Selected", 1, bpm=126.0)
+    plugin = NoqlenMetaPlugin()
+    _configure_bpm(plugin, recalculate=True)
+    analyzer = TempoAnalyzer()
+    plugin._tempo_analyzer = analyzer
+
+    plugin._import_task_choice(None, _singleton_task(item, track))
+
+    assert analyzer.calls == 1
+    assert track.bpm == 128.0
 
 
 def test_album_plans_selected_mapping_in_order_and_excludes_extras(

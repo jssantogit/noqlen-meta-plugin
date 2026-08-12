@@ -25,7 +25,7 @@ def candidate(provider: str, confidence: float, value: int = 2005) -> MetadataCa
 
 
 def test_no_advanced_settings_preserve_the_pre_block_policy_exactly() -> None:
-    field_settings = {"genres": False, "mood": True}
+    field_settings = {"genres": False, "moods": True}
     provider_settings = {"discogs": True, "musicbrainz": True}
     baseline = default_resolution_policy()
     expected_rules = {

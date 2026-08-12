@@ -222,7 +222,12 @@ def test_production_boundary_uses_one_exact_lookup_with_narrow_includes(
 
     assert fields["labels"] == ("Listenable Records",)
     assert fields["catalog_numbers"] == ("POSH 074",)
-    assert calls == [(RELEASE_MBID, ["labels", "media"])]
+    assert calls == [
+        (
+            RELEASE_MBID,
+            ["labels", "media", "genres", "tags", "recordings", "artist-credits"],
+        )
+    ]
 
 
 def test_musicbrainz_provider_satisfies_metadata_provider_contract() -> None:

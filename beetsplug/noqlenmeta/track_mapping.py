@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
+from math import isfinite
 from types import MappingProxyType
 
 from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
@@ -19,6 +20,8 @@ class TrackTargetShape(Enum):
     """The supported value shapes exposed by the current TrackInfo contract."""
 
     SCALAR_STRING = "scalar_string"
+    STRING_LIST = "string_list"
+    SCALAR_FLOAT = "scalar_float"
 
 
 def _validate_field_name(value: object, label: str) -> None:
@@ -45,6 +48,19 @@ class TrackFieldTarget:
 
 _TARGETS = (
     TrackFieldTarget("lyrics", "lyrics", TrackTargetShape.SCALAR_STRING),
+    TrackFieldTarget("bpm", "bpm", TrackTargetShape.SCALAR_FLOAT),
+    TrackFieldTarget("genres", "genres", TrackTargetShape.STRING_LIST),
+    TrackFieldTarget("moods", "moods", TrackTargetShape.STRING_LIST),
+    TrackFieldTarget(
+        "lyrics_languages", "lyrics_languages", TrackTargetShape.STRING_LIST
+    ),
+    TrackFieldTarget(
+        "artist_countries", "artist_countries", TrackTargetShape.STRING_LIST
+    ),
+    TrackFieldTarget("artist_areas", "artist_areas", TrackTargetShape.STRING_LIST),
+    TrackFieldTarget(
+        "artist_languages", "artist_languages", TrackTargetShape.STRING_LIST
+    ),
 )
 
 TRACK_FIELD_TARGETS: Mapping[str, TrackFieldTarget] = MappingProxyType(
@@ -126,10 +142,36 @@ def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
             continue
 
         value = change.after
-        if target.shape is not TrackTargetShape.SCALAR_STRING:
+        if target.shape is TrackTargetShape.STRING_LIST:
+            if (
+                not isinstance(value, tuple)
+                or not value
+                or any(
+                    not isinstance(item, str) or not item or item != item.strip()
+                    for item in value
+                )
+            ):
+                raise TrackMappingError(
+                    f"{change.field!r} requires a non-empty tuple of canonical strings"
+                )
+        elif target.shape is TrackTargetShape.SCALAR_FLOAT:
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not isfinite(value)
+                or value <= 0
+            ):
+                raise TrackMappingError(
+                    f"{change.field!r} requires a finite positive number"
+                )
+            value = float(value)
+        elif target.shape is TrackTargetShape.SCALAR_STRING:
+            if not isinstance(value, str) or not value or value != value.strip():
+                raise TrackMappingError(
+                    f"{change.field!r} requires a non-empty canonical string"
+                )
+        else:
             raise TrackMappingError(f"unsupported target shape for {change.field!r}")
-        if not isinstance(value, str) or not value:
-            raise TrackMappingError(f"{change.field!r} requires a non-empty string")
         mapped.append(
             TrackTargetChange(
                 canonical_field=change.field,

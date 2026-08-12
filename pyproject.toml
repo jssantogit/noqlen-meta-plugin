@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "beets-noqlenmeta"
-version = "1.0.0"
+version = "2.0.0"
 description = "Multi-provider metadata enrichment and MusicBrainz identity tools for beets"
 readme = "README.md"
 license = "MIT"
@@ -34,6 +34,9 @@ Issues = "https://github.com/jssantogit/noqlen-meta-plugin/issues"
 Changelog = "https://github.com/jssantogit/noqlen-meta-plugin/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
+audio = [
+    "librosa>=0.11,<1",
+]
 discogs = [
     "python3-discogs-client>=2.8,<3",
 ]
@@ -51,6 +54,9 @@ dev = [
 where = ["."]
 include = ["beetsplug.noqlenmeta*"]
 namespaces = true
+
+[tool.setuptools.package-data]
+"beetsplug.noqlenmeta.genre_taxonomy" = ["genres.txt"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"

@@ -36,7 +36,7 @@ def mapped_change(field: str, value: object) -> BeetsTargetPlan:
     ("canonical", "target", "shape"),
     [
         ("genres", "genres", BeetsTargetShape.STRING_LIST),
-        ("styles", "style", BeetsTargetShape.SCALAR_STRING),
+        ("styles", "styles", BeetsTargetShape.STRING_LIST),
         ("labels", "label", BeetsTargetShape.SCALAR_STRING),
         ("catalog_numbers", "catalognum", BeetsTargetShape.SCALAR_STRING),
         ("barcodes", "barcode", BeetsTargetShape.SCALAR_STRING),
@@ -87,7 +87,12 @@ def test_target_definitions_are_immutable() -> None:
     ("field", "value", "target", "target_value"),
     [
         ("genres", ("Rock", "Metal"), "genres", ("Rock", "Metal")),
-        ("styles", ("Progressive Metal",), "style", "Progressive Metal"),
+        (
+            "styles",
+            ("Progressive Metal", "Technical Death Metal"),
+            "styles",
+            ("Progressive Metal", "Technical Death Metal"),
+        ),
         ("labels", ("Roadrunner",), "label", "Roadrunner"),
         ("catalog_numbers", ("RR-123",), "catalognum", "RR-123"),
         ("barcodes", ("0123456789012",), "barcode", "0123456789012"),
@@ -105,14 +110,13 @@ def test_lossless_mapping(
     assert len(result.mapped_changes) == 1
     assert result.mapped_changes[0].target_field == target
     assert result.mapped_changes[0].target_value == target_value
-    if field == "genres":
+    if field in {"genres", "styles"}:
         assert isinstance(result.mapped_changes[0].target_value, tuple)
 
 
 @pytest.mark.parametrize(
     ("field", "target"),
     [
-        ("styles", "style"),
         ("labels", "label"),
         ("catalog_numbers", "catalognum"),
         ("barcodes", "barcode"),

@@ -94,7 +94,7 @@ exist. Enabling a field does not guarantee an enabled provider can supply it.
 | Path | Default | Importer use | Ordinary library use | Important interaction |
 | --- | ---: | --- | --- | --- |
 | `noqlenmeta.fields.genres` | `true` | Release | Album | Discogs, Last.fm, iTunes; list mapping. |
-| `noqlenmeta.fields.styles` | `true` | Release | Album | Discogs; persistent target is singular. |
+| `noqlenmeta.fields.styles` | `true` | Release | Album | Discogs; typed plural storage is lossless and legacy `style` is a read fallback. |
 | `noqlenmeta.fields.labels` | `true` | Release | Album | Discogs/MusicBrainz; multiple values can block singular targets. |
 | `noqlenmeta.fields.catalog_numbers` | `true` | Release | Album | Discogs/MusicBrainz; multiple values can block. |
 | `noqlenmeta.fields.barcodes` | `true` | Release | Album | Discogs/MusicBrainz; multiple values can block. |
@@ -102,10 +102,15 @@ exist. Enabling a field does not guarantee an enabled provider can supply it.
 | `noqlenmeta.fields.year` | `true` | Release | Album | MusicBrainz, Discogs, iTunes. |
 | `noqlenmeta.fields.media` | `true` | Release | Preview/block | Importer target exists; persistent Album target does not. |
 | `noqlenmeta.fields.format_descriptions` | `true` | Preview/block | Preview/block | Discogs can supply it; v1 has no lossless ordinary target. |
-| `noqlenmeta.fields.mood` | `false` | None currently | None currently | No current provider adapter contributes mood. |
-| `noqlenmeta.fields.lyrics` | `false` | Selected tracks | None | LRCLIB plain lyrics map to selected `TrackInfo.lyrics`. |
-| `noqlenmeta.fields.synced_lyrics` | `false` | Preview/block | None | LRCLIB can supply it; v1 does not apply synchronized lyrics. |
-| `noqlenmeta.fields.cover` | `false` | None currently | None currently | v1 does not fetch or write cover art. |
+| `noqlenmeta.fields.moods` | `true` | Typed track target | Typed Item target | Classified MusicBrainz tags; optional Last.fm corroboration/fallback. |
+| `noqlenmeta.fields.bpm` | `true` | Numeric track target | Float Item target | Enables preservation/sync and optional local Librosa analysis. |
+| `noqlenmeta.fields.lyrics_languages` | `true` | Typed track target | Typed Item target | Exact Recording -> Work lookup; stores three-letter codes. |
+| `noqlenmeta.fields.artist_countries` | `true` | Typed release/track targets | Typed Album/Item targets | Structurally derived MusicBrainz geographic identification. |
+| `noqlenmeta.fields.artist_areas` | `false` | Typed release/track targets | Typed Album/Item targets | Trustworthy MusicBrainz main area; no string inference. |
+| `noqlenmeta.fields.artist_languages` | `true` | Typed release/track targets | Typed Album/Item targets | Three-letter codes derived only from current-target Works. |
+| `noqlenmeta.fields.lyrics` | `false` | Selected tracks | Items | LRCLIB plain lyrics use shared import/library resolution. |
+| `noqlenmeta.fields.synced_lyrics` | `false` | Preview/block | Preview/block | No lossless synchronized-lyrics target is delivered. |
+| `noqlenmeta.fields.cover` | `true` | Album artwork | Album artwork | Exact CAA front selection and deterministic `cover.jpg`. |
 
 Example:
 
@@ -118,22 +123,93 @@ fields:
 Field settings do not control identity importer, identity library, or
 identity-tag commands, whose four fields are fixed.
 
+## Genre Classification
+
+`noqlenmeta.fields.genres` remains the enable/disable switch for the field.
+The separate settings below tune classification only; they do not enable a
+provider or grant write authority.
+
+### `noqlenmeta.genres.num_genres`
+
+- Type: integer. Default: `1`. Accepted range: `1` through `10`.
+- Effect: limits the number of independently evidenced resolved genres.
+- Interaction: the default favors one specific trustworthy result. Higher
+  values do not add broad parents implicitly.
+
+### `noqlenmeta.genres.promote_styles`
+
+- Type: boolean. Default: `true`. Accepted: `true`, `false`.
+- Effect: allows a Discogs style recognized by the packaged Noqlen taxonomy to
+  participate in genre classification.
+- Interaction: a promoted value remains independently present in `styles`.
+
+Noqlen Meta packages its own MusicBrainz-derived genre taxonomy and does not
+require the LastGenre plugin. Classification does not download taxonomy data
+during ordinary execution.
+
+```yaml
+genres:
+  num_genres: 1
+  promote_styles: true
+```
+
+### `noqlenmeta.moods.max_moods`
+
+- Type: integer. Default: `1`. Accepted range: `1` through `10`.
+- Effect: bounds independently evidenced canonical moods without padding.
+
+```yaml
+moods:
+  max_moods: 1
+```
+
 ## Provider Controls
 
-Every `enabled` key is boolean, defaults to `false`, accepts `true`/`false`,
-and grants no write permission. Release providers are used by importer release
+Every `enabled` key is boolean, accepts `true`/`false`, and grants no write
+permission. Release providers are used by importer release
 enrichment and ordinary library mode. LRCLIB is used only for selected importer
-tracks. No provider key controls identity-tag mode.
+tracks and existing-library Items. No provider key controls identity-tag mode.
 
 | Path | Type | Default | Effect and dependencies |
 | --- | --- | --- | --- |
 | `noqlenmeta.providers.discogs.enabled` | boolean | `false` | Enables release collection when field authority intersects Discogs capability; search needs the optional Discogs dependency. |
 | `noqlenmeta.providers.discogs.user_token` | string | empty | Optional Discogs token; redacted; a non-empty `NOQLENMETA_DISCOGS_TOKEN` environment value takes precedence. |
-| `noqlenmeta.providers.musicbrainz.enabled` | boolean | `false` | Enables exact-release-MBID enrichment only; no credentials; does not control identity audit. |
-| `noqlenmeta.providers.lastfm.enabled` | boolean | `false` | Enables filtered album genres; uses the API key current beets shares with plugins. |
+| `noqlenmeta.providers.musicbrainz.enabled` | boolean | `true` | Zero-credential exact-MBID Release/Recording/Work/Artist semantic backbone; no fuzzy search; does not control identity audit. |
+| `noqlenmeta.providers.lastfm.enabled` | boolean | `false` | Enables classified Track -> Release -> Artist fallback for unresolved genres/styles/moods; uses beets' shared API key. |
 | `noqlenmeta.providers.itunes.enabled` | boolean | `false` | Enables album genres/year from the public search API. |
 | `noqlenmeta.providers.itunes.storefront` | string | `us` | Two ASCII letters such as `us`, `gb`, or `jp`; normalized lowercase when iTunes is used. |
 | `noqlenmeta.providers.lrclib.enabled` | boolean | `false` | Enables exact-signature selected-track lookup; no API key. |
+| `noqlenmeta.providers.coverartarchive.enabled` | boolean | `true` | Enables exact Release artwork metadata, then Release Group fallback only after definitive absence; no API key. |
+
+## Artwork And BPM
+
+- `noqlenmeta.artwork.size`: `original`, `1200`, `500`, or `250`; default `original`. Explicit thumbnail sizes are maxima and never escalate. A non-JPEG original uses CAA JPEG thumbnails in `1200 -> 500 -> 250` order.
+- `noqlenmeta.artwork.replace_existing`: boolean, default `false`. Existing `cover.jpg` or any embedded image preserves the album as curated. With replacement enabled, one selected CAA front becomes uniform across discs and tracks.
+- `noqlenmeta.bpm.round`: boolean, default `false`; rounding happens before persistence.
+- `noqlenmeta.bpm.recalculate_existing`: boolean, default `false`; existing BPM otherwise avoids analysis.
+- `noqlenmeta.bpm.octave_normalization`: boolean, default `false`; only powers of two may move BPM into the configured range.
+- `noqlenmeta.bpm.octave_range.min`: positive finite number, default `70`.
+- `noqlenmeta.bpm.octave_range.max`: positive finite number greater than `min`, default `180`.
+- `noqlenmeta.local_analysis.bpm.enabled`: boolean, default `false`.
+- `noqlenmeta.local_analysis.bpm.analysis_mode`: `full` or `window`; default `full`.
+- `noqlenmeta.local_analysis.bpm.window_seconds`: positive finite number, default `90`; window mode uses one centered window.
+- `noqlenmeta.local_analysis.mood.enabled`: boolean, default `false`.
+
+Install `beets-noqlenmeta[audio]` to enable the lazy Librosa backend. Local BPM
+failure is isolated to that track. There is no external BPM provider and no
+local mood model. `--write` never starts analysis or changes prepared evidence.
+
+Artwork is album-only. CAA accepts only `front: true` plus `approved: true`.
+Sidecars are always named `cover.jpg`; multidisc albums receive identical bytes
+in every real disc directory. `--apply` writes and verifies sidecars and
+`Album.artpath`; `--apply --write` additionally embeds the same bytes.
+
+Discogs remains opt-in and its structured ordered `styles` tuple takes
+precedence over community style tags. MusicBrainz and Last.fm community tags
+are persisted only after deterministic classification; unknown tags are not
+accepted. Semantic file synchronization uses custom lossless list descriptors
+for `styles`, `moods`, `lyrics_languages`, `artist_languages`,
+`artist_countries`, and `artist_areas`.
 
 Token example without a secret value:
 
@@ -165,7 +241,7 @@ no write permission.
 
 ```yaml
 authority:
-  genres: [discogs, lastfm, itunes]
+  genres: [musicbrainz, discogs, lastfm, itunes]
 ```
 
 ### `noqlenmeta.resolution.min_confidence`
@@ -200,6 +276,6 @@ preserve_existing:
 - [`full-config.yaml`](../examples/full-config.yaml) contains every public key exactly once with valid values.
 
 The full example is illustrative, not a recommendation to enable every
-provider or field. AcoustID has no audio-file write authority. Identity-tag file
-replacement has no YAML permission; only CLI `--identity-tags --write`
-authorizes it.
+provider or field. AcoustID has no audio-file write authority. Ordinary file
+replacement requires `--apply --write`; legacy `--identity-tags --write`
+authority remains unchanged.

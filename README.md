@@ -7,15 +7,26 @@ offers separate workflows to audit MusicBrainz identity, use AcoustID as
 recording-level identity evidence, and synchronize four confirmed MusicBrainz
 IDs to audio-file tags.
 
-Noqlen previews by default. Database changes require `--apply`; specialized
+Noqlen previews by default. Ordinary database and approved artwork-sidecar
+changes require `--apply`; audio-file mutation requires `--write`. Specialized
 identity-tag file replacement requires `--identity-tags --write`. There is no
 `--force` option.
 
+The repository is preparing Noqlen Meta `2.0.0`. The currently published
+PyPI/GitHub release remains `1.0.0` until the v2 release workflow is explicitly
+executed after merge to `main`.
+
 ## Capabilities
 
-- Enrich selected releases from Discogs, MusicBrainz, Last.fm, and iTunes.
+- Enrich releases, tracks, and artists with semantic genres, styles, moods,
+  languages, and geography from Discogs, MusicBrainz, Last.fm, and iTunes.
 - Add selected-track plain lyrics from LRCLIB during import.
 - Preview or apply ordinary enrichment to albums already in a beets library.
+- Synchronize supported ordinary metadata to files through a verified
+  `--apply --write` workflow.
+- Select and apply verified Cover Art Archive album artwork, including
+  deterministic `cover.jpg` sidecars and optional embedding.
+- Analyze local BPM with optional lazy Librosa support from the `[audio]` extra.
 - Audit and repair release, release-group, recording, and release-track MBIDs.
 - Use decisive AcoustID recording evidence to filter incompatible MusicBrainz
   identity candidates without changing structural scores or thresholds.
@@ -57,6 +68,12 @@ Discogs search needs the optional client:
 pip install "beets-noqlenmeta[discogs]"
 ```
 
+Opt-in local BPM analysis uses the lazy audio extra:
+
+```bash
+pip install "beets-noqlenmeta[audio]"
+```
+
 No extra Python dependency is required for AcoustID lookup or stored-fingerprint
 reuse. Explicit missing-fingerprint calculation uses an external `fpcalc`
 executable (Chromaprint), configurable through `noqlenmeta.acoustid.fpcalc`.
@@ -85,8 +102,8 @@ The command is `beet noqlenmeta`; `beet nm` is the preferred alias.
 
 ## First Preview
 
-Enable at least one provider before ordinary enrichment. For example,
-MusicBrainz enrichment uses the exact release MBID already known by beets:
+MusicBrainz is enabled by default and uses only exact MBIDs already known by
+beets; it never performs fuzzy identity search:
 
 ```yaml
 noqlenmeta:
@@ -113,9 +130,15 @@ After reviewing the same query, explicitly apply ordinary safe changes:
 beet nm --apply album:"Example Album"
 ```
 
-This changes ordinary metadata in the beets database only. It does not write
-audio-file tags. Strict mode is the default: one review or mapping blocker
-withholds every ordinary Noqlen change for that album.
+This changes ordinary metadata in the beets database and may write an authorized
+verified `cover.jpg` sidecar and persist `Album.artpath`. Audio files remain
+unchanged unless `--write` is also present. Strict mode is the default: one
+review or mapping blocker withholds every ordinary Noqlen change for that album.
+
+Add `--write` to the same reviewed command to synchronize supported ordinary
+fields to media files through verified candidate-copy/reopen checks. Collection
+and analysis are identical with or without `--write`; adding `--write` never
+triggers another provider call or analyzer run.
 
 Partial mode is explicit:
 
@@ -171,7 +194,8 @@ existing-library evidence workflow and does not replace `chroma`.
 | Command | Purpose | Network | Database | Audio files |
 | --- | --- | --- | --- | --- |
 | `beet nm QUERY` | Ordinary preview | Enabled providers | No | No |
-| `beet nm --apply QUERY` | Ordinary application | Enabled providers | Ordinary album metadata | No |
+| `beet nm --apply QUERY` | Ordinary application | Enabled providers | Ordinary metadata and artwork path | No audio mutation; verified `cover.jpg` may change |
+| `beet nm --apply --write QUERY` | Ordinary DB + file application | Enabled providers | Ordinary metadata | Supported verified tags |
 | `beet nm --identity QUERY` | Identity audit | MusicBrainz + optional AcoustID lookup | No | No |
 | `beet nm --identity --apply QUERY` | Identity repair | MusicBrainz + optional AcoustID lookup | Four MBID columns | No |
 | `beet nm --acoustid QUERY` | AcoustID preview | Configured AcoustID lookup | No | No |
@@ -188,16 +212,18 @@ beets](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/site-docs/refe
 
 ## Providers
 
-All ordinary metadata providers are disabled by default. AcoustID is a separate
-recording-evidence subsystem, not an ordinary provider.
+MusicBrainz is the zero-credential provider enabled by default. Discogs and
+Last.fm are opt-in. AcoustID remains a separate recording-evidence subsystem.
 
 | Provider/source | Current scope | Current contribution |
 | --- | --- | --- |
-| Discogs | Releases | Genres, styles, labels, catalog numbers, barcodes, country, year, media, format descriptions |
-| MusicBrainz enrichment | Releases with an exact release MBID | Labels, catalog numbers, barcode, country, year, media |
-| Last.fm | Releases | Filtered album genres |
+| Discogs | Releases, opt-in | Structured genres/styles plus release metadata; styles remain ordered and authoritative |
+| MusicBrainz enrichment | Exact Release/Recording/Artist/Work MBIDs | Genres, moods, Work language codes, artist areas/countries, and release metadata |
+| Last.fm | Track -> Release -> Artist, opt-in | Classified genre/style/mood community tags only while requested fields remain unresolved |
 | iTunes | Releases | Album genre and release year |
 | LRCLIB | Importer-selected tracks | Plain lyrics; synchronized lyrics preview as blocked |
+| Cover Art Archive | Exact album Releases | Approved main-front artwork, with Release Group fallback only after definitive absence |
+| Local Librosa analysis | User audio, opt-in `[audio]` extra | BPM only; no external BPM provider |
 | MusicBrainz identity source | Separate identity modes | Four MusicBrainz identity fields |
 | AcoustID evidence | Existing-library identity/standalone mode | Recording compatibility evidence and two AcoustID database fields |
 
@@ -207,15 +233,20 @@ optional client and generally a token. Set the token in the
 
 ## Fields And Formats
 
-Ordinary release fields include genres, styles, labels, catalog numbers,
-barcodes, country, year, media, and format descriptions. Mood, lyrics,
-synchronized lyrics, and cover settings are present for explicit capability
-control, but a field is usable only where an enabled provider and a lossless
-target mapping exist.
+Semantic fields include genres, styles, moods, lyrics languages, contextual
+artist languages, artist countries, and artist areas. Language values use
+three-letter codes such as `eng`, `kor`, and `jpn`. `artist_languages` is
+derived only from Works reached by tracks in the current target; it is not a
+whole-career crawl. Artist geography uses MusicBrainz area structure and is
+never guessed from names, language, release country, script, or place strings.
 
-Noqlen v1 does not apply synchronized lyrics or cover art. Existing-library
-ordinary enrichment is album-only. Importer plain-lyrics enrichment applies to
-selected tracks only.
+Verified semantic file mappings are available for `styles`, `moods`,
+`lyrics_languages`, `artist_languages`, `artist_countries`, and `artist_areas`
+on FLAC, MP3, M4A/MP4, Ogg Vorbis, and Opus. Album artwork uses exact approved
+CAA fronts, deterministic `cover.jpg` sidecars, and optional verified embedding.
+Local BPM analysis is disabled by default, preserves existing BPM unless
+recalculation is requested, and imports Librosa only when analysis runs.
+Synchronized lyrics and local ML mood analysis remain outside this phase.
 
 Identity-tag round trips are tested with:
 
@@ -236,11 +267,13 @@ The beets database is information managed privately by beets. Audio-file tags
 are metadata stored inside media files. Navidrome normally scans those files;
 it does not normally read the private beets database.
 
-Therefore `beet nm --apply` or `beet nm --acoustid --apply` alone does not
-update what Navidrome sees. Use native `beet write` for generic beets
-database-to-file synchronization, or use `beet nm --identity-tags --write` only
-for the specialized four-MBID workflow. Then let Navidrome rescan according to
-its own configuration.
+Therefore `beet nm --apply` alone does not synchronize audio tags, although an
+authorized artwork sidecar may become visible to Navidrome after a rescan.
+Use `beet nm --apply --write` for supported ordinary metadata/BPM tags and
+prepared cover embedding, native `beet write` for generic beets
+database-to-file synchronization, or `beet nm --identity-tags --write` only for
+the specialized four-MBID workflow. Then let Navidrome rescan according to its
+own configuration. AcoustID `--apply` remains database-only.
 
 ## Compatibility
 
