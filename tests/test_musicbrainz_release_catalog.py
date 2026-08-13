@@ -175,3 +175,28 @@ def test_v2_candidates_do_not_trigger_release_group_lookup() -> None:
 
     assert provider.get_candidates(context())
     assert release_group.calls == []
+
+
+def test_production_release_group_boundary_uses_exact_normalized_resource(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, object]] = []
+
+    def get_json(self: object, url: str, **kwargs: object) -> dict[str, object]:
+        calls.append((url, kwargs.get("params")))
+        return release_group_payload()
+
+    monkeypatch.setattr(
+        "beetsplug._utils.musicbrainz.MusicBrainzAPI.get_json",
+        get_json,
+    )
+    payload = release_payload()
+    payload["release_group"] = {"id": RELEASE_GROUP_ID}
+    provider = MusicBrainzProvider(fetch_release=Fetcher(payload))
+
+    evidence = provider.get_release_catalog_evidence(context(), {"original_date"})
+
+    assert values(evidence) == {"original_date": PartialDate(2019, 4)}
+    assert len(calls) == 1
+    assert calls[0][0].endswith(f"/release-group/{RELEASE_GROUP_ID}")
+    assert calls[0][1] == {"inc": "", "fmt": "json"}
