@@ -12,6 +12,7 @@ def loaded_plugin(monkeypatch: pytest.MonkeyPatch) -> NoqlenMetaPlugin:
     plugin = NoqlenMetaPlugin()
     monkeypatch.setattr(plugins, "_instances", [plugin])
     monkeypatch.delitem(cached_classproperty.cache, (Album, "_types"), raising=False)
+    monkeypatch.delitem(cached_classproperty.cache, (Item, "_types"), raising=False)
     return plugin
 
 
