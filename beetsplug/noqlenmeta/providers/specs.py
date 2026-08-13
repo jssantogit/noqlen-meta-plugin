@@ -169,7 +169,9 @@ MUSICBRAINZ_SPEC = ProviderSpec(
 MUSICBRAINZ_TRACK_SPEC = ProviderSpec(
     name="musicbrainz",
     display_name="MusicBrainz",
-    supported_fields=frozenset({"genres", "moods", "lyrics_languages"}),
+    supported_fields=frozenset(
+        {"genres", "moods", "lyrics_languages", "isrcs", "works", "iswcs", "recording_date"}
+    ),
     scope=ProviderScope.TRACK,
 )
 
@@ -230,7 +232,7 @@ _BUILTIN_PROVIDER_CAPABILITIES = (
 
 
 def _asserted_entity(spec: ProviderSpec, field: str) -> EntityKind:
-    if field == "lyrics_languages":
+    if field in {"lyrics_languages", "iswcs"}:
         return EntityKind.WORK
     return {
         ProviderScope.RELEASE: EntityKind.RELEASE,
@@ -259,7 +261,7 @@ def _characteristics(spec: ProviderSpec, field: str) -> frozenset[AcquisitionCha
     }
     if spec.name in {"discogs", "itunes"}:
         values.add(AcquisitionCharacteristic.SEARCH)
-    if spec.name == "musicbrainz" and field == "lyrics_languages":
+    if spec.name == "musicbrainz" and field in {"lyrics_languages", "iswcs"}:
         values.add(AcquisitionCharacteristic.SUPPORTING_TRAVERSAL)
     return frozenset(values)
 

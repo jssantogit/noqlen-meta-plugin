@@ -25,7 +25,7 @@ from beetsplug.noqlenmeta.evidence import (
     SubjectRef,
 )
 from beetsplug.noqlenmeta.field_contracts import EntityKind
-from beetsplug.noqlenmeta.providers.base import ProviderError
+from beetsplug.noqlenmeta.providers.base import ProviderError, ReleaseProviderEnrichment
 from beetsplug.noqlenmeta.providers.specs import DISCOGS_SPEC, ProviderScope
 from beetsplug.noqlenmeta.release_catalog import normalize_edition, parse_partial_date
 
@@ -82,24 +82,40 @@ class DiscogsProvider:
         self._client.set_timeout(connect=5, read=10)
 
     def get_candidates(self, context: ReleaseEnrichmentContext) -> Sequence[MetadataCandidate]:
+        return self.get_enrichment(context, ()).candidates
+
+    def get_enrichment(
+        self,
+        context: ReleaseEnrichmentContext,
+        enabled_fields: Collection[str],
+    ) -> ReleaseProviderEnrichment:
         resolved = self._resolve_release(context)
         if resolved is None:
-            return ()
-        release, release_id, confidence, _ = resolved
-        return _normalize_release(release, release_id, confidence)
+            return ReleaseProviderEnrichment()
+        release, release_id, confidence, method = resolved
+        return ReleaseProviderEnrichment(
+            tuple(_normalize_release(release, release_id, confidence)),
+            self._catalog_evidence(release, release_id, confidence, method, enabled_fields),
+        )
 
     def get_release_catalog_evidence(
         self,
         context: ReleaseEnrichmentContext,
         enabled_fields: Collection[str],
     ) -> tuple[MetadataEvidence, ...]:
+        return self.get_enrichment(context, enabled_fields).evidence
+
+    def _catalog_evidence(
+        self,
+        release: Mapping[str, object],
+        release_id: int,
+        confidence: float,
+        method: AcquisitionMethod,
+        enabled_fields: Collection[str],
+    ) -> tuple[MetadataEvidence, ...]:
         requested = set(enabled_fields) & {"date", "edition"}
         if not requested:
             return ()
-        resolved = self._resolve_release(context)
-        if resolved is None:
-            return ()
-        release, release_id, confidence, method = resolved
         if _positive_int(release.get("id")) != release_id:
             return ()
         fields: list[tuple[str, object]] = []

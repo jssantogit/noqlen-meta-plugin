@@ -155,7 +155,15 @@ def test_provider_registry_keys_same_provider_name_by_scope() -> None:
 
 def test_semantic_multi_scope_capabilities_are_explicit() -> None:
     assert MUSICBRAINZ_TRACK_SPEC.supported_fields == frozenset(
-        {"genres", "moods", "lyrics_languages"}
+        {
+            "genres",
+            "moods",
+            "lyrics_languages",
+            "isrcs",
+            "iswcs",
+            "works",
+            "recording_date",
+        }
     )
     assert MUSICBRAINZ_ARTIST_SPEC.supported_fields == frozenset(
         {"genres", "moods", "artist_countries", "artist_areas"}

@@ -21,7 +21,7 @@ from beetsplug.noqlenmeta.evidence import (
 )
 from beetsplug.noqlenmeta.field_contracts import EntityKind
 from beetsplug.noqlenmeta.provider_cache import CommandEntityCache
-from beetsplug.noqlenmeta.providers.base import ProviderError
+from beetsplug.noqlenmeta.providers.base import ProviderError, ReleaseProviderEnrichment
 from beetsplug.noqlenmeta.providers.musicbrainz_semantic import (
     MusicBrainzSemanticClient,
     semantic_tags_from_payload,
@@ -65,14 +65,24 @@ class MusicBrainzProvider:
         )
 
     def get_candidates(self, context: ReleaseEnrichmentContext) -> Sequence[MetadataCandidate]:
+        return self.get_enrichment(context, ()).candidates
+
+    def get_enrichment(
+        self,
+        context: ReleaseEnrichmentContext,
+        enabled_fields: Collection[str],
+    ) -> ReleaseProviderEnrichment:
         release_mbid = _release_mbid(context)
         if release_mbid is None:
-            return ()
+            return ReleaseProviderEnrichment()
 
         payload = self._semantic_client.lookup_release(release_mbid)
         if not isinstance(payload, Mapping):
             raise ProviderError("MusicBrainz release response is invalid")
-        return _normalize_release(payload, release_mbid)
+        return ReleaseProviderEnrichment(
+            tuple(_normalize_release(payload, release_mbid)),
+            self._catalog_evidence(context, payload, release_mbid, enabled_fields),
+        )
 
     def get_semantic_evidence(self, context: ReleaseEnrichmentContext) -> SemanticEvidenceBundle:
         release_mbid = _release_mbid(context)
@@ -94,8 +104,16 @@ class MusicBrainzProvider:
         context: ReleaseEnrichmentContext,
         enabled_fields: Collection[str],
     ) -> tuple[MetadataEvidence, ...]:
-        """Return requested V3 catalog evidence without changing V2 acquisition."""
-        release_mbid = _release_mbid(context)
+        """Compatibility boundary for callers requesting only V3 evidence."""
+        return self.get_enrichment(context, enabled_fields).evidence
+
+    def _catalog_evidence(
+        self,
+        context: ReleaseEnrichmentContext,
+        payload: Mapping[str, object],
+        release_mbid: str,
+        enabled_fields: Collection[str],
+    ) -> tuple[MetadataEvidence, ...]:
         requested = set(enabled_fields) & {
             "date",
             "original_date",
@@ -103,11 +121,8 @@ class MusicBrainzProvider:
             "release_secondary_types",
             "release_status",
         }
-        if release_mbid is None or not requested:
+        if not requested:
             return ()
-        payload = self._semantic_client.lookup_release(release_mbid)
-        if not isinstance(payload, Mapping):
-            raise ProviderError("MusicBrainz release response is invalid")
 
         evidence = list(_release_catalog_evidence(payload, release_mbid, requested))
         group_fields = requested & _RELEASE_GROUP_FIELDS

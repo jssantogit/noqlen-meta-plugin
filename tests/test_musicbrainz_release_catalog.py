@@ -228,6 +228,20 @@ def test_v2_candidates_do_not_trigger_release_group_lookup() -> None:
     assert release_group.calls == []
 
 
+def test_shared_enrichment_reuses_one_release_for_v2_and_v3() -> None:
+    release = Fetcher(release_payload())
+    provider = MusicBrainzProvider(fetch_release=release)
+
+    enrichment = provider.get_enrichment(context(), {"date", "release_status"})
+
+    assert enrichment.candidates
+    assert values(enrichment.evidence) == {
+        "date": PartialDate(2020, 5, 17),
+        "release_status": ReleaseStatus.OFFICIAL,
+    }
+    assert release.calls == [RELEASE_ID]
+
+
 def test_production_release_group_boundary_uses_exact_normalized_resource(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

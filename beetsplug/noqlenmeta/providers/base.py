@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 from beetsplug.noqlenmeta.domain import (
@@ -11,6 +12,7 @@ from beetsplug.noqlenmeta.domain import (
     ReleaseEnrichmentContext,
     TrackEnrichmentContext,
 )
+from beetsplug.noqlenmeta.evidence import MetadataEvidence
 
 
 class ProviderError(RuntimeError):
@@ -19,6 +21,14 @@ class ProviderError(RuntimeError):
 
 class ProviderContractError(RuntimeError):
     """A provider adapter violated its internal candidate output contract."""
+
+
+@dataclass(frozen=True, slots=True)
+class ReleaseProviderEnrichment:
+    """V2 candidates and V3 evidence acquired from one concrete release response."""
+
+    candidates: tuple[MetadataCandidate, ...] = ()
+    evidence: tuple[MetadataEvidence, ...] = ()
 
 
 @runtime_checkable

@@ -25,7 +25,7 @@ from beetsplug.noqlenmeta.evidence import (
     SubjectRef,
 )
 from beetsplug.noqlenmeta.field_contracts import EntityKind
-from beetsplug.noqlenmeta.providers.base import ProviderError
+from beetsplug.noqlenmeta.providers.base import ProviderError, ReleaseProviderEnrichment
 from beetsplug.noqlenmeta.providers.specs import ITUNES_SPEC, ProviderScope
 from beetsplug.noqlenmeta.release_catalog import parse_iso_datetime_date
 
@@ -69,23 +69,38 @@ class ITunesProvider:
         self._request_json = request_json or _request_json
 
     def get_candidates(self, context: ReleaseEnrichmentContext) -> Sequence[MetadataCandidate]:
+        return self.get_enrichment(context, ()).candidates
+
+    def get_enrichment(
+        self,
+        context: ReleaseEnrichmentContext,
+        enabled_fields: Collection[str],
+    ) -> ReleaseProviderEnrichment:
         resolved = self._resolve_collection(context)
         if resolved is None:
-            return ()
-        collection, confidence, _ = resolved
-        return _normalize_collection(collection, confidence)
+            return ReleaseProviderEnrichment()
+        collection, confidence, method = resolved
+        return ReleaseProviderEnrichment(
+            tuple(_normalize_collection(collection, confidence)),
+            self._catalog_evidence(collection, confidence, method, enabled_fields),
+        )
 
     def get_release_catalog_evidence(
         self,
         context: ReleaseEnrichmentContext,
         enabled_fields: Collection[str],
     ) -> tuple[MetadataEvidence, ...]:
+        return self.get_enrichment(context, enabled_fields).evidence
+
+    def _catalog_evidence(
+        self,
+        collection: Mapping[str, object],
+        confidence: float,
+        method: AcquisitionMethod,
+        enabled_fields: Collection[str],
+    ) -> tuple[MetadataEvidence, ...]:
         if "date" not in enabled_fields:
             return ()
-        resolved = self._resolve_collection(context)
-        if resolved is None:
-            return ()
-        collection, confidence, method = resolved
         collection_id = _positive_int(collection.get("collectionId"))
         date = parse_iso_datetime_date(collection.get("releaseDate"))
         if collection_id is None or date is None:

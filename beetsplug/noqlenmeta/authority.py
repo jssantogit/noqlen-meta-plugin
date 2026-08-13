@@ -258,6 +258,12 @@ _RULES = (
         ProviderScope.RELEASE,
     ),
     _rule("edition", "discogs", AuthorityRole.PRIMARY, ProviderScope.RELEASE),
+    _rule("isrcs", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.TRACK),
+    _rule("works", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.TRACK),
+    _rule(
+        "iswcs", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.TRACK, EntityKind.WORK
+    ),
+    _rule("recording_date", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.TRACK),
 )
 
 

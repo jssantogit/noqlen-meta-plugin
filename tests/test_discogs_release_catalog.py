@@ -102,3 +102,14 @@ def test_discogs_does_not_extract_edition_from_title_or_notes() -> None:
     data["notes"] = "Limited Edition"
 
     assert values(DiscogsProvider(client=Client(data))) == {}
+
+
+def test_shared_enrichment_uses_one_concrete_discogs_release() -> None:
+    data = payload()
+    client = Client(data)
+
+    enrichment = DiscogsProvider(client=client).get_enrichment(context(), {"date", "edition"})
+
+    assert enrichment.candidates
+    assert enrichment.evidence
+    assert client.release_ids == [123456]

@@ -64,3 +64,13 @@ def test_v2_and_v3_paths_each_use_the_same_single_endpoint_shape() -> None:
     )
     assert len(v2_requests.urls) == len(v3_requests.urls) == 1
     assert v2_requests.urls[0].split("?", 1)[0] == v3_requests.urls[0].split("?", 1)[0]
+
+
+def test_shared_enrichment_uses_one_collection_acquisition() -> None:
+    requests = Requests(payload())
+
+    enrichment = ITunesProvider(request_json=requests).get_enrichment(context(), {"date"})
+
+    assert enrichment.candidates
+    assert enrichment.evidence
+    assert len(requests.urls) == 1
