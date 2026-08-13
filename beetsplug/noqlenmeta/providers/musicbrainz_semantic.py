@@ -174,6 +174,8 @@ class MusicBrainzTrackProvider:
                 if self.enabled_fields & {"works", "iswcs"}
                 else _related_ids(payload, "work")
             )
+            if not work_ids:
+                work_ids = _related_ids(payload, "work")
             for work_id in work_ids:
                 try:
                     work = self.client.lookup_work(work_id)
