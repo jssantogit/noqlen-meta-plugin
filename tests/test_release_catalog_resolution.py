@@ -107,6 +107,17 @@ def test_compatible_primary_and_secondary_date_choose_greater_precision() -> Non
     assert decision.action is ResolutionAction.PROPOSE
     assert decision.selected is secondary
     assert decision.value == PartialDate(2020, 5, 17)
+    assert decision.contributing_evidence == (primary, secondary)
+
+
+def test_equivalent_primary_and_secondary_select_primary_provenance() -> None:
+    primary = evidence("date", PartialDate(2020, 5), "musicbrainz")
+    secondary = evidence("date", PartialDate(2020, 5), "discogs")
+
+    decision = decision_for([secondary, primary])
+
+    assert decision.selected is primary
+    assert decision.contributing_evidence == (primary, secondary)
 
 
 def test_material_primary_secondary_conflict_is_review() -> None:
@@ -222,3 +233,13 @@ def test_provider_local_confidence_filters_only_that_evidence() -> None:
     decision = decision_for([weak_primary])
 
     assert decision.action is ResolutionAction.SKIP
+
+
+def test_low_confidence_evidence_is_not_a_contributor() -> None:
+    primary = evidence("date", PartialDate(2020), "musicbrainz")
+    weak = evidence("date", PartialDate(2020), "discogs", confidence=0.79)
+
+    decision = decision_for([weak, primary])
+
+    assert weak in decision.alternatives
+    assert decision.contributing_evidence == (primary,)

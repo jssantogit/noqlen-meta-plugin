@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
+from typing import cast
 
 from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
 from beetsplug.noqlenmeta.field_contracts import PartialDate
@@ -38,13 +40,27 @@ class ReleaseCatalogTargetPlan:
     changes: tuple[CatalogTargetChange, ...] = ()
 
 
-def map_release_catalog_plan(plan: ChangePlan) -> ReleaseCatalogTargetPlan:
+def map_release_catalog_plan(
+    plan: ChangePlan,
+    *,
+    current_values: Mapping[str, object] | None = None,
+) -> ReleaseCatalogTargetPlan:
     """Project Wave 1A canonical changes without performing resolution or writes."""
     if not isinstance(plan, ChangePlan):
         raise CatalogMappingError("source must be a ChangePlan")
     mapped: list[CatalogTargetChange] = []
-    primary: ReleaseType | None = None
-    secondary: tuple[ReleaseSecondaryType, ...] | None = None
+    current = current_values or {}
+    primary_value = current.get("release_type")
+    primary = primary_value if isinstance(primary_value, ReleaseType) else None
+    secondary_value = current.get("release_secondary_types")
+    secondary = (
+        secondary_value
+        if isinstance(secondary_value, tuple)
+        and all(isinstance(value, ReleaseSecondaryType) for value in secondary_value)
+        else None
+    )
+    primary_changed = False
+    secondary_changed = False
     for change in plan.changes:
         if change.field in {"year", "original_year"}:
             raise CatalogMappingError(
@@ -65,6 +81,7 @@ def map_release_catalog_plan(plan: ChangePlan) -> ReleaseCatalogTargetPlan:
             if not isinstance(change.after, ReleaseType):
                 raise CatalogMappingError("release_type requires ReleaseType")
             primary = change.after
+            primary_changed = True
             mapped.append(_target(change, "albumtype", primary.value, CatalogTargetClass.NATIVE))
         elif change.field == "release_secondary_types":
             if not isinstance(change.after, tuple) or not all(
@@ -73,7 +90,8 @@ def map_release_catalog_plan(plan: ChangePlan) -> ReleaseCatalogTargetPlan:
                 raise CatalogMappingError(
                     "release_secondary_types requires ReleaseSecondaryType values"
                 )
-            secondary = change.after
+            secondary = cast(tuple[ReleaseSecondaryType, ...], change.after)
+            secondary_changed = True
             mapped.append(
                 _target(
                     change,
@@ -100,10 +118,9 @@ def map_release_catalog_plan(plan: ChangePlan) -> ReleaseCatalogTargetPlan:
         else:
             raise CatalogMappingError(f"unsupported release catalog field: {change.field}")
 
-    if primary is not None and secondary is not None:
-        source = next(
-            change for change in plan.changes if change.field == "release_secondary_types"
-        )
+    if primary is not None and secondary is not None and (primary_changed or secondary_changed):
+        source_field = "release_secondary_types" if secondary_changed else "release_type"
+        source = next(change for change in plan.changes if change.field == source_field)
         mapped.append(
             _target(
                 source,

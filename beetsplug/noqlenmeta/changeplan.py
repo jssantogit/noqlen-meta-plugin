@@ -4,11 +4,28 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Protocol
 
 from beetsplug.noqlenmeta.domain import MetadataCandidate
 from beetsplug.noqlenmeta.evidence import CanonicalValue, MetadataEvidence
-from beetsplug.noqlenmeta.release_catalog_resolution import CatalogFieldDecision
-from beetsplug.noqlenmeta.resolver import FieldDecision, ResolutionAction
+
+
+class PlannableDecision(Protocol):
+    """Structural decision contract consumed by target-independent planning."""
+
+    field: str
+    current_value: CanonicalValue | None
+    action: object
+    reason: str
+
+    @property
+    def resolved_value(self) -> CanonicalValue | None: ...
+
+    @property
+    def selected_source(self) -> MetadataCandidate | MetadataEvidence | None: ...
+
+    @property
+    def contributing_evidence(self) -> tuple[MetadataEvidence, ...]: ...
 
 
 class ChangePlanError(RuntimeError):
@@ -50,9 +67,9 @@ class ChangePlan:
     """Read-only metadata consequences grouped by resolved action."""
 
     changes: tuple[PlannedChange, ...] = ()
-    reviews: tuple[FieldDecision | CatalogFieldDecision, ...] = ()
-    kept: tuple[FieldDecision | CatalogFieldDecision, ...] = ()
-    skipped: tuple[FieldDecision | CatalogFieldDecision, ...] = ()
+    reviews: tuple[PlannableDecision, ...] = ()
+    kept: tuple[PlannableDecision, ...] = ()
+    skipped: tuple[PlannableDecision, ...] = ()
 
     @property
     def has_changes(self) -> bool:
@@ -67,13 +84,13 @@ class ChangePlan:
         return not self.reviews
 
 
-def build_change_plan(decisions: Sequence[FieldDecision]) -> ChangePlan:
+def build_change_plan(decisions: Sequence[PlannableDecision]) -> ChangePlan:
     """Translate resolved decisions into deterministic, read-only consequences."""
 
     changes: list[PlannedChange] = []
-    reviews: list[FieldDecision] = []
-    kept: list[FieldDecision] = []
-    skipped: list[FieldDecision] = []
+    reviews: list[PlannableDecision] = []
+    kept: list[PlannableDecision] = []
+    skipped: list[PlannableDecision] = []
     seen_fields: set[str] = set()
 
     for decision in decisions:
@@ -82,28 +99,34 @@ def build_change_plan(decisions: Sequence[FieldDecision]) -> ChangePlan:
             raise ChangePlanError(f"duplicate decision for canonical field {field!r}")
         seen_fields.add(field)
 
-        if decision.selected is not None and decision.selected.field != field:
+        selected = decision.selected_source
+        if selected is not None and selected.field != field:
             raise ChangePlanError(
-                f"selected candidate field {decision.selected.field!r} does not match {field!r}"
+                f"selected candidate field {selected.field!r} does not match {field!r}"
             )
 
-        if decision.action is ResolutionAction.PROPOSE:
-            if decision.selected is None:
+        action = _action_name(decision.action)
+        if action == "PROPOSE":
+            value = decision.resolved_value
+            if selected is None:
                 raise ChangePlanError(f"PROPOSE decision for {field!r} has no selected candidate")
+            if value is None:
+                raise ChangePlanError(f"PROPOSE decision for {field!r} has no resolved value")
             changes.append(
                 PlannedChange(
                     field=field,
                     before=decision.current_value,
-                    after=decision.selected.value,
-                    source=decision.selected,
+                    after=value,
+                    source=selected,
                     reason=decision.reason,
+                    evidence=decision.contributing_evidence,
                 )
             )
-        elif decision.action is ResolutionAction.REVIEW:
+        elif action == "REVIEW":
             reviews.append(decision)
-        elif decision.action is ResolutionAction.KEEP:
+        elif action == "KEEP":
             kept.append(decision)
-        elif decision.action is ResolutionAction.SKIP:
+        elif action == "SKIP":
             skipped.append(decision)
         else:
             raise ChangePlanError(f"unsupported resolution action for {field!r}")
@@ -117,47 +140,17 @@ def build_change_plan(decisions: Sequence[FieldDecision]) -> ChangePlan:
 
 
 def build_catalog_change_plan(
-    decisions: Sequence[CatalogFieldDecision],
+    decisions: Sequence[PlannableDecision],
 ) -> ChangePlan:
-    """Translate V3 catalog decisions into the shared immutable ChangePlan."""
-    changes: list[PlannedChange] = []
-    reviews: list[CatalogFieldDecision] = []
-    kept: list[CatalogFieldDecision] = []
-    skipped: list[CatalogFieldDecision] = []
-    seen_fields: set[str] = set()
-    for decision in decisions:
-        field = _canonical_field(decision.field)
-        if field in seen_fields:
-            raise ChangePlanError(f"duplicate decision for canonical field {field!r}")
-        seen_fields.add(field)
-        if decision.action is ResolutionAction.PROPOSE:
-            if decision.selected is None or decision.value is None:
-                raise ChangePlanError(f"PROPOSE decision for {field!r} is incomplete")
-            contributors = (decision.selected, *decision.alternatives)
-            changes.append(
-                PlannedChange(
-                    field,
-                    decision.current_value,
-                    decision.value,
-                    decision.selected,
-                    decision.reason,
-                    contributors,
-                )
-            )
-        elif decision.action is ResolutionAction.REVIEW:
-            reviews.append(decision)
-        elif decision.action is ResolutionAction.KEEP:
-            kept.append(decision)
-        elif decision.action is ResolutionAction.SKIP:
-            skipped.append(decision)
-        else:
-            raise ChangePlanError(f"unsupported resolution action for {field!r}")
-    return ChangePlan(
-        changes=tuple(sorted(changes, key=lambda change: change.field)),
-        reviews=tuple(sorted(reviews, key=lambda decision: decision.field)),
-        kept=tuple(sorted(kept, key=lambda decision: decision.field)),
-        skipped=tuple(sorted(skipped, key=lambda decision: decision.field)),
-    )
+    """Compatibility wrapper for callers of the Wave 1A builder."""
+    return build_change_plan(decisions)
+
+
+def _action_name(value: object) -> str:
+    name = getattr(value, "name", None)
+    if not isinstance(name, str):
+        raise ChangePlanError("resolution action must be an enum value")
+    return name
 
 
 def _canonical_field(value: object) -> str:

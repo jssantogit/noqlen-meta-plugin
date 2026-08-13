@@ -1,4 +1,5 @@
 from dataclasses import FrozenInstanceError
+from pathlib import Path
 
 import pytest
 
@@ -284,8 +285,55 @@ def test_catalog_multivalue_change_retains_all_contributing_evidence() -> None:
         ResolutionAction.PROPOSE,
         "safe union",
         (second,),
+        (first, second),
     )
 
     plan = build_catalog_change_plan([resolved])
 
     assert plan.changes[0].evidence == (first, second)
+
+
+def test_catalog_alternatives_are_not_automatically_contributors() -> None:
+    selected = MetadataEvidence(
+        field="date",
+        value=PartialDate(2020),
+        subject=SubjectRef(
+            EntityKind.RELEASE,
+            (ExternalIdentifier("musicbrainz.release", "release-1"),),
+        ),
+        provider="musicbrainz",
+        acquisition_scope=ProviderScope.RELEASE,
+        source_id="release-1",
+        provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+    )
+    rejected = MetadataEvidence(
+        field="date",
+        value=PartialDate(2021),
+        subject=selected.subject,
+        provider="itunes",
+        acquisition_scope=ProviderScope.RELEASE,
+        source_id="collection-1",
+        provenance=AcquisitionProvenance(AcquisitionMethod.SEARCHED_CANDIDATE),
+        confidence=0.2,
+    )
+    resolved = CatalogFieldDecision(
+        "date",
+        None,
+        PartialDate(2020),
+        selected,
+        ResolutionAction.PROPOSE,
+        "primary value",
+        (rejected,),
+        (selected,),
+    )
+
+    plan = build_change_plan([resolved])
+
+    assert plan.changes[0].evidence == (selected,)
+
+
+def test_changeplan_has_no_runtime_domain_resolver_imports() -> None:
+    source = Path("beetsplug/noqlenmeta/changeplan.py").read_text(encoding="utf-8")
+
+    assert "release_catalog_resolution" not in source
+    assert "recording_identity_resolution" not in source

@@ -10,6 +10,7 @@ from math import isfinite
 from types import MappingProxyType
 
 from beetsplug.noqlenmeta.domain import MetadataCandidate, MetadataValue
+from beetsplug.noqlenmeta.evidence import MetadataEvidence
 from beetsplug.noqlenmeta.providers.specs import BUILTIN_PROVIDER_NAMES, DISCOGS_SPEC
 
 
@@ -136,6 +137,18 @@ class FieldDecision:
     action: ResolutionAction
     reason: str
     alternatives: tuple[MetadataCandidate, ...] = ()
+
+    @property
+    def resolved_value(self) -> MetadataValue | None:
+        return self.selected.value if self.selected is not None else self.current_value
+
+    @property
+    def selected_source(self) -> MetadataCandidate | None:
+        return self.selected
+
+    @property
+    def contributing_evidence(self) -> tuple[MetadataEvidence, ...]:
+        return ()
 
 
 _DEFAULT_AUTHORITY: dict[str, tuple[str, ...]] = {

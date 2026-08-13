@@ -49,6 +49,13 @@ def targets(plan: ChangePlan) -> dict[str, object]:
     return {target.target_field: target.value for target in mapped.changes}
 
 
+def targets_with_current(
+    plan: ChangePlan, current: dict[str, object]
+) -> dict[str, object]:
+    mapped = map_release_catalog_plan(plan, current_values=current)
+    return {target.target_field: target.value for target in mapped.changes}
+
+
 def test_date_maps_only_known_components_and_derives_year() -> None:
     assert targets(ChangePlan(changes=(change("date", PartialDate(2020)),))) == {"year": 2020}
     assert targets(ChangePlan(changes=(change("date", PartialDate(2020, 5)),))) == {
@@ -127,6 +134,37 @@ def test_secondary_types_without_primary_do_not_invent_combined_projection() -> 
     )
 
     assert targets(plan) == {"release_secondary_types": ("Live",)}
+
+
+def test_secondary_change_uses_effective_kept_primary_for_combined_projection() -> None:
+    plan = ChangePlan(
+        changes=(
+            change(
+                "release_secondary_types",
+                (ReleaseSecondaryType.LIVE,),
+                EntityKind.RELEASE_GROUP,
+            ),
+        )
+    )
+
+    assert targets_with_current(plan, {"release_type": ReleaseType.ALBUM}) == {
+        "release_secondary_types": ("Live",),
+        "albumtypes": ("Album", "Live"),
+    }
+
+
+def test_primary_change_uses_effective_kept_secondary_for_combined_projection() -> None:
+    plan = ChangePlan(
+        changes=(change("release_type", ReleaseType.ALBUM, EntityKind.RELEASE_GROUP),)
+    )
+
+    assert targets_with_current(
+        plan,
+        {"release_secondary_types": (ReleaseSecondaryType.LIVE,)},
+    ) == {
+        "albumtype": "Album",
+        "albumtypes": ("Album", "Live"),
+    }
 
 
 def test_edition_is_db_only() -> None:

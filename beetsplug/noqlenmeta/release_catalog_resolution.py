@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import cast
 
 from beetsplug.noqlenmeta.authority import (
     AUTHORITY_MATRIX,
@@ -34,6 +35,19 @@ class CatalogFieldDecision:
     action: ResolutionAction
     reason: str
     alternatives: tuple[MetadataEvidence, ...] = ()
+    contributors: tuple[MetadataEvidence, ...] = ()
+
+    @property
+    def resolved_value(self) -> CanonicalValue | None:
+        return self.value
+
+    @property
+    def selected_source(self) -> MetadataEvidence | None:
+        return self.selected
+
+    @property
+    def contributing_evidence(self) -> tuple[MetadataEvidence, ...]:
+        return self.contributors
 
 
 def resolve_release_catalog(
@@ -112,7 +126,7 @@ def _resolve_field(
         )
     value, selected = resolved
     alternatives = tuple(item for item in ordered if item is not selected)
-    return _with_current(field, current, value, selected, alternatives)
+    return _with_current(field, current, value, selected, alternatives, contenders)
 
 
 def _resolve_exclusive(
@@ -145,7 +159,7 @@ def _resolve_multivalue(
             isinstance(value, ReleaseSecondaryType) for value in item.value
         ):
             return None
-        for value in item.value:
+        for value in cast(tuple[ReleaseSecondaryType, ...], item.value):
             if value not in values:
                 values.append(value)
     return tuple(values), items[0]
@@ -157,6 +171,7 @@ def _with_current(
     value: CanonicalValue,
     selected: MetadataEvidence,
     alternatives: tuple[MetadataEvidence, ...],
+    contributors: tuple[MetadataEvidence, ...],
 ) -> CatalogFieldDecision:
     if current is None:
         action = ResolutionAction.PROPOSE
@@ -193,6 +208,7 @@ def _with_current(
         action,
         reason,
         alternatives,
+        contributors,
     )
 
 
