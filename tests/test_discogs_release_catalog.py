@@ -3,8 +3,11 @@ import json
 from pathlib import Path
 
 from beetsplug.noqlenmeta.domain import ExternalIdentifier, ReleaseEnrichmentContext
+from beetsplug.noqlenmeta.evidence import AcquisitionMethod
 from beetsplug.noqlenmeta.field_contracts import PartialDate
 from beetsplug.noqlenmeta.providers.discogs import DiscogsProvider
+from beetsplug.noqlenmeta.release_catalog_resolution import resolve_release_catalog
+from beetsplug.noqlenmeta.resolver import ResolutionAction
 
 FIXTURE = Path(__file__).parent / "fixtures" / "discogs" / "release.json"
 
@@ -59,6 +62,10 @@ def test_discogs_structural_date_and_controlled_edition_use_one_release_request(
         "edition": ["Limited Edition"],
     }
     assert client.release_ids == [123456]
+    evidence = DiscogsProvider(client=Client(data)).get_release_catalog_evidence(
+        context(), {"date"}
+    )
+    assert evidence[0].provenance.method is AcquisitionMethod.EXACT_LOOKUP
 
 
 def test_discogs_ignores_formatted_date_and_unsupported_edition_text() -> None:
@@ -82,6 +89,10 @@ def test_discogs_conflicting_controlled_editions_are_separate_evidence() -> None
     assert values(DiscogsProvider(client=Client(data))) == {
         "edition": ["Limited Edition", "Deluxe Edition"]
     }
+    evidence = DiscogsProvider(client=Client(data)).get_release_catalog_evidence(
+        context(), {"edition"}
+    )
+    assert resolve_release_catalog({}, evidence)[0].action is ResolutionAction.REVIEW
 
 
 def test_discogs_does_not_extract_edition_from_title_or_notes() -> None:

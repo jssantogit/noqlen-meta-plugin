@@ -72,7 +72,7 @@ class ITunesProvider:
         resolved = self._resolve_collection(context)
         if resolved is None:
             return ()
-        collection, confidence = resolved
+        collection, confidence, _ = resolved
         return _normalize_collection(collection, confidence)
 
     def get_release_catalog_evidence(
@@ -85,7 +85,7 @@ class ITunesProvider:
         resolved = self._resolve_collection(context)
         if resolved is None:
             return ()
-        collection, confidence = resolved
+        collection, confidence, method = resolved
         collection_id = _positive_int(collection.get("collectionId"))
         date = parse_iso_datetime_date(collection.get("releaseDate"))
         if collection_id is None or date is None:
@@ -102,27 +102,35 @@ class ITunesProvider:
                 acquisition_scope=ProviderScope.RELEASE,
                 source_id=str(collection_id),
                 source_url=_public_url(collection.get("collectionViewUrl")),
-                provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+                provenance=AcquisitionProvenance(method),
                 confidence=confidence,
             ),
         )
 
     def _resolve_collection(
         self, context: ReleaseEnrichmentContext
-    ) -> tuple[Mapping[str, object], float] | None:
+    ) -> tuple[Mapping[str, object], float, AcquisitionMethod] | None:
         direct_id, has_itunes_ids = _itunes_collection_id(context)
         if has_itunes_ids:
             if direct_id is None:
                 return None
             results = self._request("lookup", id=direct_id, entity="album")
             collection = _direct_collection(results, direct_id)
-            return (collection, _DIRECT_CONFIDENCE) if collection else None
+            return (
+                (collection, _DIRECT_CONFIDENCE, AcquisitionMethod.EXACT_LOOKUP)
+                if collection
+                else None
+            )
 
         if context.barcode is not None:
             results = self._request("lookup", upc=context.barcode, entity="album")
             matches = _matching_collections(results, context)
             if len(matches) == 1:
-                return matches[0], _UPC_CONFIDENCE
+                return (
+                    matches[0],
+                    _UPC_CONFIDENCE,
+                    AcquisitionMethod.STRUCTURALLY_VALIDATED,
+                )
             if len(matches) > 1:
                 return None
 
@@ -136,7 +144,7 @@ class ITunesProvider:
         matches = _matching_collections(results, context)
         if len(matches) != 1:
             return None
-        return matches[0], _SEARCH_CONFIDENCE
+        return matches[0], _SEARCH_CONFIDENCE, AcquisitionMethod.SEARCHED_CANDIDATE
 
     def _request(self, operation: str, **parameters: object) -> tuple[Mapping[str, object], ...]:
         parameters["country"] = self._storefront.upper()

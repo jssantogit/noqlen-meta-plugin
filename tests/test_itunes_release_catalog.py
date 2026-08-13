@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from beetsplug.noqlenmeta.domain import ExternalIdentifier, ReleaseEnrichmentContext
+from beetsplug.noqlenmeta.evidence import AcquisitionMethod
 from beetsplug.noqlenmeta.field_contracts import PartialDate
 from beetsplug.noqlenmeta.providers.itunes import ITunesProvider
 
@@ -41,6 +42,7 @@ def test_itunes_release_date_uses_existing_lookup_response() -> None:
     assert [(item.field, item.value) for item in evidence] == [("date", PartialDate(1997, 5, 21))]
     assert len(requests.urls) == 1
     assert "/lookup?" in requests.urls[0]
+    assert evidence[0].provenance.method is AcquisitionMethod.EXACT_LOOKUP
 
 
 def test_itunes_invalid_or_missing_release_date_emits_no_evidence() -> None:

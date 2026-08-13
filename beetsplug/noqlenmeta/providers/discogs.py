@@ -85,7 +85,7 @@ class DiscogsProvider:
         resolved = self._resolve_release(context)
         if resolved is None:
             return ()
-        release, release_id, confidence = resolved
+        release, release_id, confidence, _ = resolved
         return _normalize_release(release, release_id, confidence)
 
     def get_release_catalog_evidence(
@@ -99,7 +99,7 @@ class DiscogsProvider:
         resolved = self._resolve_release(context)
         if resolved is None:
             return ()
-        release, release_id, confidence = resolved
+        release, release_id, confidence, method = resolved
         if _positive_int(release.get("id")) != release_id:
             return ()
         fields: list[tuple[str, object]] = []
@@ -120,7 +120,7 @@ class DiscogsProvider:
                 acquisition_scope=ProviderScope.RELEASE,
                 source_id=str(release_id),
                 source_url=source_url,
-                provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+                provenance=AcquisitionProvenance(method),
                 confidence=confidence,
             )
             for field, value in fields
@@ -128,13 +128,13 @@ class DiscogsProvider:
 
     def _resolve_release(
         self, context: ReleaseEnrichmentContext
-    ) -> tuple[Mapping[str, object], int, float] | None:
+    ) -> tuple[Mapping[str, object], int, float, AcquisitionMethod] | None:
         direct_id, has_discogs_ids = _discogs_release_id(context)
         if has_discogs_ids:
             if direct_id is None:
                 return None
             release = self._fetch_release(direct_id)
-            return release, direct_id, _DIRECT_CONFIDENCE
+            return release, direct_id, _DIRECT_CONFIDENCE, AcquisitionMethod.EXACT_LOOKUP
 
         if self._token is None:
             raise ProviderError("Discogs search requires a personal user token")
@@ -145,7 +145,7 @@ class DiscogsProvider:
 
         release_id, confidence = selected
         release = self._fetch_release(release_id)
-        return release, release_id, confidence
+        return release, release_id, confidence, AcquisitionMethod.SEARCHED_CANDIDATE
 
     def _fetch_release(self, release_id: int) -> Mapping[str, object]:
         try:
