@@ -42,7 +42,8 @@ def test_current_target_mappings_reference_field_registry() -> None:
 
 def test_current_flexible_fields_reference_typed_db_contracts() -> None:
     for field in ITEM_FIELD_TYPES.keys() | ALBUM_FIELD_TYPES.keys():
-        assert TargetClass.TYPED_DB in FIELD_CONTRACTS[field].target_classes
+        canonical = "works" if field == "mb_workids" else field
+        assert TargetClass.TYPED_DB in FIELD_CONTRACTS[canonical].target_classes
 
 
 def test_public_v2_fields_resolve_to_registered_concepts() -> None:

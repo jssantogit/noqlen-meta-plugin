@@ -21,6 +21,7 @@ from beetsplug.noqlenmeta.domain import (
     SemanticEvidenceBundle,
     TrackEnrichmentContext,
 )
+from beetsplug.noqlenmeta.field_contracts import PartialDate
 from beetsplug.noqlenmeta.genre_evidence import GenreEvidence, GenreEvidenceKind
 from beetsplug.noqlenmeta.library_integration import (
     context_from_library_album,
@@ -74,7 +75,19 @@ def configure_enabled(
         "apply": apply,
         "apply_mode": apply_mode,
         "genres": {"num_genres": 2, "promote_styles": True},
-        "fields": {"cover": False},
+        "fields": {
+            "cover": False,
+            "date": False,
+            "original_date": False,
+            "release_type": False,
+            "release_secondary_types": False,
+            "release_status": False,
+            "edition": False,
+            "isrcs": False,
+            "iswcs": False,
+            "works": False,
+            "recording_date": False,
+        },
         "providers": {
             "discogs": {"enabled": discogs, "user_token": TOKEN},
             "musicbrainz": {"enabled": musicbrainz},
@@ -324,6 +337,7 @@ def test_library_album_adapters_preserve_canonical_shapes_without_splitting() ->
         "barcodes": ("0123456789012",),
         "country": "FR",
         "year": 2005,
+        "date": PartialDate(2005),
         "artist_countries": ("Brazil", "Japan"),
         "artist_areas": ("Salvador", "Tokyo"),
         "artist_languages": ("por", "jpn"),

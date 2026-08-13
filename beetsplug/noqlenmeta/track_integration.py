@@ -14,12 +14,15 @@ from beets.library import Item
 from beetsplug.noqlenmeta.domain import (
     ArtistEnrichmentContext,
     ExternalIdentifier,
-    MetadataValue,
     ReleaseEnrichmentContext,
     TrackEnrichmentContext,
     canonical_isrc,
     canonical_uuid,
 )
+from beetsplug.noqlenmeta.evidence import CanonicalValue
+from beetsplug.noqlenmeta.field_contracts import IdentifierCollection
+from beetsplug.noqlenmeta.release_catalog import parse_partial_date
+from beetsplug.noqlenmeta.work_identity import WorkReference, canonical_work_references
 
 _MUSICBRAINZ_RECORDING_NAMESPACE = "musicbrainz.recording"
 _MUSICBRAINZ_RELEASE_TRACK_NAMESPACE = "musicbrainz.release_track"
@@ -183,12 +186,12 @@ def context_from_library_item(item: Item) -> TrackEnrichmentContext | None:
     )
 
 
-def current_values_from_track_info(track_info: TrackInfo) -> dict[str, MetadataValue]:
+def current_values_from_track_info(track_info: TrackInfo) -> dict[str, CanonicalValue]:
     """Return explicitly carried canonical track values from TrackInfo."""
     return _current_track_values(track_info.get)
 
 
-def current_values_from_library_item(item: Item) -> dict[str, MetadataValue]:
+def current_values_from_library_item(item: Item) -> dict[str, CanonicalValue]:
     """Return canonical track values from the Item itself without Album fallback."""
     return _current_track_values(lambda field: _item_get(item, field))
 
@@ -320,8 +323,8 @@ def _item_identifier_values(item: Item | None) -> tuple[object, object, object, 
     )
 
 
-def _current_track_values(getter: Callable[[str], object]) -> dict[str, MetadataValue]:
-    values: dict[str, MetadataValue] = {}
+def _current_track_values(getter: Callable[[str], object]) -> dict[str, CanonicalValue]:
+    values: dict[str, CanonicalValue] = {}
     for field in ("lyrics", "synced_lyrics"):
         value = getter(field)
         text = _optional_text(value)
@@ -348,7 +351,45 @@ def _current_track_values(getter: Callable[[str], object]) -> dict[str, Metadata
         and bpm > 0
     ):
         values["bpm"] = float(bpm)
+    isrcs = _canonical_identifiers(getter("isrcs"), "isrc", canonical_isrc)
+    if not isrcs:
+        isrcs = _canonical_identifiers(getter("isrc"), "isrc", canonical_isrc)
+    if isrcs:
+        values["isrcs"] = IdentifierCollection(isrcs)
+    iswcs = _canonical_identifiers(getter("iswcs"), "iswc", _canonical_iswc)
+    if iswcs:
+        values["iswcs"] = IdentifierCollection(iswcs)
+    work_ids = _canonical_identifiers(
+        getter("mb_workids"), "musicbrainz.work", canonical_uuid
+    )
+    if not work_ids:
+        work_ids = _canonical_identifiers(
+            getter("mb_workid"), "musicbrainz.work", canonical_uuid
+        )
+    if work_ids:
+        work_title = _optional_text(getter("work")) if len(work_ids) == 1 else None
+        values["works"] = canonical_work_references(
+            WorkReference(identifier.value, work_title, "stored identity", None)
+            for identifier in work_ids
+        )
+    if recording_date := parse_partial_date(getter("recording_date")):
+        values["recording_date"] = recording_date
     return values
+
+
+def _canonical_identifiers(
+    raw: object, namespace: str, normalizer: Callable[[object], str | None]
+) -> tuple[ExternalIdentifier, ...]:
+    candidates = raw if isinstance(raw, (tuple, list)) else str(raw).split(";") if raw else ()
+    values = {value for candidate in candidates if (value := normalizer(candidate)) is not None}
+    return tuple(ExternalIdentifier(namespace, value) for value in sorted(values))
+
+
+def _canonical_iswc(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip().upper()
+    return text if text.startswith("T-") and len(text) == 15 else None
 
 
 def _item_get(item: Item, field: str) -> object:

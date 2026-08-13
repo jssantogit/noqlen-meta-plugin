@@ -25,15 +25,27 @@ V2_FIELDS = {
     "synced_lyrics",
     "cover",
 }
+WAVE_ONE_FIELDS = {
+    "date",
+    "original_date",
+    "release_type",
+    "release_secondary_types",
+    "release_status",
+    "edition",
+    "isrcs",
+    "iswcs",
+    "works",
+    "recording_date",
+}
 
 
-def test_v2_public_field_configuration_is_unchanged() -> None:
+def test_v2_public_fields_are_preserved_when_wave_one_is_added() -> None:
     config = default_config()
 
-    assert set(config["fields"]) == V2_FIELDS
+    assert set(config["fields"]) == V2_FIELDS | WAVE_ONE_FIELDS
     assert config["fields"]["cover"] is True
     assert "vocal_languages" not in config["fields"]
-    assert "isrcs" not in config["fields"]
+    assert all(config["fields"][field] is True for field in WAVE_ONE_FIELDS)
 
 
 def test_v2_semantics_are_not_reassigned_by_aliases() -> None:
@@ -108,11 +120,8 @@ def test_existing_private_tags_are_preserved_without_new_v3_tags() -> None:
     )
 
 
-def test_future_v3_concepts_do_not_expand_provider_behavior() -> None:
+def test_wave_two_and_later_concepts_do_not_expand_provider_behavior() -> None:
     future_fields = {
-        "isrcs",
-        "iswcs",
-        "recording_date",
         "vocal_languages",
         "explicitness",
         "back_artwork",
@@ -122,4 +131,7 @@ def test_future_v3_concepts_do_not_expand_provider_behavior() -> None:
     }
 
     assert not future_fields & {capability.field for capability in BUILTIN_PROVIDER_CAPABILITIES}
+    assert {"isrcs", "iswcs", "works", "recording_date"} <= {
+        capability.field for capability in BUILTIN_PROVIDER_CAPABILITIES
+    }
     assert "deezer" not in {capability.provider for capability in BUILTIN_PROVIDER_CAPABILITIES}

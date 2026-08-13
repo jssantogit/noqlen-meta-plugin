@@ -14,6 +14,7 @@ from beetsplug.noqlenmeta.domain import (
     SemanticEvidenceBundle,
     SemanticTagEvidence,
 )
+from beetsplug.noqlenmeta.evidence import MetadataEvidence
 from beetsplug.noqlenmeta.genre_evidence import GenreEvidence, GenreEvidenceKind
 from beetsplug.noqlenmeta.genre_resolution import GenreSettings, resolve_genres
 from beetsplug.noqlenmeta.genre_taxonomy import (
@@ -62,10 +63,12 @@ class SemanticFieldOutcome:
 class SemanticEnrichmentResult:
     candidates: tuple[MetadataCandidate, ...]
     outcomes: Mapping[str, SemanticFieldOutcome]
+    evidence: tuple[MetadataEvidence, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "candidates", tuple(self.candidates))
         object.__setattr__(self, "outcomes", MappingProxyType(dict(self.outcomes)))
+        object.__setattr__(self, "evidence", tuple(self.evidence))
 
 
 def derive_artist_languages(

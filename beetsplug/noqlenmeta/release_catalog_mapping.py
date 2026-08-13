@@ -49,7 +49,10 @@ def map_release_catalog_plan(
     if not isinstance(plan, ChangePlan):
         raise CatalogMappingError("source must be a ChangePlan")
     mapped: list[CatalogTargetChange] = []
-    current = current_values or {}
+    current = dict(current_values or {})
+    for decision in plan.kept:
+        if decision.field in {"release_type", "release_secondary_types"}:
+            current.setdefault(decision.field, decision.current_value)
     primary_value = current.get("release_type")
     primary = primary_value if isinstance(primary_value, ReleaseType) else None
     secondary_value = current.get("release_secondary_types")

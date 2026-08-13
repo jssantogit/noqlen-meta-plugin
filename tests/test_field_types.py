@@ -49,3 +49,21 @@ def test_release_catalog_fields_round_trip_on_album(tmp_path, loaded_plugin) -> 
     assert fresh is not None
     assert fresh["edition"] == "Limited Edition"
     assert fresh["release_secondary_types"] == ["Live", "Compilation"]
+
+
+def test_recording_work_fields_round_trip_on_item(tmp_path, loaded_plugin) -> None:
+    library = Library(str(tmp_path / "recording.db"))
+    item = Item(path=b"synthetic.flac", title="Synthetic", artist="Artist")
+    item["isrcs"] = ["USAAA0100001", "GBBBB0200002"]
+    item["iswcs"] = ["T-123.456.789-0"]
+    item["mb_workids"] = ["11111111-2222-3333-4444-555555555555"]
+    item["recording_date"] = "2020-05"
+    item.add(library)
+
+    fresh = library.get_item(item.id)
+
+    assert fresh is not None
+    assert fresh["isrcs"] == ["USAAA0100001", "GBBBB0200002"]
+    assert fresh["iswcs"] == ["T-123.456.789-0"]
+    assert fresh["mb_workids"] == ["11111111-2222-3333-4444-555555555555"]
+    assert fresh["recording_date"] == "2020-05"

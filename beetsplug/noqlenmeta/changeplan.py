@@ -146,6 +146,38 @@ def build_catalog_change_plan(
     return build_change_plan(decisions)
 
 
+def compose_change_plans(*plans: ChangePlan, suppress_fields: Sequence[str] = ()) -> ChangePlan:
+    """Combine independently resolved domains while rejecting canonical collisions."""
+    suppressed = {_canonical_field(field) for field in suppress_fields}
+    changes = [
+        change for plan in plans for change in plan.changes if change.field not in suppressed
+    ]
+    groups = tuple(
+        tuple(
+            decision
+            for plan in plans
+            for decision in decisions(plan)
+            if decision.field not in suppressed
+        )
+        for decisions in (
+            lambda plan: plan.reviews,
+            lambda plan: plan.kept,
+            lambda plan: plan.skipped,
+        )
+    )
+    fields = [change.field for change in changes] + [
+        decision.field for group in groups for decision in group
+    ]
+    if len(fields) != len(set(fields)):
+        raise ChangePlanError("duplicate canonical field while composing ChangePlans")
+    return ChangePlan(
+        tuple(sorted(changes, key=lambda change: change.field)),
+        tuple(sorted(groups[0], key=lambda decision: decision.field)),
+        tuple(sorted(groups[1], key=lambda decision: decision.field)),
+        tuple(sorted(groups[2], key=lambda decision: decision.field)),
+    )
+
+
 def _action_name(value: object) -> str:
     name = getattr(value, "name", None)
     if not isinstance(name, str):

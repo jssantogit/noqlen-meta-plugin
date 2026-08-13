@@ -15,6 +15,7 @@ from beetsplug.noqlenmeta.domain import (
     canonical_uuid,
 )
 from beetsplug.noqlenmeta.integration import (
+    _add_release_catalog_current,
     _optional_text,
     _positive_release_id,
     _preview_value,
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
 
 _DISCOGS_RELEASE_NAMESPACE = "discogs.release"
 _MUSICBRAINZ_RELEASE_NAMESPACE = "musicbrainz.release"
+_MUSICBRAINZ_RELEASE_GROUP_NAMESPACE = "musicbrainz.release_group"
 
 
 def context_from_library_album(album: Album) -> ReleaseEnrichmentContext | None:
@@ -56,6 +58,11 @@ def context_from_library_album(album: Album) -> ReleaseEnrichmentContext | None:
     if musicbrainz_release_id is not None:
         external_ids.append(
             ExternalIdentifier(_MUSICBRAINZ_RELEASE_NAMESPACE, musicbrainz_release_id)
+        )
+    release_group_id = canonical_uuid(album.mb_releasegroupid)
+    if release_group_id is not None:
+        external_ids.append(
+            ExternalIdentifier(_MUSICBRAINZ_RELEASE_GROUP_NAMESPACE, release_group_id)
         )
 
     return ReleaseEnrichmentContext(
@@ -106,6 +113,8 @@ def current_values_from_library_album(album: Album) -> dict[str, MetadataValue]:
     year = _valid_year(album.year)
     if year is not None:
         current_values["year"] = year
+
+    _add_release_catalog_current(current_values, lambda field: album.get(field, None))
 
     return current_values
 
@@ -187,6 +196,19 @@ def _render_library_change(change: LibraryTargetChange) -> tuple[str, ...]:
             f"    reason: {_safe_preview_text(source.reason)}",
         )
     )
+    if source.evidence:
+        selected = source.evidence[0]
+        lines.append(
+            "    evidence: "
+            f"{_safe_preview_text(selected.provider)}; "
+            f"entity={_safe_preview_text(selected.subject.entity.value)}; "
+            f"scope={_safe_preview_text(selected.acquisition_scope.value)}; "
+            f"method={_safe_preview_text(selected.provenance.method.value)}"
+        )
+        if selected.confidence is not None:
+            lines.append(f"    evidence confidence: {selected.confidence:.2f}")
+        if len(source.evidence) > 1:
+            lines.append(f"    corroboration: {len(source.evidence) - 1} additional source(s)")
     return tuple(lines)
 
 

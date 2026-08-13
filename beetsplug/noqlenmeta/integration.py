@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
@@ -23,7 +23,15 @@ from beetsplug.noqlenmeta.domain import (
     ReleaseEnrichmentContext,
     canonical_uuid,
 )
+from beetsplug.noqlenmeta.evidence import CanonicalValue
+from beetsplug.noqlenmeta.field_contracts import PartialDate
 from beetsplug.noqlenmeta.providers.specs import provider_display_name
+from beetsplug.noqlenmeta.release_catalog import (
+    normalize_edition,
+    normalize_release_secondary_types,
+    normalize_release_status,
+    normalize_release_type,
+)
 from beetsplug.noqlenmeta.resolver import (
     FieldDecision,
     FieldRule,
@@ -38,6 +46,7 @@ if TYPE_CHECKING:
 
 _DISCOGS_RELEASE_NAMESPACE = "discogs.release"
 _MUSICBRAINZ_RELEASE_NAMESPACE = "musicbrainz.release"
+_MUSICBRAINZ_RELEASE_GROUP_NAMESPACE = "musicbrainz.release_group"
 _DISCOGS_TOKEN_ENV = "NOQLENMETA_DISCOGS_TOKEN"
 
 
@@ -89,6 +98,11 @@ def context_from_album_info(album_info: AlbumInfo) -> ReleaseEnrichmentContext |
         if key not in seen_ids:
             seen_ids.add(key)
             external_ids.append(ExternalIdentifier(_MUSICBRAINZ_RELEASE_NAMESPACE, release_id))
+    release_group_id = canonical_uuid(getattr(album_info, "releasegroup_id", None))
+    if release_group_id is not None:
+        external_ids.append(
+            ExternalIdentifier(_MUSICBRAINZ_RELEASE_GROUP_NAMESPACE, release_group_id)
+        )
 
     return ReleaseEnrichmentContext(
         album_artist=artist,
@@ -100,9 +114,9 @@ def context_from_album_info(album_info: AlbumInfo) -> ReleaseEnrichmentContext |
     )
 
 
-def current_values_from_album_info(album_info: AlbumInfo) -> dict[str, MetadataValue]:
+def current_values_from_album_info(album_info: AlbumInfo) -> dict[str, CanonicalValue]:
     """Copy selected beets metadata into provider-independent canonical fields."""
-    current_values: dict[str, MetadataValue] = {}
+    current_values: dict[str, CanonicalValue] = {}
 
     genres = _text_tuple(album_info.genres)
     if genres:
@@ -140,7 +154,46 @@ def current_values_from_album_info(album_info: AlbumInfo) -> dict[str, MetadataV
     if year is not None:
         current_values["year"] = year
 
+    _add_release_catalog_current(current_values, album_info.get)
+
     return current_values
+
+
+def _add_release_catalog_current(
+    values: dict[str, CanonicalValue], getter: Callable[[str], object]
+) -> None:
+    year = _valid_year(getter("year"))
+    if year is not None:
+        month = getter("month")
+        day = getter("day")
+        try:
+            values["date"] = PartialDate(
+                year,
+                month if isinstance(month, int) and month > 0 else None,
+                day if isinstance(day, int) and day > 0 else None,
+            )
+        except ValueError:
+            pass
+    original_year = _valid_year(getter("original_year"))
+    if original_year is not None:
+        original_month = getter("original_month")
+        original_day = getter("original_day")
+        try:
+            values["original_date"] = PartialDate(
+                original_year,
+                original_month if isinstance(original_month, int) and original_month > 0 else None,
+                original_day if isinstance(original_day, int) and original_day > 0 else None,
+            )
+        except ValueError:
+            pass
+    if release_type := normalize_release_type(getter("albumtype")):
+        values["release_type"] = release_type
+    if secondary := normalize_release_secondary_types(getter("release_secondary_types")):
+        values["release_secondary_types"] = secondary
+    if status := normalize_release_status(getter("albumstatus")):
+        values["release_status"] = status
+    if edition := normalize_edition(getter("edition")):
+        values["edition"] = edition
 
 
 def resolution_policy_from_settings(
@@ -308,6 +361,19 @@ def _render_target_change(change: BeetsTargetChange) -> tuple[str, ...]:
             f"    reason: {_safe_preview_text(source.reason)}",
         )
     )
+    if source.evidence:
+        selected = source.evidence[0]
+        lines.append(
+            "    evidence: "
+            f"{_provider_display_name(selected.provider)}; "
+            f"entity={_safe_preview_text(selected.subject.entity.value)}; "
+            f"scope={_safe_preview_text(selected.acquisition_scope.value)}; "
+            f"method={_safe_preview_text(selected.provenance.method.value)}"
+        )
+        if selected.confidence is not None:
+            lines.append(f"    evidence confidence: {selected.confidence:.2f}")
+        if len(source.evidence) > 1:
+            lines.append(f"    corroboration: {len(source.evidence) - 1} additional source(s)")
     return tuple(lines)
 
 

@@ -9,12 +9,14 @@ from types import MappingProxyType
 
 from beets.library import Item
 
-from beetsplug.noqlenmeta.changeplan import ChangePlan, build_change_plan
+from beetsplug.noqlenmeta.changeplan import ChangePlan, build_change_plan, compose_change_plans
 from beetsplug.noqlenmeta.domain import (
     MetadataCandidate,
     MetadataValue,
     TrackEnrichmentContext,
 )
+from beetsplug.noqlenmeta.evidence import CanonicalValue, MetadataEvidence
+from beetsplug.noqlenmeta.recording_identity_resolution import resolve_recording_identity
 from beetsplug.noqlenmeta.resolver import (
     FieldDecision,
     ResolutionPolicy,
@@ -124,6 +126,7 @@ def build_import_track_planning_result(
     *,
     from_scratch: bool,
     candidates: Sequence[MetadataCandidate],
+    evidence: Sequence[MetadataEvidence] = (),
     policy: ResolutionPolicy,
     semantic_outcomes: Mapping[str, SemanticFieldOutcome] | None = None,
 ) -> ImportTrackPlanningResult:
@@ -135,6 +138,7 @@ def build_import_track_planning_result(
             from_scratch=from_scratch,
         ),
         candidates=candidates,
+        evidence=evidence,
         policy=policy,
         semantic_outcomes=semantic_outcomes,
     )
@@ -152,16 +156,20 @@ def build_import_track_planning_result(
 
 def build_track_planning_result(
     context: TrackEnrichmentContext,
-    current_values: Mapping[str, MetadataValue],
+    current_values: Mapping[str, CanonicalValue],
     *,
     candidates: Sequence[MetadataCandidate],
+    evidence: Sequence[MetadataEvidence] = (),
     policy: ResolutionPolicy,
     semantic_outcomes: Mapping[str, SemanticFieldOutcome] | None = None,
 ) -> TrackPlanningResult:
     """Resolve one track through the shared canonical planning path."""
     collected = tuple(candidates)
     decisions = resolve_metadata(current_values, collected, policy)
-    change_plan = build_change_plan(decisions)
+    change_plan = compose_change_plans(
+        build_change_plan(decisions),
+        build_change_plan(resolve_recording_identity(current_values, evidence)),
+    )
     target_plan = map_change_plan_to_track_info(change_plan)
     outcomes = reconcile_semantic_outcomes(
         semantic_outcomes or {},

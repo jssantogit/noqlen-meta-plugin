@@ -276,7 +276,9 @@ _CONTRACTS = (
     _field("lyrics", EntityKind.RECORDING, _ONE, ResolverKind.LYRICS, _NATIVE),
     _field("synced_lyrics", EntityKind.RECORDING, _ONE, ResolverKind.LYRICS, TargetClass.SIDECAR),
     # Dates and release classification.
-    _field("date", EntityKind.RELEASE, _ONE, ResolverKind.EXCLUSIVE, _NATIVE),
+    _field(
+        "date", EntityKind.RELEASE, _ONE, ResolverKind.EXCLUSIVE, _NATIVE, default_enabled=True
+    ),
     _field(
         "original_date",
         EntityKind.RELEASE_GROUP,
@@ -284,10 +286,25 @@ _CONTRACTS = (
         ResolverKind.EXCLUSIVE,
         _NATIVE,
         aliases=("originaldate",),
+        default_enabled=True,
     ),
     _field("original_year", EntityKind.RELEASE_GROUP, _ONE, ResolverKind.EXCLUSIVE, _NATIVE),
-    _field("recording_date", EntityKind.RECORDING, _ONE, ResolverKind.EXCLUSIVE, _DB),
-    _field("release_type", EntityKind.RELEASE_GROUP, _ONE, ResolverKind.EXCLUSIVE, _NATIVE),
+    _field(
+        "recording_date",
+        EntityKind.RECORDING,
+        _ONE,
+        ResolverKind.EXCLUSIVE,
+        _DB,
+        default_enabled=True,
+    ),
+    _field(
+        "release_type",
+        EntityKind.RELEASE_GROUP,
+        _ONE,
+        ResolverKind.EXCLUSIVE,
+        _NATIVE,
+        default_enabled=True,
+    ),
     _field(
         "release_secondary_types",
         EntityKind.RELEASE_GROUP,
@@ -295,13 +312,52 @@ _CONTRACTS = (
         ResolverKind.MULTIVALUE,
         _NATIVE,
         _DB,
+        default_enabled=True,
     ),
-    _field("release_status", EntityKind.RELEASE, _ONE, ResolverKind.EXCLUSIVE, _NATIVE),
-    _field("edition", EntityKind.RELEASE, _ONE, ResolverKind.EXCLUSIVE, _DB),
+    _field(
+        "release_status",
+        EntityKind.RELEASE,
+        _ONE,
+        ResolverKind.EXCLUSIVE,
+        _NATIVE,
+        default_enabled=True,
+    ),
+    _field(
+        "edition",
+        EntityKind.RELEASE,
+        _ONE,
+        ResolverKind.EXCLUSIVE,
+        _DB,
+        default_enabled=True,
+    ),
     # Recording and Work identity, kept outside generic identity resolution.
-    _field("isrcs", EntityKind.RECORDING, _MANY, ResolverKind.MULTIVALUE, _NATIVE, _DB),
-    _field("iswcs", EntityKind.WORK, _MANY, ResolverKind.MULTIVALUE, _DB),
-    _field("works", EntityKind.RECORDING, _MANY, ResolverKind.STRUCTURED, _NATIVE, _INTERNAL),
+    _field(
+        "isrcs",
+        EntityKind.RECORDING,
+        _MANY,
+        ResolverKind.MULTIVALUE,
+        _NATIVE,
+        _DB,
+        default_enabled=True,
+    ),
+    _field(
+        "iswcs",
+        EntityKind.WORK,
+        _MANY,
+        ResolverKind.MULTIVALUE,
+        _DB,
+        default_enabled=True,
+    ),
+        _field(
+            "works",
+            EntityKind.RECORDING,
+            _MANY,
+            ResolverKind.STRUCTURED,
+            _NATIVE,
+            _DB,
+            _INTERNAL,
+            default_enabled=True,
+        ),
     # Credits and structured title/language concepts.
     _field(
         "composers", _WORK_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _NATIVE, _INTERNAL

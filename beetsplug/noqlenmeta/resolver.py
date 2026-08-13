@@ -170,6 +170,17 @@ _DEFAULT_AUTHORITY: dict[str, tuple[str, ...]] = {
     "lyrics": ("lrclib",),
     "synced_lyrics": ("lrclib",),
     "cover": ("itunes", "discogs"),
+    # V3 fields use the role-aware authority matrix, not this V2 ordinal tuple.
+    "date": (),
+    "original_date": (),
+    "release_type": (),
+    "release_secondary_types": (),
+    "release_status": (),
+    "edition": (),
+    "isrcs": (),
+    "iswcs": (),
+    "works": (),
+    "recording_date": (),
 }
 def default_resolution_policy() -> ResolutionPolicy:
     """Return the operational field policy with production providers disabled."""

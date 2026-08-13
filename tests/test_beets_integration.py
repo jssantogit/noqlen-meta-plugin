@@ -22,6 +22,7 @@ from beetsplug.noqlenmeta.domain import (
     ReleaseEnrichmentContext,
     SemanticEvidenceBundle,
 )
+from beetsplug.noqlenmeta.field_contracts import PartialDate
 from beetsplug.noqlenmeta.genre_evidence import GenreEvidence, GenreEvidenceKind
 from beetsplug.noqlenmeta.integration import (
     context_from_album_info,
@@ -130,7 +131,19 @@ def configure_enabled(
     storefront: str = "us",
     resolution: dict[str, object] | None = None,
 ) -> None:
-    configured_fields = {"cover": False}
+    configured_fields = {
+        "cover": False,
+        "date": False,
+        "original_date": False,
+        "release_type": False,
+        "release_secondary_types": False,
+        "release_status": False,
+        "edition": False,
+        "isrcs": False,
+        "iswcs": False,
+        "works": False,
+        "recording_date": False,
+    }
     configured_fields.update(fields or {})
     settings: dict[str, object] = {
         "preview": preview,
@@ -294,6 +307,7 @@ def test_current_values_map_album_info_to_canonical_shapes() -> None:
         "barcodes": ("012345678901",),
         "country": "NL",
         "year": 2024,
+        "date": PartialDate(2024),
         "media": ("CD",),
         "artist_countries": ("Brazil", "Japan"),
         "artist_areas": ("Salvador", "Tokyo"),
@@ -2090,3 +2104,10 @@ def test_ambiguous_review_preview_has_no_selected_value(
     assert "contenders: 2 from Discogs" in output[0]
     assert "returned conflicting values" in output[0]
     assert "candidate:" not in output[0]
+
+def test_release_v3_only_field_keeps_musicbrainz_contribution_enabled() -> None:
+    policy = resolution_policy_from_settings(
+        {"date": True}, {"musicbrainz": True}
+    )
+
+    assert NoqlenMetaPlugin._has_contributing_release_provider(policy)

@@ -10,7 +10,13 @@ from beetsplug.noqlenmeta.field_contracts import (
 )
 
 ITEM_FIELD_TYPES = MappingProxyType(
-    {field: types.MULTI_VALUE_DSV for field in V2_ITEM_FLEXIBLE_FIELDS}
+    {
+        **{field: types.MULTI_VALUE_DSV for field in V2_ITEM_FLEXIBLE_FIELDS},
+        "isrcs": types.MULTI_VALUE_DSV,
+        "iswcs": types.MULTI_VALUE_DSV,
+        "mb_workids": types.MULTI_VALUE_DSV,
+        "recording_date": types.STRING,
+    }
 )
 
 ALBUM_FIELD_TYPES = MappingProxyType(
