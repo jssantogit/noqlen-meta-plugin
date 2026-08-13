@@ -50,9 +50,9 @@ class ChangePlan:
     """Read-only metadata consequences grouped by resolved action."""
 
     changes: tuple[PlannedChange, ...] = ()
-    reviews: tuple[FieldDecision, ...] = ()
-    kept: tuple[FieldDecision, ...] = ()
-    skipped: tuple[FieldDecision, ...] = ()
+    reviews: tuple[FieldDecision | CatalogFieldDecision, ...] = ()
+    kept: tuple[FieldDecision | CatalogFieldDecision, ...] = ()
+    skipped: tuple[FieldDecision | CatalogFieldDecision, ...] = ()
 
     @property
     def has_changes(self) -> bool:
@@ -154,9 +154,9 @@ def build_catalog_change_plan(
             raise ChangePlanError(f"unsupported resolution action for {field!r}")
     return ChangePlan(
         changes=tuple(sorted(changes, key=lambda change: change.field)),
-        reviews=tuple(sorted(reviews, key=lambda decision: decision.field)),  # type: ignore[arg-type]
-        kept=tuple(sorted(kept, key=lambda decision: decision.field)),  # type: ignore[arg-type]
-        skipped=tuple(sorted(skipped, key=lambda decision: decision.field)),  # type: ignore[arg-type]
+        reviews=tuple(sorted(reviews, key=lambda decision: decision.field)),
+        kept=tuple(sorted(kept, key=lambda decision: decision.field)),
+        skipped=tuple(sorted(skipped, key=lambda decision: decision.field)),
     )
 
 
