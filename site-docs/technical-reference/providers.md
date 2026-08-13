@@ -1,5 +1,7 @@
 # Provider Reference
 
+Wave 1 reuses one concrete release acquisition for V2 candidates and V3 evidence. MusicBrainz is primary for release catalog and exact Recording/Work evidence; Discogs supplies secondary date and controlled edition evidence; iTunes is date fallback. MusicBrainz may add one exact Release Group support lookup only when requested group data is absent.
+
 You will see each provider's real current scope and expected unavailable
 behavior. Enabling a provider does not make it support every field.
 

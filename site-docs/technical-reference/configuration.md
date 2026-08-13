@@ -99,6 +99,12 @@ exist. Enabling a field does not guarantee an enabled provider can supply it.
 | `noqlenmeta.fields.catalog_numbers` | `true` | Release | Album | Discogs/MusicBrainz; multiple values can block. |
 | `noqlenmeta.fields.barcodes` | `true` | Release | Album | Discogs/MusicBrainz; multiple values can block. |
 | `noqlenmeta.fields.country` | `true` | Release | Album | Discogs/MusicBrainz; iTunes storefront is not release country. |
+| `noqlenmeta.fields.date` | `true` | Release | Album | Exact edition date; supplies native date components and suppresses legacy year competition. |
+| `noqlenmeta.fields.original_date` | `true` | Release Group | Album | First Release Group date, distinct from edition and recording dates. |
+| `noqlenmeta.fields.release_type` | `true` | Release Group | Album | Controlled primary type. |
+| `noqlenmeta.fields.release_secondary_types` | `true` | Release Group | Album | Separate typed plural secondary types. |
+| `noqlenmeta.fields.release_status` | `true` | Release | Album | Controlled MusicBrainz release status. |
+| `noqlenmeta.fields.edition` | `true` | Release | Album | Controlled Discogs edition designation; database only. |
 | `noqlenmeta.fields.year` | `true` | Release | Album | MusicBrainz, Discogs, iTunes. |
 | `noqlenmeta.fields.media` | `true` | Release | Preview/block | Importer target exists; persistent Album target does not. |
 | `noqlenmeta.fields.format_descriptions` | `true` | Preview/block | Preview/block | Discogs can supply it; there is currently no lossless ordinary target. |
@@ -111,6 +117,10 @@ exist. Enabling a field does not guarantee an enabled provider can supply it.
 | `noqlenmeta.fields.lyrics` | `false` | Selected tracks | Items | LRCLIB plain lyrics use shared import/library resolution. |
 | `noqlenmeta.fields.synced_lyrics` | `false` | Preview/block | Preview/block | No lossless synchronized-lyrics target is delivered. |
 | `noqlenmeta.fields.cover` | `true` | Album artwork | Album artwork | Exact CAA front selection and deterministic `cover.jpg`. |
+| `noqlenmeta.fields.isrcs` | `true` | Recording | Item | All exact ISRCs; scalar native/file projection only when singular. |
+| `noqlenmeta.fields.works` | `true` | Recording | Item | Structured exact Work relationships; plural Work IDs persist in the database. |
+| `noqlenmeta.fields.iswcs` | `true` | Work | Item | Work-scoped plural ISWCs; database only. |
+| `noqlenmeta.fields.recording_date` | `true` | Recording | Item | Structurally proven date; canonical partial-date database text only. |
 
 Example:
 

@@ -2,10 +2,9 @@
 
 ## Status and boundary
 
-Wave 1A implements an internal Release/Release Group catalog pipeline. It is not
-wired into the normal CLI, importer, public configuration or file-writing flow.
-V2 remains the public operational behavior until the complete Wave 1 integration
-is reviewed.
+Wave 1A supplied the internal Release/Release Group catalog pipeline. The 032
+Wave 1 contract now supersedes its former internal-only integration boundary and
+wires these values into normal importer, CLI, database and audited file targets.
 
 The implemented pipeline is:
 

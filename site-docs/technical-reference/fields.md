@@ -1,5 +1,7 @@
 # Field Reference
 
+Wave 1 distinguishes the selected edition `date`, Release Group `original_date`, and structurally proven `recording_date`. ISRC identifies a Recording, MusicBrainz Work IDs identify related Works, and ISWC identifies a Work. Plural ISRCs, ISWCs, and Work IDs persist as typed Item fields; omissions never delete and multiple values are never reduced to an arbitrary first value.
+
 You will see which ordinary fields can currently be supplied and where they
 can be represented safely.
 

@@ -1,5 +1,7 @@
 # Database vs File Tags
 
+Wave 1 keeps plural ISRCs, ISWCs, and Work IDs queryable in the Item database. File writing expands known release/original date components and supports release type/status plus exactly one ISRC or Work ID. Multiple ISRCs/Works, ISWC, recording date, edition, and separate secondary release types are blocked for file sync. Under partial mode, those blockers do not prevent safe database application.
+
 Noqlen can affect three distinct places:
 
 ```text

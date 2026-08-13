@@ -41,6 +41,12 @@ noqlenmeta:
     catalog_numbers: true
     barcodes: true
     country: true
+    date: true
+    original_date: true
+    release_type: true
+    release_secondary_types: true
+    release_status: true
+    edition: true
     year: true
     media: true
     format_descriptions: true
@@ -53,6 +59,10 @@ noqlenmeta:
     lyrics: false
     synced_lyrics: false
     cover: true
+    isrcs: true
+    works: true
+    iswcs: true
+    recording_date: true
 
   genres:
     num_genres: 1

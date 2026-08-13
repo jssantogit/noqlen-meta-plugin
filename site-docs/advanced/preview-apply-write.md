@@ -1,5 +1,7 @@
 # Preview, Apply and Write
 
+Wave 1 providers run during planning; preview shows canonical evidence and REVIEW/BLOCKED outcomes; `--apply` changes selected importer metadata or the library database; and `--write` uses that already acquired plan. Adding `--write` never triggers another provider call.
+
 ## Preview
 
 Preview is the default and non-mutating. It may collect provider evidence or
