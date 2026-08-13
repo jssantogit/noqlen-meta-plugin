@@ -18,11 +18,14 @@ RELEASE_ID = "6ea45c08-3cfa-461a-aa4d-4cc404fcfa86"
 RELEASE_GROUP_ID = "11111111-2222-3333-4444-555555555555"
 
 
-def context() -> ReleaseEnrichmentContext:
+def context(*, release_group_id: str | None = None) -> ReleaseEnrichmentContext:
+    identifiers = [ExternalIdentifier("musicbrainz.release", RELEASE_ID)]
+    if release_group_id is not None:
+        identifiers.append(ExternalIdentifier("musicbrainz.release_group", release_group_id))
     return ReleaseEnrichmentContext(
         "Synthetic Artist",
         "Synthetic Album",
-        external_ids=(ExternalIdentifier("musicbrainz.release", RELEASE_ID),),
+        external_ids=tuple(identifiers),
     )
 
 
@@ -126,6 +129,30 @@ def test_release_group_lookup_occurs_once_only_when_requested_data_is_missing() 
         "release_secondary_types",
     }
     assert release_group.calls == [RELEASE_GROUP_ID]
+
+
+def test_explicit_context_release_group_id_enables_exact_lookup_when_not_nested() -> None:
+    release = Fetcher(release_payload(nested=False))
+    release_group = Fetcher(release_group_payload())
+    provider = MusicBrainzProvider(fetch_release=release, fetch_release_group=release_group)
+
+    evidence = provider.get_release_catalog_evidence(
+        context(release_group_id=RELEASE_GROUP_ID), {"original_date"}
+    )
+
+    assert values(evidence) == {"original_date": PartialDate(2019, 4)}
+    assert release_group.calls == [RELEASE_GROUP_ID]
+
+
+def test_missing_release_group_identity_never_triggers_speculative_lookup() -> None:
+    release_group = Fetcher(release_group_payload())
+    provider = MusicBrainzProvider(
+        fetch_release=Fetcher(release_payload(nested=False)),
+        fetch_release_group=release_group,
+    )
+
+    assert provider.get_release_catalog_evidence(context(), {"original_date"}) == ()
+    assert release_group.calls == []
 
 
 def test_supporting_release_group_failure_does_not_discard_release_fields() -> None:

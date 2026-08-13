@@ -35,6 +35,7 @@ from beetsplug.noqlenmeta.release_catalog import (
 )
 
 _MUSICBRAINZ_RELEASE_NAMESPACE = "musicbrainz.release"
+_MUSICBRAINZ_RELEASE_GROUP_NAMESPACE = "musicbrainz.release_group"
 _PUBLIC_RELEASE_URL = "https://musicbrainz.org/release/{}"
 _PUBLIC_RELEASE_GROUP_URL = "https://musicbrainz.org/release-group/{}"
 _RELEASE_GROUP_FIELDS = frozenset({"original_date", "release_type", "release_secondary_types"})
@@ -113,9 +114,8 @@ class MusicBrainzProvider:
         if not group_fields:
             return tuple(evidence)
         nested = payload.get("release_group")
-        if not isinstance(nested, Mapping):
-            return tuple(evidence)
-        group_id = canonical_uuid(nested.get("id"))
+        nested = nested if isinstance(nested, Mapping) else {}
+        group_id = canonical_uuid(nested.get("id")) or _release_group_mbid(context)
         if group_id is None:
             return tuple(evidence)
         missing = group_fields - {item.field for item in evidence}
@@ -150,6 +150,21 @@ def _release_mbid(context: ReleaseEnrichmentContext) -> str | None:
         identifier.value
         for identifier in context.external_ids
         if identifier.namespace == _MUSICBRAINZ_RELEASE_NAMESPACE
+    ]
+    if not raw_values:
+        return None
+    normalized = [canonical_uuid(value) for value in raw_values]
+    if any(value is None for value in normalized):
+        return None
+    distinct = set(normalized)
+    return distinct.pop() if len(distinct) == 1 else None
+
+
+def _release_group_mbid(context: ReleaseEnrichmentContext) -> str | None:
+    raw_values = [
+        identifier.value
+        for identifier in context.external_ids
+        if identifier.namespace == _MUSICBRAINZ_RELEASE_GROUP_NAMESPACE
     ]
     if not raw_values:
         return None

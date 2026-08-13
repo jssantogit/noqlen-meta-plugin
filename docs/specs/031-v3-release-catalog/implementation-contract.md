@@ -57,7 +57,9 @@ the same release payload and command cache as V2 enrichment.
 - nested Release Group `first_release_date`, `primary_type`, and
   `secondary_types` supply the Release Group fields when complete.
 - an exact cached Release Group lookup is used only when a requested Release
-  Group field is missing from a nested group carrying a valid group MBID.
+  Group field is missing and a valid group MBID is known from the nested Release
+  payload or an explicitly supplied namespaced release-group identity.
+- absent Release Group identity never causes search or speculative lookup.
 - one Release Group response serves all requested Release Group fields.
 - supporting lookup failure removes only missing Release Group evidence and
   does not discard Release date/status evidence.
