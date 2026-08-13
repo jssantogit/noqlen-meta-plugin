@@ -10,6 +10,8 @@ from types import MappingProxyType
 
 from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
 from beetsplug.noqlenmeta.domain import MetadataValue
+from beetsplug.noqlenmeta.field_contracts import IdentifierCollection, PartialDate
+from beetsplug.noqlenmeta.work_identity import WorkReference
 
 
 class TrackMappingError(RuntimeError):
@@ -61,6 +63,10 @@ _TARGETS = (
     TrackFieldTarget(
         "artist_languages", "artist_languages", TrackTargetShape.STRING_LIST
     ),
+    TrackFieldTarget("isrcs", "isrcs", TrackTargetShape.STRING_LIST),
+    TrackFieldTarget("iswcs", "iswcs", TrackTargetShape.STRING_LIST),
+    TrackFieldTarget("works", "mb_workids", TrackTargetShape.STRING_LIST),
+    TrackFieldTarget("recording_date", "recording_date", TrackTargetShape.SCALAR_STRING),
 )
 
 TRACK_FIELD_TARGETS: Mapping[str, TrackFieldTarget] = MappingProxyType(
@@ -117,6 +123,55 @@ def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
     mapped: list[TrackTargetChange] = []
     blocked: list[TrackMappingBlocker] = []
     for change in sorted(plan.changes, key=lambda item: item.field):
+        if change.field in {"isrcs", "iswcs"}:
+            if not isinstance(change.after, IdentifierCollection):
+                raise TrackMappingError(f"{change.field!r} requires IdentifierCollection")
+            values = tuple(identifier.value for identifier in change.after.values)
+            mapped.append(
+                _target_change(change, change.field, TrackTargetShape.STRING_LIST, values)
+            )
+            if change.field == "isrcs" and len(values) == 1:
+                mapped.append(
+                    _target_change(
+                        change, "isrc", TrackTargetShape.SCALAR_STRING, values[0]
+                    )
+                )
+            continue
+        if change.field == "works":
+            if not isinstance(change.after, tuple) or not all(
+                isinstance(value, WorkReference) for value in change.after
+            ):
+                raise TrackMappingError("'works' requires WorkReference values")
+            values = tuple(value.mbid for value in change.after)
+            mapped.append(
+                _target_change(change, "mb_workids", TrackTargetShape.STRING_LIST, values)
+            )
+            if len(values) == 1:
+                mapped.append(
+                    _target_change(
+                        change, "mb_workid", TrackTargetShape.SCALAR_STRING, values[0]
+                    )
+                )
+                title = change.after[0].title
+                if title is not None:
+                    mapped.append(
+                        _target_change(
+                            change, "work", TrackTargetShape.SCALAR_STRING, title
+                        )
+                    )
+            continue
+        if change.field == "recording_date":
+            if not isinstance(change.after, PartialDate):
+                raise TrackMappingError("'recording_date' requires PartialDate")
+            mapped.append(
+                _target_change(
+                    change,
+                    "recording_date",
+                    TrackTargetShape.SCALAR_STRING,
+                    _partial_date_text(change.after),
+                )
+            )
+            continue
         if change.field == "synced_lyrics":
             blocked.append(
                 TrackMappingBlocker(
@@ -183,3 +238,17 @@ def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
         )
 
     return TrackTargetPlan(plan, tuple(mapped), tuple(blocked))
+
+
+def _target_change(
+    source: PlannedChange, target: str, shape: TrackTargetShape, value: MetadataValue
+) -> TrackTargetChange:
+    return TrackTargetChange(source.field, target, shape, value, source)
+
+
+def _partial_date_text(value: PartialDate) -> str:
+    if value.month is None:
+        return f"{value.year:04d}"
+    if value.day is None:
+        return f"{value.year:04d}-{value.month:02d}"
+    return f"{value.year:04d}-{value.month:02d}-{value.day:02d}"

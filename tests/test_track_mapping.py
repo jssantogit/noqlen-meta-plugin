@@ -5,7 +5,15 @@ from beets.autotag.hooks import TrackInfo
 from beets.library import Item
 
 from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
-from beetsplug.noqlenmeta.domain import MetadataCandidate
+from beetsplug.noqlenmeta.domain import ExternalIdentifier, MetadataCandidate
+from beetsplug.noqlenmeta.evidence import (
+    AcquisitionMethod,
+    AcquisitionProvenance,
+    MetadataEvidence,
+    SubjectRef,
+)
+from beetsplug.noqlenmeta.field_contracts import EntityKind
+from beetsplug.noqlenmeta.providers.specs import ProviderScope
 from beetsplug.noqlenmeta.resolver import FieldDecision, ResolutionAction
 from beetsplug.noqlenmeta.track_mapping import (
     TRACK_FIELD_TARGETS,
@@ -15,6 +23,7 @@ from beetsplug.noqlenmeta.track_mapping import (
     TrackTargetShape,
     map_change_plan_to_track_info,
 )
+from beetsplug.noqlenmeta.work_identity import WorkReference
 
 SYNCED_TARGET_REASON = (
     "no lossless normal beets TrackInfo target preserves synchronized lyrics semantics"
@@ -85,6 +94,41 @@ def test_v2_track_targets_are_lossless(
     assert mapped.target_field == target
     assert mapped.target_shape is shape
     assert mapped.target_value == value
+
+
+def test_single_work_maps_id_and_safe_title_without_flattening() -> None:
+    reference = WorkReference(
+        "12345678-1234-5678-9234-567812345678",
+        "Synthetic Work",
+        "performance",
+        None,
+    )
+    evidence = MetadataEvidence(
+        field="works",
+        value=(reference,),
+        subject=SubjectRef(
+            EntityKind.RECORDING,
+            (
+                ExternalIdentifier(
+                    "musicbrainz.recording",
+                    "22345678-1234-5678-9234-567812345678",
+                ),
+            ),
+        ),
+        provider="musicbrainz",
+        acquisition_scope=ProviderScope.TRACK,
+        source_id="22345678-1234-5678-9234-567812345678",
+        provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+    )
+    change = PlannedChange("works", None, (reference,), evidence, "resolved")
+
+    result = map_change_plan_to_track_info(ChangePlan(changes=(change,)))
+
+    assert {mapped.target_field: mapped.target_value for mapped in result.mapped_changes} == {
+        "mb_workids": (reference.mbid,),
+        "mb_workid": reference.mbid,
+        "work": "Synthetic Work",
+    }
 
 
 def test_actual_track_info_exposes_lossless_plain_lyrics_item_data_target() -> None:
@@ -189,6 +233,12 @@ def test_target_registry_and_mapping_results_are_immutable() -> None:
         ),
         "artist_languages": TrackFieldTarget(
             "artist_languages", "artist_languages", TrackTargetShape.STRING_LIST
+        ),
+        "isrcs": TrackFieldTarget("isrcs", "isrcs", TrackTargetShape.STRING_LIST),
+        "iswcs": TrackFieldTarget("iswcs", "iswcs", TrackTargetShape.STRING_LIST),
+        "works": TrackFieldTarget("works", "mb_workids", TrackTargetShape.STRING_LIST),
+        "recording_date": TrackFieldTarget(
+            "recording_date", "recording_date", TrackTargetShape.SCALAR_STRING
         ),
     }
     result = map_change_plan_to_track_info(

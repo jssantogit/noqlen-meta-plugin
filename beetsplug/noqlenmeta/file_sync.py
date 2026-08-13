@@ -17,6 +17,7 @@ from beets.library import Item, Library
 from mediafile import MediaFile
 
 from beetsplug.noqlenmeta.changeplan import PlannedChange
+from beetsplug.noqlenmeta.field_contracts import IdentifierCollection, PartialDate
 from beetsplug.noqlenmeta.media_snapshot import (
     MediaFileSnapshot,
     copy_regular_file_without_source_atime,
@@ -27,6 +28,8 @@ from beetsplug.noqlenmeta.media_snapshot import (
     snapshot_media_file,
     verify_candidate_metadata,
 )
+from beetsplug.noqlenmeta.release_catalog import ReleaseStatus, ReleaseType
+from beetsplug.noqlenmeta.work_identity import WorkReference
 
 
 class FileTagShape(Enum):
@@ -112,6 +115,9 @@ _TARGETS = (
 FILE_TAG_TARGETS: Mapping[str, FileTagTarget] = MappingProxyType(
     {target.canonical_field: target for target in _TARGETS}
 )
+_EXPANDED_FIELDS = frozenset(
+    {"date", "original_date", "isrcs", "works", "release_type", "release_status"}
+)
 _RELATED_MEDIA_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType(
     {"genres": frozenset({"genres", "genre"})}
 )
@@ -144,6 +150,22 @@ def plan_file_sync(item: Item, changes: Sequence[PlannedChange]) -> FileSyncPlan
         if change.field in seen:
             raise ValueError(f"duplicate canonical file field {change.field!r}")
         seen.add(change.field)
+        if change.field in _EXPANDED_FIELDS:
+            try:
+                projections = _expanded_targets(change)
+            except ValueError as error:
+                blocked.append(FileSyncBlocker(change.field, str(error), change))
+                continue
+            for target, value in projections:
+                before = snapshot_values[target.media_field]
+                after = freeze_media_value(value)
+                if before != after:
+                    mapped.append(
+                        FileTagChange(
+                            change.field, target.media_field, before, value, change
+                        )
+                    )
+            continue
         target = FILE_TAG_TARGETS.get(change.field)
         if target is None:
             blocked.append(
@@ -235,8 +257,7 @@ def apply_file_sync_plan(library: Library, plan: FileSyncPlan) -> FileSyncResult
 
         media = MediaFile(os.fsdecode(candidate))
         for change in plan.changes:
-            target = FILE_TAG_TARGETS[change.canonical_field]
-            setattr(media, change.media_field, _materialize(target, change.after))
+            setattr(media, change.media_field, _file_change_value(change))
         media.save()
         candidate_after = snapshot_media_file(candidate, fields=_all_media_fields())
         _verify_candidate_snapshot(plan, candidate_after)
@@ -367,17 +388,26 @@ def _validate_plan(plan: FileSyncPlan) -> None:
     for change in plan.changes:
         target = FILE_TAG_TARGETS.get(change.canonical_field)
         if (
-            target is None
-            or change.canonical_field != change.source.field
-            or change.media_field != target.media_field
-            or change.after != change.source.after
+            change.canonical_field != change.source.field
             or change.before != snapshot_values.get(change.media_field)
             or change.media_field in seen
         ):
             raise FileSyncApplicationError("file synchronization plan is not canonical")
         seen.add(change.media_field)
         try:
-            _materialize(target, change.after)
+            if target is not None:
+                if change.media_field != target.media_field or change.after != change.source.after:
+                    raise ValueError
+                _materialize(target, change.after)
+            elif change.canonical_field in _EXPANDED_FIELDS:
+                expected = {
+                    projected.media_field: value
+                    for projected, value in _expanded_targets(change.source)
+                }
+                if expected.get(change.media_field) != change.after:
+                    raise ValueError
+            else:
+                raise ValueError
         except ValueError as error:
             raise FileSyncApplicationError(
                 "file synchronization plan is not canonical"
@@ -428,13 +458,55 @@ def _materialize(target: FileTagTarget, value: object) -> Any:
     raise ValueError("unsupported file target shape")
 
 
+def _file_change_value(change: FileTagChange) -> Any:
+    target = FILE_TAG_TARGETS.get(change.canonical_field)
+    return _materialize(target, change.after) if target is not None else change.after
+
+
+def _expanded_targets(
+    change: PlannedChange,
+) -> tuple[tuple[FileTagTarget, object], ...]:
+    value = change.after
+    if change.field in {"date", "original_date"}:
+        if not isinstance(value, PartialDate):
+            raise ValueError("canonical date requires a partial date")
+        prefix = "original_" if change.field == "original_date" else ""
+        components = [(f"{prefix}year", value.year)]
+        if value.month is not None:
+            components.append((f"{prefix}month", value.month))
+        if value.day is not None:
+            components.append((f"{prefix}day", value.day))
+        return tuple(
+            (FileTagTarget(change.field, field, FileTagShape.SCALAR_INT), component)
+            for field, component in components
+        )
+    if change.field == "release_type" and isinstance(value, ReleaseType):
+        target = FileTagTarget(change.field, "albumtype", FileTagShape.SCALAR_STRING)
+        return ((target, value.value),)
+    if change.field == "release_status" and isinstance(value, ReleaseStatus):
+        target = FileTagTarget(change.field, "albumstatus", FileTagShape.SCALAR_STRING)
+        return ((target, value.value),)
+    if change.field == "isrcs" and isinstance(value, IdentifierCollection):
+        identifiers = tuple(identifier.value for identifier in value.values)
+        if len(identifiers) != 1:
+            raise ValueError("multiple ISRCs cannot be represented losslessly by MediaFile")
+        return ((FileTagTarget(change.field, "isrc", FileTagShape.SCALAR_STRING), identifiers[0]),)
+    if change.field == "works" and isinstance(value, tuple) and all(
+        isinstance(reference, WorkReference) for reference in value
+    ):
+        if len(value) != 1:
+            raise ValueError("multiple Works cannot be represented losslessly by MediaFile")
+        target = FileTagTarget(change.field, "mb_workid", FileTagShape.SCALAR_STRING)
+        return ((target, value[0].mbid),)
+    raise ValueError("canonical value cannot be represented losslessly by MediaFile")
+
+
 def _verify_candidate_snapshot(plan: FileSyncPlan, actual: MediaFileSnapshot) -> None:
     expected_before = dict(plan.snapshot.values)
     actual_values = dict(actual.values)
     allowed: set[str] = set()
     for change in plan.changes:
-        target = FILE_TAG_TARGETS[change.canonical_field]
-        expected = freeze_media_value(_materialize(target, change.after))
+        expected = freeze_media_value(_file_change_value(change))
         if actual_values.get(change.media_field) != expected:
             raise ValueError("ordinary metadata candidate value verification failed")
         allowed.update(_RELATED_MEDIA_FIELDS.get(change.media_field, {change.media_field}))

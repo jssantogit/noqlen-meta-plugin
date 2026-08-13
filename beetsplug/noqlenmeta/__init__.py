@@ -46,7 +46,12 @@ from beetsplug.noqlenmeta.beets_application import (
     parse_application_mode,
 )
 from beetsplug.noqlenmeta.beets_mapping import map_change_plan_to_beets
-from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange, build_change_plan
+from beetsplug.noqlenmeta.changeplan import (
+    ChangePlan,
+    PlannedChange,
+    build_change_plan,
+    compose_change_plans,
+)
 from beetsplug.noqlenmeta.configuration import (
     default_config,
     validate_artwork_config,
@@ -158,6 +163,7 @@ from beetsplug.noqlenmeta.orchestration import (
 )
 from beetsplug.noqlenmeta.provider_cache import CommandEntityCache
 from beetsplug.noqlenmeta.providers import ProviderError
+from beetsplug.noqlenmeta.providers.base import ReleaseProviderEnrichment
 from beetsplug.noqlenmeta.providers.coverartarchive import CoverArtArchiveClient
 from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_NAMES,
@@ -167,8 +173,10 @@ from beetsplug.noqlenmeta.providers.specs import (
     ITUNES_SPEC,
     LRCLIB_SPEC,
     MUSICBRAINZ_SPEC,
+    RELEASE_CATALOG_PROVIDER_CAPABILITIES,
     ProviderSpec,
 )
+from beetsplug.noqlenmeta.release_catalog_resolution import resolve_release_catalog
 from beetsplug.noqlenmeta.resolver import (
     FieldDecision,
     ResolutionAction,
@@ -972,6 +980,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 context,
                 current_values,
                 candidates=track_candidates,
+                evidence=track_enrichment.evidence,
                 policy=policy,
                 semantic_outcomes=track_enrichment.outcomes,
             )
@@ -1797,6 +1806,12 @@ class NoqlenMetaPlugin(BeetsPlugin):
     def _has_contributing_release_provider(policy: ResolutionPolicy) -> bool:
         return any(
             provider_can_contribute(policy, spec)
+            or any(
+                capability.provider == spec.name
+                and policy.is_provider_enabled(spec.name)
+                and policy.is_field_enabled(capability.field)
+                for capability in RELEASE_CATALOG_PROVIDER_CAPABILITIES
+            )
             for spec in BUILTIN_RELEASE_PROVIDER_SPECS.values()
         )
 
@@ -1833,6 +1848,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
             context,
             from_scratch=from_scratch,
             candidates=enrichment.candidates,
+            evidence=enrichment.evidence,
             policy=policy,
             semantic_outcomes=enrichment.outcomes,
         )
@@ -1913,7 +1929,13 @@ class NoqlenMetaPlugin(BeetsPlugin):
             )
             if policy.is_field_enabled(field)
         }
-        if semantic_fields:
+        wave_fields = {
+            field
+            for field in ("isrcs", "works", "iswcs", "recording_date")
+            if policy.is_field_enabled(field)
+        }
+        recording_evidence = ()
+        if semantic_fields or wave_fields:
             musicbrainz_release = None
             musicbrainz_tracks = ()
             musicbrainz_artists = ()
@@ -1923,10 +1945,13 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     MusicBrainzTrackProvider,
                 )
 
+                track_enrichment = MusicBrainzTrackProvider(
+                    self._musicbrainz_client(),
+                    enabled_fields=semantic_fields | wave_fields,
+                ).get_enrichment(context)
+                recording_evidence = track_enrichment.evidence
                 musicbrainz_tracks = (
-                    lambda: MusicBrainzTrackProvider(
-                        self._musicbrainz_client(), enabled_fields=semantic_fields
-                    ).get_semantic_evidence(context),
+                    (lambda: track_enrichment.semantic,) if semantic_fields else ()
                 )
                 release_context = context.release
                 if release_context is not None:
@@ -1995,21 +2020,24 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     )
 
                 lastfm_artist = collect_lastfm_artist
-            semantic = collect_semantic_enrichment(
-                semantic_fields,
-                policy=policy,
-                musicbrainz_release=musicbrainz_release,
-                musicbrainz_tracks=musicbrainz_tracks,
-                musicbrainz_artists=musicbrainz_artists,
-                lastfm_track=lastfm_track,
-                lastfm_release=lastfm_release,
-                lastfm_artist=lastfm_artist,
-                genre_settings=self._genre_settings(),
-                max_moods=self._mood_settings().max_moods,
-            )
-            candidates.extend(semantic.candidates)
-            semantic_outcomes = semantic.outcomes
-        return SemanticEnrichmentResult(tuple(candidates), semantic_outcomes)
+            if semantic_fields:
+                semantic = collect_semantic_enrichment(
+                    semantic_fields,
+                    policy=policy,
+                    musicbrainz_release=musicbrainz_release,
+                    musicbrainz_tracks=musicbrainz_tracks,
+                    musicbrainz_artists=musicbrainz_artists,
+                    lastfm_track=lastfm_track,
+                    lastfm_release=lastfm_release,
+                    lastfm_artist=lastfm_artist,
+                    genre_settings=self._genre_settings(),
+                    max_moods=self._mood_settings().max_moods,
+                )
+                candidates.extend(semantic.candidates)
+                semantic_outcomes = semantic.outcomes
+        return SemanticEnrichmentResult(
+            tuple(candidates), semantic_outcomes, tuple(recording_evidence)
+        )
 
     def _build_change_plan_for_release(
         self,
@@ -2020,32 +2048,63 @@ class NoqlenMetaPlugin(BeetsPlugin):
         track_contexts: Sequence[TrackEnrichmentContext] = (),
     ) -> ReleasePlanningResult:
         candidates: list[MetadataCandidate] = []
-        if provider_can_contribute(policy, DISCOGS_SPEC):
+        catalog_evidence = []
+        catalog_fields = {
+            field
+            for field in (
+                "date",
+                "original_date",
+                "release_type",
+                "release_secondary_types",
+                "release_status",
+                "edition",
+            )
+            if policy.is_field_enabled(field)
+        }
+
+        def collect_release(
+            spec: ProviderSpec, fetch: Callable[[], object]
+        ) -> None:
+            self._pending_release_enrichment = None
+            try:
+                result = fetch()
+            except ProviderError:
+                self._log.warning(
+                    "Noqlen Meta: {} enrichment unavailable; processing will continue",
+                    spec.display_name,
+                )
+                return
+            enrichment = self._pending_release_enrichment
+            self._pending_release_enrichment = None
+            if isinstance(enrichment, ReleaseProviderEnrichment):
+                candidates.extend(validate_provider_candidates(spec, enrichment.candidates))
+                catalog_evidence.extend(enrichment.evidence)
+            elif isinstance(result, ReleaseProviderEnrichment):
+                candidates.extend(validate_provider_candidates(spec, result.candidates))
+                catalog_evidence.extend(result.evidence)
+            else:
+                candidates.extend(validate_provider_candidates(spec, result))  # type: ignore[arg-type]
+
+        if self._release_provider_contributes(policy, DISCOGS_SPEC):
             token = resolve_discogs_token(
                 self.config["providers"]["discogs"]["user_token"].as_str()
             )
-            candidates.extend(
-                self._collect_provider_candidates(
-                    DISCOGS_SPEC,
-                    lambda: self._discogs_candidates(context, token),
-                )
+            collect_release(
+                DISCOGS_SPEC,
+                lambda: self._discogs_candidates(context, token),
             )
 
-        if provider_can_contribute(policy, MUSICBRAINZ_SPEC):
-            candidates.extend(
-                self._collect_provider_candidates(
-                    MUSICBRAINZ_SPEC,
-                    lambda: self._musicbrainz_candidates(context),
-                )
+        if self._release_provider_contributes(policy, MUSICBRAINZ_SPEC):
+            collect_release(
+                MUSICBRAINZ_SPEC,
+                lambda: self._musicbrainz_candidates(context),
             )
 
-        if provider_can_contribute(policy, ITUNES_SPEC):
+        if self._release_provider_contributes(policy, ITUNES_SPEC):
             storefront = self.config["providers"]["itunes"]["storefront"].as_str()
-            candidates.extend(
-                self._collect_provider_candidates(
-                    ITUNES_SPEC,
-                    lambda: self._itunes_candidates(context, storefront),
-                )
+            collect_release(
+                ITUNES_SPEC,
+                lambda: self._itunes_candidates(context, storefront),
             )
 
         release_semantic_fields = {
@@ -2145,8 +2204,19 @@ class NoqlenMetaPlugin(BeetsPlugin):
         decisions = ordinary_decisions + (
             (genre_decision,) if genre_decision is not None else ()
         )
+        ordinary_plan = build_change_plan(
+            tuple(sorted(decisions, key=lambda decision: decision.field))
+        )
+        catalog_decisions = resolve_release_catalog(current_values, catalog_evidence)
+        catalog_plan = (
+            build_change_plan(catalog_decisions) if catalog_decisions else ChangePlan()
+        )
         return ReleasePlanningResult(
-            build_change_plan(tuple(sorted(decisions, key=lambda decision: decision.field))),
+            compose_change_plans(
+                ordinary_plan,
+                catalog_plan,
+                suppress_fields=("year",) if "date" in catalog_fields else (),
+            ),
             semantic_outcomes,
         )
 
@@ -2172,9 +2242,29 @@ class NoqlenMetaPlugin(BeetsPlugin):
         )
         return validated
 
+    @staticmethod
+    def _release_provider_contributes(
+        policy: ResolutionPolicy, spec: ProviderSpec
+    ) -> bool:
+        return provider_can_contribute(policy, spec) or any(
+            capability.provider == spec.name
+            and policy.is_provider_enabled(spec.name)
+            and policy.is_field_enabled(capability.field)
+            for capability in RELEASE_CATALOG_PROVIDER_CAPABILITIES
+        )
+
     def _discogs_candidates(
         self, context: ReleaseEnrichmentContext, token: str | None
     ) -> tuple[MetadataCandidate, ...]:
+        enrichment = self._discogs_enrichment(
+            context, token, self._enabled_catalog_fields()
+        )
+        self._pending_release_enrichment = enrichment
+        return enrichment.candidates
+
+    def _discogs_enrichment(
+        self, context: ReleaseEnrichmentContext, token: str | None, enabled_fields: Sequence[str]
+    ) -> ReleaseProviderEnrichment:
         try:
             from beetsplug.noqlenmeta.providers.discogs import DiscogsProvider
         except ModuleNotFoundError as error:
@@ -2184,16 +2274,25 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 raise ProviderError("Discogs client dependency is unavailable") from None
             raise
 
-        return tuple(DiscogsProvider(token=token).get_candidates(context))
+        return DiscogsProvider(token=token).get_enrichment(context, enabled_fields)
 
     def _musicbrainz_candidates(
         self, context: ReleaseEnrichmentContext
     ) -> tuple[MetadataCandidate, ...]:
+        enrichment = self._musicbrainz_enrichment(
+            context, self._enabled_catalog_fields()
+        )
+        self._pending_release_enrichment = enrichment
+        return enrichment.candidates
+
+    def _musicbrainz_enrichment(
+        self, context: ReleaseEnrichmentContext, enabled_fields: Sequence[str]
+    ) -> ReleaseProviderEnrichment:
         from beetsplug.noqlenmeta.providers.musicbrainz import MusicBrainzProvider
 
         if self._musicbrainz_provider is None:
             self._musicbrainz_provider = MusicBrainzProvider(cache=self._semantic_cache)
-        return tuple(self._musicbrainz_provider.get_candidates(context))
+        return self._musicbrainz_provider.get_enrichment(context, enabled_fields)
 
     def _musicbrainz_client(self):
         from beetsplug.noqlenmeta.providers.musicbrainz_semantic import (
@@ -2216,9 +2315,35 @@ class NoqlenMetaPlugin(BeetsPlugin):
     def _itunes_candidates(
         self, context: ReleaseEnrichmentContext, storefront: str
     ) -> tuple[MetadataCandidate, ...]:
+        enrichment = self._itunes_enrichment(
+            context, storefront, self._enabled_catalog_fields()
+        )
+        self._pending_release_enrichment = enrichment
+        return enrichment.candidates
+
+    def _enabled_catalog_fields(self) -> tuple[str, ...]:
+        return tuple(
+            field
+            for field in (
+                "date",
+                "original_date",
+                "release_type",
+                "release_secondary_types",
+                "release_status",
+                "edition",
+            )
+            if self.config["fields"][field].get(bool)
+        )
+
+    def _itunes_enrichment(
+        self,
+        context: ReleaseEnrichmentContext,
+        storefront: str,
+        enabled_fields: Sequence[str],
+    ) -> ReleaseProviderEnrichment:
         from beetsplug.noqlenmeta.providers.itunes import ITunesProvider
 
-        return tuple(ITunesProvider(storefront=storefront).get_candidates(context))
+        return ITunesProvider(storefront=storefront).get_enrichment(context, enabled_fields)
 
     def _lastfm_candidates(
         self, context: ReleaseEnrichmentContext

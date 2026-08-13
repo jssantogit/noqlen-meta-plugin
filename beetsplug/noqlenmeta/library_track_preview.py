@@ -45,5 +45,20 @@ def render_library_track_plan(
         f"  target: Item.{_safe_preview_text(change.target_field)}"
         for change in plan.mapped_changes
     )
+    for change in plan.mapped_changes:
+        if not change.source.evidence:
+            continue
+        selected = change.source.evidence[0]
+        detail = (
+            f"  evidence: {_safe_preview_text(selected.provider)}; "
+            f"entity={_safe_preview_text(selected.subject.entity.value)}; "
+            f"scope={_safe_preview_text(selected.acquisition_scope.value)}; "
+            f"method={_safe_preview_text(selected.provenance.method.value)}"
+        )
+        if selected.confidence is not None:
+            detail += f"; confidence={selected.confidence:.2f}"
+        if len(change.source.evidence) > 1:
+            detail += f"; corroboration={len(change.source.evidence) - 1}"
+        lines.append(detail)
     lines.extend(_render_semantic_outcomes(semantic_outcomes or {}))
     ui.print_("\n".join(lines))

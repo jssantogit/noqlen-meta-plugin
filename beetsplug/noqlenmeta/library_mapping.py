@@ -9,6 +9,7 @@ from types import MappingProxyType
 from beetsplug.noqlenmeta.beets_mapping import BeetsTargetShape
 from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
 from beetsplug.noqlenmeta.domain import MetadataValue
+from beetsplug.noqlenmeta.release_catalog_mapping import map_release_catalog_plan
 
 
 class LibraryMappingError(RuntimeError):
@@ -103,7 +104,35 @@ def map_change_plan_to_library_album(plan: ChangePlan) -> LibraryTargetPlan:
 
     mapped: list[LibraryTargetChange] = []
     blocked: list[LibraryMappingBlocker] = []
+    catalog_fields = {
+        "date", "original_date", "release_type", "release_secondary_types",
+        "release_status", "edition",
+    }
+    catalog_changes = tuple(change for change in plan.changes if change.field in catalog_fields)
+    if catalog_changes:
+        catalog_plan = map_release_catalog_plan(
+            ChangePlan(catalog_changes, plan.reviews, plan.kept, plan.skipped)
+        )
+        for target in catalog_plan.changes:
+            shape = (
+                BeetsTargetShape.STRING_LIST
+                if isinstance(target.value, tuple)
+                else BeetsTargetShape.SCALAR_INT
+                if isinstance(target.value, int)
+                else BeetsTargetShape.SCALAR_STRING
+            )
+            mapped.append(
+                LibraryTargetChange(
+                    target.canonical_field,
+                    target.target_field,
+                    shape,
+                    target.value,  # type: ignore[arg-type]
+                    target.source,
+                )
+            )
     for change in sorted(plan.changes, key=lambda item: item.field):
+        if change.field in catalog_fields:
+            continue
         if change.field == "media":
             _require_text_tuple(change)
             blocked.append(
