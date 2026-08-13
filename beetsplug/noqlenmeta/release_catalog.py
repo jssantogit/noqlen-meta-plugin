@@ -34,10 +34,13 @@ class ReleaseSecondaryType(Enum):
 
 
 class ReleaseStatus(Enum):
+    BOOTLEG = "Bootleg"
+    CANCELLED = "Cancelled"
+    EXPUNGED = "Expunged"
     OFFICIAL = "Official"
     PROMOTION = "Promotion"
-    BOOTLEG = "Bootleg"
     PSEUDO_RELEASE = "Pseudo-Release"
+    WITHDRAWN = "Withdrawn"
 
 
 _PRIMARY_TYPES = {value.value.casefold(): value for value in ReleaseType}

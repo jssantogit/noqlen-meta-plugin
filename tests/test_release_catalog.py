@@ -117,10 +117,35 @@ def test_secondary_release_types_are_ordered_and_deduplicated() -> None:
         ("Promotion", ReleaseStatus.PROMOTION),
         ("Bootleg", ReleaseStatus.BOOTLEG),
         ("Pseudo-Release", ReleaseStatus.PSEUDO_RELEASE),
+        ("Cancelled", ReleaseStatus.CANCELLED),
+        ("Expunged", ReleaseStatus.EXPUNGED),
+        ("Withdrawn", ReleaseStatus.WITHDRAWN),
+        ("official", ReleaseStatus.OFFICIAL),
+        ("PSEUDO-RELEASE", ReleaseStatus.PSEUDO_RELEASE),
     ],
 )
 def test_musicbrainz_release_status_is_controlled(value: str, expected: ReleaseStatus) -> None:
     assert normalize_release_status(value) is expected
+
+
+def test_musicbrainz_release_status_contract_is_exact() -> None:
+    assert {status.value for status in ReleaseStatus} == {
+        "Bootleg",
+        "Cancelled",
+        "Expunged",
+        "Official",
+        "Promotion",
+        "Pseudo-Release",
+        "Withdrawn",
+    }
+
+
+@pytest.mark.parametrize(
+    "value",
+    [None, 1, "", "Unknown", "Pseudo Release", "Pseudo--Release"],
+)
+def test_unknown_or_malformed_release_status_is_rejected(value: object) -> None:
+    assert normalize_release_status(value) is None
 
 
 @pytest.mark.parametrize(

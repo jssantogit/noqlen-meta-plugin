@@ -84,6 +84,30 @@ def test_release_fields_use_exact_release_payload() -> None:
     assert release_group.calls == []
 
 
+@pytest.mark.parametrize(
+    ("raw_status", "expected"),
+    [
+        ("Bootleg", ReleaseStatus.BOOTLEG),
+        ("Cancelled", ReleaseStatus.CANCELLED),
+        ("Expunged", ReleaseStatus.EXPUNGED),
+        ("Official", ReleaseStatus.OFFICIAL),
+        ("Promotion", ReleaseStatus.PROMOTION),
+        ("Pseudo-Release", ReleaseStatus.PSEUDO_RELEASE),
+        ("Withdrawn", ReleaseStatus.WITHDRAWN),
+    ],
+)
+def test_release_status_evidence_covers_musicbrainz_contract(
+    raw_status: str, expected: ReleaseStatus
+) -> None:
+    payload = release_payload()
+    payload["status"] = raw_status
+    provider = MusicBrainzProvider(fetch_release=Fetcher(payload))
+
+    evidence = provider.get_release_catalog_evidence(context(), {"release_status"})
+
+    assert values(evidence) == {"release_status": expected}
+
+
 def test_nested_release_group_is_reused_for_all_requested_fields() -> None:
     release = Fetcher(release_payload())
     release_group = Fetcher(release_group_payload())

@@ -29,7 +29,10 @@ call, configuration lookup, mutation or file operation.
 - `release_type`: one controlled MusicBrainz primary Release Group type.
 - `release_secondary_types`: ordered, deduplicated controlled Release Group
   secondary types, kept separate from the primary type.
-- `release_status`: one controlled MusicBrainz Release status.
+- `release_status`: one controlled MusicBrainz Release status: `Bootleg`,
+  `Cancelled`, `Expunged`, `Official`, `Promotion`, `Pseudo-Release`, or
+  `Withdrawn`. Matching is case-insensitive; unknown or malformed values emit
+  no evidence.
 - `edition`: one controlled explicit Release designation.
 
 ## Date precision
