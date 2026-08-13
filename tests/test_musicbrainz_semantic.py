@@ -10,6 +10,7 @@ from beetsplug.noqlenmeta.domain import (
     SemanticCategory,
     TrackEnrichmentContext,
 )
+from beetsplug.noqlenmeta.field_contracts import PartialDate
 from beetsplug.noqlenmeta.genre_evidence import GenreEvidenceKind
 from beetsplug.noqlenmeta.provider_cache import CommandEntityCache
 from beetsplug.noqlenmeta.providers import ProviderError
@@ -20,6 +21,7 @@ from beetsplug.noqlenmeta.providers.musicbrainz_semantic import (
     MusicBrainzTrackProvider,
 )
 from beetsplug.noqlenmeta.providers.specs import ProviderScope
+from beetsplug.noqlenmeta.work_identity import WorkReference
 
 RELEASE_MBID = "6ea45c08-3cfa-461a-aa4d-4cc404fcfa86"
 RECORDING_MBID = "11111111-1111-4111-8111-111111111111"
@@ -204,6 +206,161 @@ def test_genre_only_collection_does_not_fetch_works() -> None:
     ).get_semantic_evidence(track_context())
     assert bundle.genres
     assert calls["work"] == []
+
+
+def test_wave_one_enrichment_reuses_recording_and_work_payloads() -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "genres": [{"name": "k-pop", "count": 9}],
+            "isrcs": ["US-AAA-01-00001", "USAAA0100001", "GBBBB0200002"],
+            "relations": [
+                {
+                    "target-type": "work",
+                    "type": "performance",
+                    "type-id": "a3005666-a872-32c3-ad06-98af558e99b0",
+                    "attributes": ["live"],
+                    "ordering-key": 1,
+                    "work": {"id": WORK_ONE, "title": "Synthetic Work"},
+                }
+            ],
+        },
+        works={
+            WORK_ONE: {
+                "id": WORK_ONE,
+                "iswcs": ["T-123.456.789-0", "T-123.456.789-0"],
+                "languages": ["eng"],
+            }
+        },
+    )
+    provider = MusicBrainzTrackProvider(
+        semantic_client,
+        enabled_fields={"genres", "lyrics_languages", "isrcs", "works", "iswcs"},
+    )
+
+    enrichment = provider.get_enrichment(track_context())
+
+    assert enrichment.semantic.genres
+    assert {item.field for item in enrichment.evidence} == {"isrcs", "works", "iswcs"}
+    isrcs = next(item.value for item in enrichment.evidence if item.field == "isrcs")
+    assert [identifier.value for identifier in isrcs.values] == [
+        "GBBBB0200002",
+        "USAAA0100001",
+    ]
+    works = next(item.value for item in enrichment.evidence if item.field == "works")
+    assert works == (
+        WorkReference(
+            WORK_ONE,
+            "Synthetic Work",
+            "performance",
+            "a3005666-a872-32c3-ad06-98af558e99b0",
+            ("live",),
+            1,
+        ),
+    )
+    iswc = next(item for item in enrichment.evidence if item.field == "iswcs")
+    assert iswc.subject.entity.value == "work"
+    assert calls["recording"] == [RECORDING_MBID]
+    assert calls["work"] == [WORK_ONE]
+
+
+def test_isrc_only_enrichment_never_fetches_work() -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "isrcs": ["USAAA0100001"],
+            "relations": [{"target-type": "work", "work": {"id": WORK_ONE}}],
+        },
+        works={WORK_ONE: {"id": WORK_ONE, "iswcs": ["T-123.456.789-0"]}},
+    )
+
+    enrichment = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"isrcs"}
+    ).get_enrichment(track_context())
+
+    assert [item.field for item in enrichment.evidence] == ["isrcs"]
+    assert calls["work"] == []
+
+
+def test_work_failure_preserves_isrc_and_work_reference() -> None:
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "isrcs": ["USAAA0100001"],
+            "relations": [
+                {
+                    "target-type": "work",
+                    "type": "performance",
+                    "work": {"id": WORK_ONE, "title": "Synthetic Work"},
+                }
+            ],
+        },
+        works={WORK_ONE: RequestException("temporary")},
+    )
+
+    enrichment = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"isrcs", "works", "iswcs"}
+    ).get_enrichment(track_context())
+
+    assert {item.field for item in enrichment.evidence} == {"isrcs", "works"}
+    assert "iswcs" in enrichment.unavailable_fields
+
+
+@pytest.mark.parametrize(
+    "recording",
+    [
+        {"id": RECORDING_MBID, "first-release-date": "1999-01-02"},
+        {
+            "id": RECORDING_MBID,
+            "relations": [
+                {"target-type": "place", "type": "recorded at", "begin": "2020-01-02"}
+            ],
+        },
+        {
+            "id": RECORDING_MBID,
+            "relations": [
+                {
+                    "target-type": "place",
+                    "type": "recorded at",
+                    "begin": "2020-01-02",
+                    "end": "2020-01-03",
+                }
+            ],
+        },
+    ],
+)
+def test_unsafe_recording_dates_emit_no_evidence(recording: Mapping[str, object]) -> None:
+    semantic_client, _ = client(recording=recording)
+
+    enrichment = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"recording_date"}
+    ).get_enrichment(track_context())
+
+    assert enrichment.evidence == ()
+
+
+def test_same_explicit_recorded_at_begin_end_emits_recording_date() -> None:
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "relations": [
+                {
+                    "target-type": "place",
+                    "type": "recorded at",
+                    "begin": "2020-01-02",
+                    "end": "2020-01-02",
+                }
+            ],
+        }
+    )
+
+    enrichment = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"recording_date"}
+    ).get_enrichment(track_context())
+
+    assert [(item.field, item.value) for item in enrichment.evidence] == [
+        ("recording_date", PartialDate(2020, 1, 2))
+    ]
 
 
 def test_release_semantics_reuse_the_existing_exact_release_payload() -> None:

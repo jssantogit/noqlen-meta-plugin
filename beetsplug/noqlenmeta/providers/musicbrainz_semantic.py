@@ -4,18 +4,28 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Collection, Mapping, Sequence
+from dataclasses import dataclass
 
 from requests import RequestException
 
 from beetsplug.noqlenmeta.domain import (
     ArtistEnrichmentContext,
+    ExternalIdentifier,
     MetadataCandidate,
     SemanticCategory,
     SemanticEvidenceBundle,
     SemanticTagEvidence,
     TrackEnrichmentContext,
+    canonical_isrc,
     canonical_uuid,
 )
+from beetsplug.noqlenmeta.evidence import (
+    AcquisitionMethod,
+    AcquisitionProvenance,
+    MetadataEvidence,
+    SubjectRef,
+)
+from beetsplug.noqlenmeta.field_contracts import EntityKind, IdentifierCollection
 from beetsplug.noqlenmeta.genre_evidence import GenreEvidence, GenreEvidenceKind
 from beetsplug.noqlenmeta.genre_taxonomy import (
     DEFAULT_GENRE_TAXONOMY,
@@ -28,7 +38,9 @@ from beetsplug.noqlenmeta.providers.specs import (
     MUSICBRAINZ_TRACK_SPEC,
     ProviderScope,
 )
+from beetsplug.noqlenmeta.release_catalog import parse_partial_date
 from beetsplug.noqlenmeta.semantic_tags import classify_semantic_tag
+from beetsplug.noqlenmeta.work_identity import WorkReference, canonical_work_references
 
 EntityFetcher = Callable[[str], Mapping[str, object] | None]
 
@@ -36,7 +48,15 @@ _PUBLIC_URL = "https://musicbrainz.org/{}/{}"
 _DIRECT_CONFIDENCE = 0.99
 _COMMUNITY_CONFIDENCE = 0.85
 _LANGUAGE = re.compile(r"[a-z]{3}")
+_ISWC = re.compile(r"T-\d{3}\.\d{3}\.\d{3}-\d")
 _NON_SPECIFIC_LANGUAGES = frozenset({"mul", "und", "zxx"})
+
+
+@dataclass(frozen=True, slots=True)
+class MusicBrainzTrackEnrichment:
+    semantic: SemanticEvidenceBundle = SemanticEvidenceBundle()
+    evidence: tuple[MetadataEvidence, ...] = ()
+    unavailable_fields: frozenset[str] = frozenset()
 
 
 class MusicBrainzSemanticClient:
@@ -118,12 +138,15 @@ class MusicBrainzTrackProvider:
         self.enabled_fields = set(enabled_fields or self.supported_fields | {"artist_languages"})
 
     def get_semantic_evidence(self, context: TrackEnrichmentContext) -> SemanticEvidenceBundle:
+        return self.get_enrichment(context).semantic
+
+    def get_enrichment(self, context: TrackEnrichmentContext) -> MusicBrainzTrackEnrichment:
         recording_id = _context_mbid(context.external_ids, "musicbrainz.recording")
         if recording_id is None:
-            return SemanticEvidenceBundle()
+            return MusicBrainzTrackEnrichment()
         payload = self.client.lookup_recording(recording_id)
         if payload is None:
-            return SemanticEvidenceBundle()
+            return MusicBrainzTrackEnrichment()
         genres, tags = ((), ())
         if self.enabled_fields & {"genres", "moods"}:
             genres, tags = semantic_tags_from_payload(
@@ -134,19 +157,38 @@ class MusicBrainzTrackProvider:
             )
         languages: list[str] = []
         unavailable_fields: set[str] = set()
-        if self.enabled_fields & {"lyrics_languages", "artist_languages"}:
-            for work_id in _related_ids(payload, "work"):
+        wave_unavailable: set[str] = set()
+        evidence: list[MetadataEvidence] = []
+        work_references = _work_references(payload)
+        if "isrcs" in self.enabled_fields and (isrcs := _recording_isrcs(payload)):
+            evidence.append(_recording_evidence("isrcs", isrcs, recording_id))
+        if "works" in self.enabled_fields and work_references:
+            evidence.append(_recording_evidence("works", work_references, recording_id))
+        if "recording_date" in self.enabled_fields:
+            for recording_date in _recording_dates(payload):
+                evidence.append(_recording_evidence("recording_date", recording_date, recording_id))
+        work_fields = {"lyrics_languages", "artist_languages", "iswcs"}
+        if self.enabled_fields & work_fields:
+            work_ids = (
+                tuple(reference.mbid for reference in work_references)
+                if self.enabled_fields & {"works", "iswcs"}
+                else _related_ids(payload, "work")
+            )
+            for work_id in work_ids:
                 try:
                     work = self.client.lookup_work(work_id)
                 except ProviderError:
                     unavailable_fields.update(
                         self.enabled_fields & {"lyrics_languages", "artist_languages"}
                     )
+                    wave_unavailable.update(self.enabled_fields & {"iswcs"})
                     continue
                 if work is None:
                     continue
                 for language in _work_languages(work):
                     _append_unique(languages, language)
+                if "iswcs" in self.enabled_fields and (iswcs := _work_iswcs(work)):
+                    evidence.append(_work_evidence("iswcs", iswcs, work_id, recording_id))
         metadata = ()
         if languages:
             metadata = (
@@ -159,7 +201,8 @@ class MusicBrainzTrackProvider:
                     _PUBLIC_URL.format("recording", recording_id),
                 ),
             )
-        return SemanticEvidenceBundle(metadata, genres, tags, frozenset(unavailable_fields))
+        semantic = SemanticEvidenceBundle(metadata, genres, tags, frozenset(unavailable_fields))
+        return MusicBrainzTrackEnrichment(semantic, tuple(evidence), frozenset(wave_unavailable))
 
 
 class MusicBrainzArtistProvider:
@@ -253,6 +296,135 @@ class MusicBrainzArtistProvider:
             )
         return None, unavailable
 
+
+def _recording_evidence(field: str, value: object, recording_id: str) -> MetadataEvidence:
+    return MetadataEvidence(
+        field=field,
+        value=value,  # type: ignore[arg-type]
+        subject=SubjectRef(
+            EntityKind.RECORDING,
+            (ExternalIdentifier("musicbrainz.recording", recording_id),),
+        ),
+        provider="musicbrainz",
+        acquisition_scope=ProviderScope.TRACK,
+        source_id=recording_id,
+        source_url=_PUBLIC_URL.format("recording", recording_id),
+        provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+        confidence=_DIRECT_CONFIDENCE,
+    )
+
+
+def _work_evidence(
+    field: str,
+    value: object,
+    work_id: str,
+    recording_id: str,
+) -> MetadataEvidence:
+    return MetadataEvidence(
+        field=field,
+        value=value,  # type: ignore[arg-type]
+        subject=SubjectRef(
+            EntityKind.WORK,
+            (ExternalIdentifier("musicbrainz.work", work_id),),
+        ),
+        provider="musicbrainz",
+        acquisition_scope=ProviderScope.TRACK,
+        source_id=work_id,
+        source_url=_PUBLIC_URL.format("work", work_id),
+        provenance=AcquisitionProvenance(
+            AcquisitionMethod.SUPPORTING_TRAVERSAL,
+            supporting_entity=EntityKind.RECORDING,
+        ),
+        confidence=_DIRECT_CONFIDENCE,
+    )
+
+
+def _recording_isrcs(payload: Mapping[str, object]) -> IdentifierCollection | None:
+    raw_values = payload.get("isrcs")
+    if not isinstance(raw_values, Sequence) or isinstance(raw_values, (str, bytes)):
+        return None
+    values = {
+        ExternalIdentifier("isrc", normalized)
+        for value in raw_values
+        if (normalized := canonical_isrc(value)) is not None
+    }
+    if not values:
+        return None
+    return IdentifierCollection(tuple(sorted(values, key=lambda value: value.value)))
+
+
+def _work_iswcs(payload: Mapping[str, object]) -> IdentifierCollection | None:
+    raw_values = payload.get("iswcs")
+    if not isinstance(raw_values, Sequence) or isinstance(raw_values, (str, bytes)):
+        return None
+    values = {
+        ExternalIdentifier("iswc", value.strip().upper())
+        for value in raw_values
+        if isinstance(value, str) and _ISWC.fullmatch(value.strip())
+    }
+    if not values:
+        return None
+    return IdentifierCollection(tuple(sorted(values, key=lambda value: value.value)))
+
+
+def _work_references(payload: Mapping[str, object]) -> tuple[WorkReference, ...]:
+    relations = payload.get("relations")
+    if not isinstance(relations, Sequence) or isinstance(relations, (str, bytes)):
+        return ()
+    values: list[WorkReference] = []
+    for relation in relations:
+        if not isinstance(relation, Mapping) or relation.get("target-type") != "work":
+            continue
+        work = relation.get("work")
+        if not isinstance(work, Mapping):
+            continue
+        work_id = canonical_uuid(work.get("id"))
+        relation_type = _text(relation.get("type"))
+        if work_id is None or not relation_type:
+            continue
+        type_id = canonical_uuid(relation.get("type-id"))
+        title = _text(work.get("title")) or None
+        raw_attributes = relation.get("attributes")
+        attributes = (
+            tuple(
+                attribute.strip()
+                for attribute in raw_attributes
+                if isinstance(attribute, str) and attribute.strip()
+            )
+            if isinstance(raw_attributes, Sequence)
+            and not isinstance(raw_attributes, (str, bytes))
+            else ()
+        )
+        ordering = relation.get("ordering-key")
+        ordering_key = (
+            ordering if isinstance(ordering, int) and not isinstance(ordering, bool) else None
+        )
+        values.append(
+            WorkReference(
+                work_id,
+                title,
+                relation_type,
+                type_id,
+                attributes,
+                ordering_key,
+            )
+        )
+    return canonical_work_references(values)
+
+
+def _recording_dates(payload: Mapping[str, object]) -> tuple[object, ...]:
+    relations = payload.get("relations")
+    if not isinstance(relations, Sequence) or isinstance(relations, (str, bytes)):
+        return ()
+    values = []
+    for relation in relations:
+        if not isinstance(relation, Mapping) or relation.get("type") != "recorded at":
+            continue
+        begin = parse_partial_date(relation.get("begin"))
+        end = parse_partial_date(relation.get("end"))
+        if begin is not None and begin == end:
+            values.append(begin)
+    return tuple(sorted(set(values), key=str))
 
 def semantic_tags_from_payload(
     payload: Mapping[str, object],
