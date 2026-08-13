@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from beetsplug.noqlenmeta.domain import MetadataCandidate, MetadataValue
+from beetsplug.noqlenmeta.domain import MetadataCandidate
+from beetsplug.noqlenmeta.evidence import CanonicalValue, MetadataEvidence
+from beetsplug.noqlenmeta.release_catalog_resolution import CatalogFieldDecision
 from beetsplug.noqlenmeta.resolver import FieldDecision, ResolutionAction
 
 
@@ -18,18 +20,29 @@ class PlannedChange:
     """One explicit consequence of a resolved PROPOSE decision."""
 
     field: str
-    before: MetadataValue | None
-    after: MetadataValue
-    source: MetadataCandidate
+    before: CanonicalValue | None
+    after: CanonicalValue
+    source: MetadataCandidate | MetadataEvidence
     reason: str
+    evidence: tuple[MetadataEvidence, ...] = ()
 
     def __post_init__(self) -> None:
         if self.source.field != self.field:
             raise ChangePlanError(
                 f"selected candidate field {self.source.field!r} does not match {self.field!r}"
             )
-        if type(self.source.value) is not type(self.after) or self.source.value != self.after:
+        if isinstance(self.source, MetadataCandidate) and (
+            type(self.source.value) is not type(self.after) or self.source.value != self.after
+        ):
             raise ChangePlanError("planned value does not match the selected candidate value")
+        evidence = tuple(self.evidence)
+        if not all(isinstance(item, MetadataEvidence) for item in evidence):
+            raise TypeError("evidence must contain MetadataEvidence values")
+        if isinstance(self.source, MetadataEvidence) and not evidence:
+            evidence = (self.source,)
+        if isinstance(self.source, MetadataEvidence) and self.source not in evidence:
+            raise ChangePlanError("selected evidence must be retained by the planned change")
+        object.__setattr__(self, "evidence", evidence)
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +113,50 @@ def build_change_plan(decisions: Sequence[FieldDecision]) -> ChangePlan:
         reviews=tuple(sorted(reviews, key=lambda decision: decision.field)),
         kept=tuple(sorted(kept, key=lambda decision: decision.field)),
         skipped=tuple(sorted(skipped, key=lambda decision: decision.field)),
+    )
+
+
+def build_catalog_change_plan(
+    decisions: Sequence[CatalogFieldDecision],
+) -> ChangePlan:
+    """Translate V3 catalog decisions into the shared immutable ChangePlan."""
+    changes: list[PlannedChange] = []
+    reviews: list[CatalogFieldDecision] = []
+    kept: list[CatalogFieldDecision] = []
+    skipped: list[CatalogFieldDecision] = []
+    seen_fields: set[str] = set()
+    for decision in decisions:
+        field = _canonical_field(decision.field)
+        if field in seen_fields:
+            raise ChangePlanError(f"duplicate decision for canonical field {field!r}")
+        seen_fields.add(field)
+        if decision.action is ResolutionAction.PROPOSE:
+            if decision.selected is None or decision.value is None:
+                raise ChangePlanError(f"PROPOSE decision for {field!r} is incomplete")
+            contributors = (decision.selected, *decision.alternatives)
+            changes.append(
+                PlannedChange(
+                    field,
+                    decision.current_value,
+                    decision.value,
+                    decision.selected,
+                    decision.reason,
+                    contributors,
+                )
+            )
+        elif decision.action is ResolutionAction.REVIEW:
+            reviews.append(decision)
+        elif decision.action is ResolutionAction.KEEP:
+            kept.append(decision)
+        elif decision.action is ResolutionAction.SKIP:
+            skipped.append(decision)
+        else:
+            raise ChangePlanError(f"unsupported resolution action for {field!r}")
+    return ChangePlan(
+        changes=tuple(sorted(changes, key=lambda change: change.field)),
+        reviews=tuple(sorted(reviews, key=lambda decision: decision.field)),  # type: ignore[arg-type]
+        kept=tuple(sorted(kept, key=lambda decision: decision.field)),  # type: ignore[arg-type]
+        skipped=tuple(sorted(skipped, key=lambda decision: decision.field)),  # type: ignore[arg-type]
     )
 
 

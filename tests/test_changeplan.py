@@ -6,9 +6,19 @@ from beetsplug.noqlenmeta.changeplan import (
     ChangePlan,
     ChangePlanError,
     PlannedChange,
+    build_catalog_change_plan,
     build_change_plan,
 )
-from beetsplug.noqlenmeta.domain import MetadataCandidate
+from beetsplug.noqlenmeta.domain import ExternalIdentifier, MetadataCandidate
+from beetsplug.noqlenmeta.evidence import (
+    AcquisitionMethod,
+    AcquisitionProvenance,
+    MetadataEvidence,
+    SubjectRef,
+)
+from beetsplug.noqlenmeta.field_contracts import EntityKind, PartialDate
+from beetsplug.noqlenmeta.providers.specs import ProviderScope
+from beetsplug.noqlenmeta.release_catalog_resolution import CatalogFieldDecision
 from beetsplug.noqlenmeta.resolver import FieldDecision, ResolutionAction
 
 
@@ -76,9 +86,7 @@ def test_propose_becomes_one_planned_change_with_provenance() -> None:
 
 
 def test_propose_retains_missing_current_value() -> None:
-    plan = build_change_plan(
-        [decision("genres", ResolutionAction.PROPOSE, selected=candidate())]
-    )
+    plan = build_change_plan([decision("genres", ResolutionAction.PROPOSE, selected=candidate())])
 
     assert plan.changes[0].before is None
 
@@ -206,3 +214,78 @@ def test_empty_plan_is_conflict_free_without_changes() -> None:
     assert not plan.has_changes
     assert not plan.requires_review
     assert plan.is_conflict_free
+
+
+def test_catalog_decision_uses_same_change_plan_with_typed_evidence() -> None:
+    source = MetadataEvidence(
+        field="date",
+        value=PartialDate(2020, 5, 17),
+        subject=SubjectRef(
+            EntityKind.RELEASE,
+            (ExternalIdentifier("musicbrainz.release", "release-1"),),
+        ),
+        provider="musicbrainz",
+        acquisition_scope=ProviderScope.RELEASE,
+        source_id="release-1",
+        provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+        confidence=0.99,
+    )
+    resolved = CatalogFieldDecision(
+        "date",
+        PartialDate(2020),
+        PartialDate(2020, 5, 17),
+        source,
+        ResolutionAction.PROPOSE,
+        "safe precision enrichment",
+    )
+
+    plan = build_catalog_change_plan([resolved])
+
+    assert plan.changes == (
+        PlannedChange(
+            "date",
+            PartialDate(2020),
+            PartialDate(2020, 5, 17),
+            source,
+            "safe precision enrichment",
+            (source,),
+        ),
+    )
+    assert plan.changes[0].source is source
+
+
+def test_catalog_multivalue_change_retains_all_contributing_evidence() -> None:
+    first = MetadataEvidence(
+        field="release_secondary_types",
+        value=("Live",),
+        subject=SubjectRef(
+            EntityKind.RELEASE_GROUP,
+            (ExternalIdentifier("catalog.release_group", "group-1"),),
+        ),
+        provider="catalog",
+        acquisition_scope=ProviderScope.RELEASE,
+        source_id="group-1",
+        provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+    )
+    second = MetadataEvidence(
+        field="release_secondary_types",
+        value=("Compilation",),
+        subject=first.subject,
+        provider="other",
+        acquisition_scope=ProviderScope.RELEASE,
+        source_id="group-1",
+        provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+    )
+    resolved = CatalogFieldDecision(
+        "release_secondary_types",
+        None,
+        ("Live", "Compilation"),
+        first,
+        ResolutionAction.PROPOSE,
+        "safe union",
+        (second,),
+    )
+
+    plan = build_catalog_change_plan([resolved])
+
+    assert plan.changes[0].evidence == (first, second)

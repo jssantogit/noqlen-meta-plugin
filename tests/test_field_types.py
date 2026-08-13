@@ -35,3 +35,17 @@ def test_styles_round_trip_as_multiple_album_values(tmp_path, loaded_plugin) -> 
 
     assert fresh is not None
     assert fresh["styles"] == ["Progressive Metal", "Technical Death Metal"]
+
+
+def test_release_catalog_fields_round_trip_on_album(tmp_path, loaded_plugin) -> None:
+    library = Library(str(tmp_path / "catalog.db"))
+    album = Album(album="Synthetic", albumartist="Artist")
+    album["edition"] = "Limited Edition"
+    album["release_secondary_types"] = ["Live", "Compilation"]
+    album.add(library)
+
+    fresh = library.get_album(album.id)
+
+    assert fresh is not None
+    assert fresh["edition"] == "Limited Edition"
+    assert fresh["release_secondary_types"] == ["Live", "Compilation"]

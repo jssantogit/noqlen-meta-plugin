@@ -14,5 +14,9 @@ ITEM_FIELD_TYPES = MappingProxyType(
 )
 
 ALBUM_FIELD_TYPES = MappingProxyType(
-    {field: types.MULTI_VALUE_DSV for field in V2_ALBUM_FLEXIBLE_FIELDS}
+    {
+        **{field: types.MULTI_VALUE_DSV for field in V2_ALBUM_FLEXIBLE_FIELDS},
+        "edition": types.STRING,
+        "release_secondary_types": types.MULTI_VALUE_DSV,
+    }
 )
