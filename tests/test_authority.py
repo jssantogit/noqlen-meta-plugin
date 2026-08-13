@@ -90,3 +90,57 @@ def test_v2_translation_does_not_guess_new_authority_roles() -> None:
     translated = translate_v2_authority("genres", ("lastfm", "discogs"))
 
     assert all(not hasattr(entry, "role") for entry in translated)
+
+
+@pytest.mark.parametrize(
+    ("field", "entity", "provider", "role"),
+    [
+        ("date", EntityKind.RELEASE, "musicbrainz", AuthorityRole.PRIMARY),
+        ("date", EntityKind.RELEASE, "discogs", AuthorityRole.SECONDARY),
+        ("date", EntityKind.RELEASE, "itunes", AuthorityRole.FALLBACK),
+        (
+            "original_date",
+            EntityKind.RELEASE_GROUP,
+            "musicbrainz",
+            AuthorityRole.PRIMARY,
+        ),
+        (
+            "release_type",
+            EntityKind.RELEASE_GROUP,
+            "musicbrainz",
+            AuthorityRole.PRIMARY,
+        ),
+        (
+            "release_secondary_types",
+            EntityKind.RELEASE_GROUP,
+            "musicbrainz",
+            AuthorityRole.PRIMARY,
+        ),
+        (
+            "release_status",
+            EntityKind.RELEASE,
+            "musicbrainz",
+            AuthorityRole.PRIMARY,
+        ),
+        ("edition", EntityKind.RELEASE, "discogs", AuthorityRole.PRIMARY),
+    ],
+)
+def test_release_catalog_authority_matches_implemented_capabilities(
+    field: str,
+    entity: EntityKind,
+    provider: str,
+    role: AuthorityRole,
+) -> None:
+    assert AUTHORITY_MATRIX.role_for(field, entity, ProviderScope.RELEASE, provider) is role
+
+
+def test_original_year_has_no_independent_provider_authority() -> None:
+    assert (
+        AUTHORITY_MATRIX.role_for(
+            "original_year",
+            EntityKind.RELEASE_GROUP,
+            ProviderScope.RELEASE,
+            "musicbrainz",
+        )
+        is AuthorityRole.INELIGIBLE
+    )

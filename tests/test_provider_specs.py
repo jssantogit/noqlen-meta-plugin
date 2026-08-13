@@ -19,6 +19,8 @@ from beetsplug.noqlenmeta.providers.specs import (
     MUSICBRAINZ_ARTIST_SPEC,
     MUSICBRAINZ_SPEC,
     MUSICBRAINZ_TRACK_SPEC,
+    RELEASE_CATALOG_PROVIDER_CAPABILITIES,
+    RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY,
     AcquisitionCharacteristic,
     IdentityPrerequisite,
     ProviderCapability,
@@ -318,6 +320,39 @@ def test_caa_and_acoustid_remain_outside_ordinary_capabilities() -> None:
     assert not {"coverartarchive", "acoustid"} & {
         capability.provider for capability in BUILTIN_PROVIDER_CAPABILITIES
     }
+
+
+def test_release_catalog_capabilities_match_only_implemented_v3_methods() -> None:
+    assert {
+        (capability.provider, capability.field, capability.asserted_entity)
+        for capability in RELEASE_CATALOG_PROVIDER_CAPABILITIES
+    } == {
+        ("musicbrainz", "date", EntityKind.RELEASE),
+        ("musicbrainz", "original_date", EntityKind.RELEASE_GROUP),
+        ("musicbrainz", "release_type", EntityKind.RELEASE_GROUP),
+        ("musicbrainz", "release_secondary_types", EntityKind.RELEASE_GROUP),
+        ("musicbrainz", "release_status", EntityKind.RELEASE),
+        ("discogs", "date", EntityKind.RELEASE),
+        ("discogs", "edition", EntityKind.RELEASE),
+        ("itunes", "date", EntityKind.RELEASE),
+    }
+    assert "original_year" not in {
+        capability.field for capability in RELEASE_CATALOG_PROVIDER_CAPABILITIES
+    }
+    assert len(RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY) == len(
+        RELEASE_CATALOG_PROVIDER_CAPABILITIES
+    )
+    release_group = [
+        capability
+        for capability in RELEASE_CATALOG_PROVIDER_CAPABILITIES
+        if capability.provider == "musicbrainz"
+        and capability.asserted_entity is EntityKind.RELEASE_GROUP
+    ]
+    assert release_group
+    assert all(
+        AcquisitionCharacteristic.SUPPORTING_TRAVERSAL in capability.characteristics
+        for capability in release_group
+    )
 
 
 def test_capability_rejects_entity_outside_field_contract() -> None:

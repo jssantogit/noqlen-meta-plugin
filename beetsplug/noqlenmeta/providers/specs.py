@@ -277,6 +277,59 @@ BUILTIN_PROVIDER_CAPABILITIES = tuple(
     for field in sorted(spec.supported_fields)
 )
 BUILTIN_PROVIDER_CAPABILITY_REGISTRY = capability_registry(BUILTIN_PROVIDER_CAPABILITIES)
+
+
+def _catalog_capability(provider: str, field: str, entity: EntityKind) -> ProviderCapability:
+    return ProviderCapability(
+        provider=provider,
+        field=field,
+        asserted_entity=entity,
+        acquisition_scope=ProviderScope.RELEASE,
+        identity_prerequisites=(
+            frozenset({IdentityPrerequisite.EXACT_CANONICAL_ID})
+            if provider == "musicbrainz"
+            else _identity_prerequisites(
+                next(
+                    spec
+                    for spec in _BUILTIN_PROVIDER_CAPABILITIES
+                    if spec.name == provider and spec.scope is ProviderScope.RELEASE
+                )
+            )
+        ),
+        characteristics=(
+            frozenset(
+                {
+                    AcquisitionCharacteristic.DIRECT_LOOKUP,
+                    AcquisitionCharacteristic.RESPONSE_REUSE,
+                    *(
+                        {AcquisitionCharacteristic.SEARCH}
+                        if provider in {"discogs", "itunes"}
+                        else set()
+                    ),
+                    *(
+                        {AcquisitionCharacteristic.SUPPORTING_TRAVERSAL}
+                        if provider == "musicbrainz" and entity is EntityKind.RELEASE_GROUP
+                        else set()
+                    ),
+                }
+            )
+        ),
+    )
+
+
+RELEASE_CATALOG_PROVIDER_CAPABILITIES = (
+    _catalog_capability("musicbrainz", "date", EntityKind.RELEASE),
+    _catalog_capability("musicbrainz", "original_date", EntityKind.RELEASE_GROUP),
+    _catalog_capability("musicbrainz", "release_type", EntityKind.RELEASE_GROUP),
+    _catalog_capability("musicbrainz", "release_secondary_types", EntityKind.RELEASE_GROUP),
+    _catalog_capability("musicbrainz", "release_status", EntityKind.RELEASE),
+    _catalog_capability("discogs", "date", EntityKind.RELEASE),
+    _catalog_capability("discogs", "edition", EntityKind.RELEASE),
+    _catalog_capability("itunes", "date", EntityKind.RELEASE),
+)
+RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY = capability_registry(
+    RELEASE_CATALOG_PROVIDER_CAPABILITIES
+)
 BUILTIN_PROVIDER_SPECS: Mapping[ProviderKey, ProviderSpec] = MappingProxyType(
     {(spec.name, spec.scope): spec for spec in _BUILTIN_PROVIDER_CAPABILITIES}
 )

@@ -10,6 +10,7 @@ from types import MappingProxyType
 from beetsplug.noqlenmeta.field_contracts import EntityKind, field_contract
 from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_CAPABILITY_REGISTRY,
+    RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY,
     ProviderScope,
 )
 
@@ -228,6 +229,35 @@ _RULES = (
     # LRCLIB is the current lyrics source; artwork/AcoustID are separate domains.
     _rule("lyrics", "lrclib", AuthorityRole.PRIMARY, ProviderScope.TRACK),
     _rule("synced_lyrics", "lrclib", AuthorityRole.PRIMARY, ProviderScope.TRACK),
+    # Internal Wave 1A release catalog evidence; no public orchestration yet.
+    _rule("date", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.RELEASE),
+    _rule("date", "discogs", AuthorityRole.SECONDARY, ProviderScope.RELEASE),
+    _rule("date", "itunes", AuthorityRole.FALLBACK, ProviderScope.RELEASE),
+    _rule(
+        "original_date",
+        "musicbrainz",
+        AuthorityRole.PRIMARY,
+        ProviderScope.RELEASE,
+    ),
+    _rule(
+        "release_type",
+        "musicbrainz",
+        AuthorityRole.PRIMARY,
+        ProviderScope.RELEASE,
+    ),
+    _rule(
+        "release_secondary_types",
+        "musicbrainz",
+        AuthorityRole.PRIMARY,
+        ProviderScope.RELEASE,
+    ),
+    _rule(
+        "release_status",
+        "musicbrainz",
+        AuthorityRole.PRIMARY,
+        ProviderScope.RELEASE,
+    ),
+    _rule("edition", "discogs", AuthorityRole.PRIMARY, ProviderScope.RELEASE),
 )
 
 
@@ -239,7 +269,9 @@ def _validate_capabilities(rules: tuple[AuthorityRule, ...]) -> None:
             authority.asserted_entity,
             authority.acquisition_scope,
         )
-        if key not in BUILTIN_PROVIDER_CAPABILITY_REGISTRY:
+        if key not in BUILTIN_PROVIDER_CAPABILITY_REGISTRY and (
+            key not in RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY
+        ):
             raise ValueError(f"authority has no registered provider capability: {key!r}")
 
 

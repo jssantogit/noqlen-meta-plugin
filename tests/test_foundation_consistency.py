@@ -6,12 +6,17 @@ from beetsplug.noqlenmeta.field_types import ALBUM_FIELD_TYPES, ITEM_FIELD_TYPES
 from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_CAPABILITIES,
     BUILTIN_PROVIDER_CAPABILITY_REGISTRY,
+    RELEASE_CATALOG_PROVIDER_CAPABILITIES,
+    RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY,
 )
 from beetsplug.noqlenmeta.track_mapping import TRACK_FIELD_TARGETS
 
 
 def test_provider_capabilities_reference_field_registry() -> None:
-    for capability in BUILTIN_PROVIDER_CAPABILITIES:
+    for capability in (
+        *BUILTIN_PROVIDER_CAPABILITIES,
+        *RELEASE_CATALOG_PROVIDER_CAPABILITIES,
+    ):
         assert capability.field in FIELD_CONTRACTS
         assert capability.asserted_entity in FIELD_CONTRACTS[capability.field].allowed_entities
 
@@ -19,12 +24,15 @@ def test_provider_capabilities_reference_field_registry() -> None:
 def test_authority_matrix_references_registered_capabilities() -> None:
     for authority in AUTHORITY_MATRIX.rules:
         assert authority.asserted_entity in FIELD_CONTRACTS[authority.field].allowed_entities
-        assert (
+        key = (
             authority.provider,
             authority.field,
             authority.asserted_entity,
             authority.acquisition_scope,
-        ) in BUILTIN_PROVIDER_CAPABILITY_REGISTRY
+        )
+        assert key in BUILTIN_PROVIDER_CAPABILITY_REGISTRY or (
+            key in RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY
+        )
 
 
 def test_current_target_mappings_reference_field_registry() -> None:
