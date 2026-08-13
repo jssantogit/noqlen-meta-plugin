@@ -11,6 +11,7 @@ from beetsplug.noqlenmeta.evidence import (
 )
 from beetsplug.noqlenmeta.field_contracts import EntityKind, IdentifierCollection
 from beetsplug.noqlenmeta.providers.specs import ProviderScope
+from beetsplug.noqlenmeta.work_identity import WorkReference
 
 
 def subject(entity: EntityKind, namespace: str) -> SubjectRef:
@@ -162,6 +163,36 @@ def test_evidence_rejects_arbitrary_canonical_values() -> None:
             acquisition_scope=ProviderScope.RELEASE,
             source_id="42",
             provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+        )
+
+
+def test_work_evidence_accepts_only_typed_work_reference_tuples() -> None:
+    reference = WorkReference(
+        "12345678-1234-5678-9234-567812345678",
+        "Synthetic Work",
+        "performance",
+        None,
+    )
+    evidence = MetadataEvidence(
+        field="works",
+        value=(reference,),
+        subject=subject(EntityKind.RECORDING, "musicbrainz.recording"),
+        provider="musicbrainz",
+        acquisition_scope=ProviderScope.TRACK,
+        source_id="recording-1",
+        provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+    )
+
+    assert evidence.value == (reference,)
+    with pytest.raises(ValueError, match="multi-value"):
+        MetadataEvidence(
+            field="works",
+            value=(object(),),  # type: ignore[arg-type]
+            subject=evidence.subject,
+            provider="musicbrainz",
+            acquisition_scope=ProviderScope.TRACK,
+            source_id="recording-1",
+            provenance=evidence.provenance,
         )
 
 

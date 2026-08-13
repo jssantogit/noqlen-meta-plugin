@@ -20,6 +20,7 @@ from beetsplug.noqlenmeta.release_catalog import (
     ReleaseStatus,
     ReleaseType,
 )
+from beetsplug.noqlenmeta.work_identity import WorkReference
 
 CanonicalValue: TypeAlias = (
     MetadataValue
@@ -28,6 +29,7 @@ CanonicalValue: TypeAlias = (
     | ReleaseType
     | ReleaseStatus
     | tuple[ReleaseSecondaryType, ...]
+    | tuple[WorkReference, ...]
 )
 
 
@@ -120,6 +122,7 @@ class MetadataEvidence:
             if not (
                 all(isinstance(value, str) and value.strip() for value in self.value)
                 or all(isinstance(value, ReleaseSecondaryType) for value in self.value)
+                or all(isinstance(value, WorkReference) for value in self.value)
             ):
                 raise ValueError("canonical multi-value contains invalid values")
         if isinstance(self.value, float) and not isfinite(self.value):
