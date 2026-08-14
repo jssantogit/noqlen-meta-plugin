@@ -188,7 +188,10 @@ def _add_release_catalog_current(
             pass
     if release_type := normalize_release_type(getter("albumtype")):
         values["release_type"] = release_type
-    if secondary := normalize_release_secondary_types(getter("release_secondary_types")):
+    secondary = normalize_release_secondary_types(getter("release_secondary_types"))
+    if not secondary:
+        secondary = normalize_release_secondary_types(getter("albumtypes"))
+    if secondary:
         values["release_secondary_types"] = secondary
     if status := normalize_release_status(getter("albumstatus")):
         values["release_status"] = status

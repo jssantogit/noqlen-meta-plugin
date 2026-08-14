@@ -37,6 +37,7 @@ from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_RELEASE_PROVIDER_SPECS,
     ProviderScope,
 )
+from beetsplug.noqlenmeta.release_catalog import ReleaseSecondaryType, ReleaseType
 from beetsplug.noqlenmeta.resolver import default_resolution_policy
 
 TOKEN = "test-personal-token"
@@ -342,6 +343,29 @@ def test_current_values_prefer_plural_styles_over_legacy_style() -> None:
 def test_current_values_fall_back_to_legacy_style() -> None:
     assert current_values_from_album_info(album_info(style="Legacy"))["styles"] == (
         "Legacy",
+    )
+
+
+def test_current_values_reconstruct_controlled_native_secondary_types() -> None:
+    info = album_info(albumtype="Album")
+    info["albumtypes"] = ["Album", "Live", "Compilation", "Custom"]
+
+    current = current_values_from_album_info(info)
+
+    assert current["release_type"] is ReleaseType.ALBUM
+    assert current["release_secondary_types"] == (
+        ReleaseSecondaryType.LIVE,
+        ReleaseSecondaryType.COMPILATION,
+    )
+
+
+def test_typed_secondary_types_take_precedence_over_native_albumtypes() -> None:
+    info = album_info(albumtype="Album")
+    info["release_secondary_types"] = ["Remix"]
+    info["albumtypes"] = ["Album", "Live"]
+
+    assert current_values_from_album_info(info)["release_secondary_types"] == (
+        ReleaseSecondaryType.REMIX,
     )
 
 

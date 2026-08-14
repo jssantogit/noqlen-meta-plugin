@@ -32,6 +32,7 @@ from beetsplug.noqlenmeta.providers import ProviderError
 from beetsplug.noqlenmeta.providers.base import ProviderContractError
 from beetsplug.noqlenmeta.providers.lastfm import LastFmProvider
 from beetsplug.noqlenmeta.providers.specs import ProviderScope
+from beetsplug.noqlenmeta.release_catalog import ReleaseSecondaryType, ReleaseType
 
 TOKEN = "test-personal-token"
 RELEASE_MBID = "6ea45c08-3cfa-461a-aa4d-4cc404fcfa86"
@@ -365,6 +366,19 @@ def test_library_adapter_falls_back_to_legacy_style() -> None:
     album = Album(albumartist="Artist", album="Album", style="Legacy")
 
     assert current_values_from_library_album(album)["styles"] == ("Legacy",)
+
+
+def test_library_current_reconstructs_native_secondary_types() -> None:
+    album = Album(album="Synthetic", albumartist="Artist", albumtype="Album")
+    album.albumtypes = ["Album", "Live", "Compilation", "Custom"]
+
+    current = current_values_from_library_album(album)
+
+    assert current["release_type"] is ReleaseType.ALBUM
+    assert current["release_secondary_types"] == (
+        ReleaseSecondaryType.LIVE,
+        ReleaseSecondaryType.COMPILATION,
+    )
 
 
 @pytest.mark.parametrize("field", ["albumartist", "album"])
