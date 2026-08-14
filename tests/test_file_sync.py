@@ -10,15 +10,27 @@ from mediafile import MediaFile
 import beetsplug.noqlenmeta.file_sync as file_sync_module
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.changeplan import PlannedChange
-from beetsplug.noqlenmeta.domain import MetadataCandidate
+from beetsplug.noqlenmeta.domain import ExternalIdentifier, MetadataCandidate
+from beetsplug.noqlenmeta.evidence import (
+    AcquisitionMethod,
+    AcquisitionProvenance,
+    MetadataEvidence,
+    SubjectRef,
+)
+from beetsplug.noqlenmeta.field_contracts import EntityKind, PartialDate
 from beetsplug.noqlenmeta.file_sync import (
     FileSyncApplicationError,
     apply_file_sync_plan,
     plan_file_sync,
     verify_file_sync_plan,
 )
+from beetsplug.noqlenmeta.providers.specs import ProviderScope
 
 FIXTURE = Path(__file__).parent / "fixtures" / "identity_tags" / "silence.flac"
+FORMAT_FIXTURES = tuple(
+    Path(__file__).parent / "fixtures" / "identity_tags" / f"silence.{extension}"
+    for extension in ("flac", "mp3", "m4a", "ogg", "opus")
+)
 
 
 @pytest.fixture
@@ -42,6 +54,20 @@ def media_item(tmp_path: Path) -> tuple[Library, Item, Path]:
 
 
 def planned_change(field: str, value: object) -> PlannedChange:
+    if isinstance(value, PartialDate):
+        evidence = MetadataEvidence(
+            field,
+            value,
+            SubjectRef(
+                EntityKind.RELEASE if field == "date" else EntityKind.RELEASE_GROUP,
+                (ExternalIdentifier("catalog.release", "release-1"),),
+            ),
+            "catalog",
+            ProviderScope.RELEASE,
+            "release-1",
+            AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+        )
+        return PlannedChange(field, None, value, evidence, f"resolved {field}")
     candidate = MetadataCandidate(field, value, "catalog", 0.95, "42")  # type: ignore[arg-type]
     return PlannedChange(field, None, candidate.value, candidate, f"resolved {field}")
 
@@ -118,6 +144,49 @@ def test_apply_writes_synthetic_lyrics(media_item) -> None:
     apply_file_sync_plan(library, plan)
 
     assert MediaFile(path).lyrics == "Synthetic line"
+
+
+@pytest.mark.parametrize("fixture", FORMAT_FIXTURES, ids=lambda path: path.suffix)
+@pytest.mark.parametrize(
+    ("date", "expected"),
+    [
+        (PartialDate(2025), (2025, None, None)),
+        (PartialDate(2025, 6), (2025, 6, None)),
+    ],
+)
+def test_partial_dates_clear_stale_lower_precision_across_formats(
+    tmp_path: Path,
+    fixture: Path,
+    date: PartialDate,
+    expected: tuple[int, int | None, int | None],
+) -> None:
+    NoqlenMetaPlugin()
+    path = tmp_path / f"track{fixture.suffix}"
+    shutil.copy2(fixture, path)
+    media = MediaFile(path)
+    media.title = "Synthetic Title"
+    media.year, media.month, media.day = 2019, 5, 17
+    media.original_year, media.original_month, media.original_day = 1999, 4, 3
+    media.save()
+    library = Library(str(tmp_path / "library.db"), set_music_dir=False)
+    item = Item(path=os.fsencode(path), artist="Artist", title="Synthetic Title", mtime=17.0)
+    library.add(item)
+    item = library.get_item(item.id)
+    plan = plan_file_sync(
+        item,
+        (
+            planned_change("date", date),
+            planned_change("original_date", date),
+        ),
+    )
+
+    result = apply_file_sync_plan(library, plan)
+
+    written = MediaFile(path)
+    assert result.committed, result
+    assert (written.year, written.month, written.day) == expected
+    assert (written.original_year, written.original_month, written.original_day) == expected
+    assert written.title == "Synthetic Title"
 
 
 def test_preflight_rejects_source_change(media_item) -> None:

@@ -98,10 +98,12 @@ concrete Release acquisition; and one iTunes collection acquisition path.
 
 ## Targets and workflow
 
-Release and original dates project only known native date components. Release
-type and status use audited native targets. Separate secondary types, edition,
-plural identifiers and recording date use typed database targets where needed.
-Mapping performs no acquisition or resolution.
+Release and original dates project through native date components. Components
+below the accepted precision are explicitly cleared so a year-only or
+year-month value cannot retain stale month/day state. Release type and status
+use audited native targets. Separate secondary types, edition, plural
+identifiers and recording date use typed database targets where needed. Mapping
+performs no acquisition or resolution.
 
 Preview is non-mutating. Apply stores accepted database-safe fields. Partial
 apply retains REVIEW/BLOCKED fields while applying accepted units. Optional

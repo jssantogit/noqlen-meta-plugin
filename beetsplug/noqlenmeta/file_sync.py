@@ -119,7 +119,24 @@ _EXPANDED_FIELDS = frozenset(
     {"date", "original_date", "isrcs", "works", "release_type", "release_status"}
 )
 _RELATED_MEDIA_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType(
-    {"genres": frozenset({"genres", "genre"})}
+    {
+        "genres": frozenset({"genres", "genre"}),
+        **{
+            field: frozenset({"date", "year", "month", "day"})
+            for field in ("date", "year", "month", "day")
+        },
+        **{
+            field: frozenset(
+                {"original_date", "original_year", "original_month", "original_day"}
+            )
+            for field in (
+                "original_date",
+                "original_year",
+                "original_month",
+                "original_day",
+            )
+        },
+    }
 )
 
 
@@ -471,11 +488,11 @@ def _expanded_targets(
         if not isinstance(value, PartialDate):
             raise ValueError("canonical date requires a partial date")
         prefix = "original_" if change.field == "original_date" else ""
-        components = [(f"{prefix}year", value.year)]
-        if value.month is not None:
-            components.append((f"{prefix}month", value.month))
-        if value.day is not None:
-            components.append((f"{prefix}day", value.day))
+        components = [
+            (f"{prefix}year", value.year),
+            (f"{prefix}month", value.month),
+            (f"{prefix}day", value.day),
+        ]
         return tuple(
             (FileTagTarget(change.field, field, FileTagShape.SCALAR_INT), component)
             for field, component in components
