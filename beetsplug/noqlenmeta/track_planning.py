@@ -47,6 +47,16 @@ _TRACK_CURRENT_FIELDS = (
     "artist_areas",
     "artist_languages",
 )
+_TRACK_SOURCE_FIELDS = (
+    *_TRACK_CURRENT_FIELDS,
+    "isrcs",
+    "isrc",
+    "iswcs",
+    "mb_workids",
+    "mb_workid",
+    "work",
+    "recording_date",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,21 +113,17 @@ def effective_current_values_for_import_track(
     from_scratch: bool,
 ) -> dict[str, MetadataValue]:
     """Predict canonical Item values immediately after normal beets application."""
-    if from_scratch:
-        current = _current_values_surviving_beets_clear(selected.item)
-    else:
-        current = current_values_from_library_item(selected.item)
-
     selected_data = _selected_metadata_application_data(selected)
-    selected_values = _current_track_values(selected_data.get)
-    for field in _TRACK_CURRENT_FIELDS:
-        if field not in selected_data:
+    effective: dict[str, object] = {}
+    for field in _TRACK_SOURCE_FIELDS:
+        if field in selected_data:
+            effective[field] = selected_data[field]
             continue
-        if field in selected_values:
-            current[field] = selected_values[field]
-        else:
-            current.pop(field, None)
-    return current
+        if not from_scratch or field not in Item._media_tag_fields:
+            value = selected.item.get(field, None, with_album=False)
+            if value is not None:
+                effective[field] = value
+    return _current_track_values(effective.get)
 
 
 def build_import_track_planning_result(

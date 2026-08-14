@@ -166,6 +166,7 @@ from beetsplug.noqlenmeta.providers import ProviderError
 from beetsplug.noqlenmeta.providers.base import ReleaseProviderEnrichment
 from beetsplug.noqlenmeta.providers.coverartarchive import CoverArtArchiveClient
 from beetsplug.noqlenmeta.providers.specs import (
+    BUILTIN_PROVIDER_CAPABILITIES,
     BUILTIN_PROVIDER_NAMES,
     BUILTIN_RELEASE_PROVIDER_SPECS,
     BUILTIN_TRACK_PROVIDER_SPECS,
@@ -174,6 +175,7 @@ from beetsplug.noqlenmeta.providers.specs import (
     LRCLIB_SPEC,
     MUSICBRAINZ_SPEC,
     RELEASE_CATALOG_PROVIDER_CAPABILITIES,
+    ProviderScope,
     ProviderSpec,
 )
 from beetsplug.noqlenmeta.release_catalog_resolution import resolve_release_catalog
@@ -1819,6 +1821,14 @@ class NoqlenMetaPlugin(BeetsPlugin):
     def _has_contributing_track_provider(policy: ResolutionPolicy) -> bool:
         return any(
             provider_can_contribute(policy, spec)
+            or any(
+                capability.provider == spec.name
+                and capability.acquisition_scope is ProviderScope.TRACK
+                and policy.is_provider_enabled(spec.name)
+                and policy.is_field_enabled(capability.field)
+                for capability in BUILTIN_PROVIDER_CAPABILITIES
+                if capability.field in {"isrcs", "works", "iswcs", "recording_date"}
+            )
             for spec in BUILTIN_TRACK_PROVIDER_SPECS.values()
         )
 

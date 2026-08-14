@@ -6,7 +6,19 @@ from beets.autotag.distance import Distance
 from beets.autotag.hooks import AlbumInfo, TrackInfo
 from beets.library import Item
 
-from beetsplug.noqlenmeta.domain import MetadataCandidate, TrackEnrichmentContext
+from beetsplug.noqlenmeta.domain import (
+    ExternalIdentifier,
+    MetadataCandidate,
+    TrackEnrichmentContext,
+)
+from beetsplug.noqlenmeta.evidence import (
+    AcquisitionMethod,
+    AcquisitionProvenance,
+    MetadataEvidence,
+    SubjectRef,
+)
+from beetsplug.noqlenmeta.field_contracts import EntityKind, IdentifierCollection
+from beetsplug.noqlenmeta.providers.specs import ProviderScope
 from beetsplug.noqlenmeta.resolver import FieldRule, ResolutionAction, ResolutionPolicy
 from beetsplug.noqlenmeta.track_integration import (
     SelectedImportTrack,
@@ -18,6 +30,10 @@ from beetsplug.noqlenmeta.track_planning import (
     effective_current_values_for_import_track,
     selected_metadata_current_values,
 )
+from beetsplug.noqlenmeta.work_identity import WorkReference
+
+RECORDING_ID = "11111111-1111-4111-8111-111111111111"
+WORK_ID = "22222222-2222-4222-8222-222222222222"
 
 
 def _track_info(**overrides: object) -> TrackInfo:
@@ -89,6 +105,83 @@ def test_selected_metadata_overrides_local_values_in_both_modes(
         "lyrics": "selected plain",
         "synced_lyrics": "selected synced",
     }
+
+
+@pytest.mark.parametrize("from_scratch", [False, True])
+def test_selected_scalar_isrc_replaces_stale_item_current(
+    from_scratch: bool,
+) -> None:
+    selected = SelectedImportTrack(
+        Item(isrc="USAAA0100001"),
+        _track_info(isrc="GBBBB0200002"),
+        None,
+    )
+
+    current = effective_current_values_for_import_track(
+        selected, from_scratch=from_scratch
+    )
+
+    assert current["isrcs"] == IdentifierCollection(
+        (ExternalIdentifier("isrc", "GBBBB0200002"),)
+    )
+
+
+def test_absent_selected_work_does_not_clear_item_work() -> None:
+    selected = SelectedImportTrack(
+        Item(mb_workid=WORK_ID, work="Existing Work"), _track_info(), None
+    )
+
+    current = effective_current_values_for_import_track(selected, from_scratch=False)
+
+    assert current["works"] == (
+        WorkReference(WORK_ID, "Existing Work", "stored identity", None),
+    )
+
+
+def test_selected_single_work_becomes_effective_current() -> None:
+    selected = SelectedImportTrack(
+        Item(mb_workid="33333333-3333-4333-8333-333333333333", work="Old"),
+        _track_info(mb_workid=WORK_ID, work="Selected Work"),
+        None,
+    )
+
+    current = effective_current_values_for_import_track(selected, from_scratch=False)
+
+    assert current["works"] == (
+        WorkReference(WORK_ID, "Selected Work", "stored identity", None),
+    )
+
+
+def test_selected_isrc_matching_provider_evidence_keeps_without_review() -> None:
+    selected = SelectedImportTrack(
+        Item(isrc="USAAA0100001"), _track_info(isrc="GBBBB0200002"), None
+    )
+    evidence = MetadataEvidence(
+        "isrcs",
+        IdentifierCollection((ExternalIdentifier("isrc", "GBBBB0200002"),)),
+        SubjectRef(
+            EntityKind.RECORDING,
+            (ExternalIdentifier("musicbrainz.recording", RECORDING_ID),),
+        ),
+        "musicbrainz",
+        ProviderScope.TRACK,
+        RECORDING_ID,
+        AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+        confidence=0.99,
+    )
+    result = build_import_track_planning_result(
+        selected,
+        TrackEnrichmentContext("Synthetic Artist", "Synthetic Track"),
+        from_scratch=False,
+        candidates=(),
+        evidence=(evidence,),
+        policy=ResolutionPolicy(
+            {"isrcs": FieldRule(True, (), 0.8)}, {"musicbrainz": True}
+        ),
+    )
+
+    assert result.change_plan.reviews == ()
+    assert result.change_plan.kept[0].field == "isrcs"
 
 
 def test_album_selected_metadata_uses_beets_merged_application_data() -> None:

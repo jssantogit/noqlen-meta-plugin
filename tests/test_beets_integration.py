@@ -16,6 +16,7 @@ from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.beets_application import BeetsApplicationError
 from beetsplug.noqlenmeta.beets_mapping import BeetsMappingError
 from beetsplug.noqlenmeta.changeplan import ChangePlanError
+from beetsplug.noqlenmeta.configuration import default_config
 from beetsplug.noqlenmeta.domain import (
     ArtistEnrichmentContext,
     MetadataCandidate,
@@ -2111,3 +2112,17 @@ def test_release_v3_only_field_keeps_musicbrainz_contribution_enabled() -> None:
     )
 
     assert NoqlenMetaPlugin._has_contributing_release_provider(policy)
+
+
+@pytest.mark.parametrize(
+    ("field_enabled", "provider_enabled", "expected"),
+    [(True, True, True), (True, False, False), (False, True, False)],
+)
+def test_track_v3_only_contribution_uses_capability_not_v2_authority(
+    field_enabled: bool, provider_enabled: bool, expected: bool
+) -> None:
+    fields = {field: False for field in default_config()["fields"]}
+    fields["isrcs"] = field_enabled
+    policy = resolution_policy_from_settings(fields, {"musicbrainz": provider_enabled})
+
+    assert NoqlenMetaPlugin._has_contributing_track_provider(policy) is expected

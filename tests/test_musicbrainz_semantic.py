@@ -285,6 +285,18 @@ def test_isrc_only_enrichment_never_fetches_work() -> None:
     assert calls["work"] == []
 
 
+def test_isrc_only_without_recording_mbid_makes_no_request() -> None:
+    semantic_client, calls = client(recording={"id": RECORDING_MBID})
+    context = TrackEnrichmentContext("Synthetic Artist", "Synthetic Track")
+
+    enrichment = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"isrcs"}
+    ).get_enrichment(context)
+
+    assert enrichment.evidence == ()
+    assert calls["recording"] == []
+
+
 def test_explicit_empty_enabled_fields_produce_no_evidence_or_work_lookup() -> None:
     semantic_client, calls = client(
         recording={
