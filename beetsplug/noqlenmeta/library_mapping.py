@@ -8,6 +8,8 @@ from types import MappingProxyType
 
 from beetsplug.noqlenmeta.beets_mapping import BeetsTargetShape
 from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
+from beetsplug.noqlenmeta.credit_resolution import CREDIT_FIELDS
+from beetsplug.noqlenmeta.credits import ArtistCredit, CreditReference
 from beetsplug.noqlenmeta.domain import MetadataValue
 from beetsplug.noqlenmeta.release_catalog_mapping import map_release_catalog_plan
 
@@ -49,6 +51,10 @@ _TARGETS = (
     LibraryFieldTarget("barcodes", "barcode", BeetsTargetShape.SCALAR_STRING),
     LibraryFieldTarget("country", "country", BeetsTargetShape.SCALAR_STRING),
     LibraryFieldTarget("year", "year", BeetsTargetShape.SCALAR_INT),
+    LibraryFieldTarget("producers", "producers", BeetsTargetShape.STRING_LIST),
+    LibraryFieldTarget("conductors", "conductors", BeetsTargetShape.STRING_LIST),
+    LibraryFieldTarget("performers", "performers", BeetsTargetShape.STRING_LIST),
+    LibraryFieldTarget("featured_artists", "featured_artists", BeetsTargetShape.STRING_LIST),
 )
 
 LIBRARY_FIELD_TARGETS: Mapping[str, LibraryFieldTarget] = MappingProxyType(
@@ -83,6 +89,7 @@ class LibraryTargetPlan:
     source: ChangePlan
     mapped_changes: tuple[LibraryTargetChange, ...] = ()
     blocked_changes: tuple[LibraryMappingBlocker, ...] = ()
+    state_changes: tuple[PlannedChange, ...] = ()
 
     @property
     def has_mapping_blockers(self) -> bool:
@@ -104,6 +111,7 @@ def map_change_plan_to_library_album(plan: ChangePlan) -> LibraryTargetPlan:
 
     mapped: list[LibraryTargetChange] = []
     blocked: list[LibraryMappingBlocker] = []
+    state_changes: list[PlannedChange] = []
     catalog_fields = {
         "date", "original_date", "release_type", "release_secondary_types",
         "release_status", "edition",
@@ -132,6 +140,36 @@ def map_change_plan_to_library_album(plan: ChangePlan) -> LibraryTargetPlan:
             )
     for change in sorted(plan.changes, key=lambda item: item.field):
         if change.field in catalog_fields:
+            continue
+        if change.field in CREDIT_FIELDS:
+            state_changes.append(change)
+            if change.field == "structured_artist_credits":
+                if not isinstance(change.after, ArtistCredit):
+                    raise LibraryMappingError(
+                        "'structured_artist_credits' requires ArtistCredit"
+                    )
+                continue
+            if not isinstance(change.after, tuple) or not all(
+                isinstance(value, CreditReference) for value in change.after
+            ):
+                raise LibraryMappingError(
+                    f"{change.field!r} requires CreditReference values"
+                )
+            target = LIBRARY_FIELD_TARGETS.get(change.field)
+            if target is None:
+                raise LibraryMappingError(
+                    f"no release credit projection exists for {change.field!r}"
+                )
+            names = tuple(dict.fromkeys(value.party.name for value in change.after))
+            mapped.append(
+                LibraryTargetChange(
+                    change.field,
+                    target.target_field,
+                    target.shape,
+                    names,
+                    change,
+                )
+            )
             continue
         if change.field == "media":
             _require_text_tuple(change)
@@ -188,7 +226,7 @@ def map_change_plan_to_library_album(plan: ChangePlan) -> LibraryTargetPlan:
             )
         )
 
-    return LibraryTargetPlan(plan, tuple(mapped), tuple(blocked))
+    return LibraryTargetPlan(plan, tuple(mapped), tuple(blocked), tuple(state_changes))
 
 
 def _require_text_tuple(change: PlannedChange) -> tuple[str, ...]:

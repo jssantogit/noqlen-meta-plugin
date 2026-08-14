@@ -11,6 +11,7 @@ from beets.autotag.hooks import AlbumInfo, TrackInfo
 from beets.importer.actions import Action
 from beets.library import Item
 
+from beetsplug.noqlenmeta.credit_state import read_credit_state
 from beetsplug.noqlenmeta.domain import (
     ArtistEnrichmentContext,
     ExternalIdentifier,
@@ -193,7 +194,10 @@ def current_values_from_track_info(track_info: TrackInfo) -> dict[str, Canonical
 
 def current_values_from_library_item(item: Item) -> dict[str, CanonicalValue]:
     """Return canonical track values from the Item itself without Album fallback."""
-    return _current_track_values(lambda field: _item_get(item, field))
+    values = _current_track_values(lambda field: _item_get(item, field))
+    if isinstance(item.id, int):
+        values.update(read_credit_state(item._db, "item", item.id))
+    return values
 
 
 def selected_import_tracks(task: object) -> tuple[SelectedImportTrack, ...]:

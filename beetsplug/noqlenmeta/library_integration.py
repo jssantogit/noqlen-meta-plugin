@@ -8,12 +8,13 @@ from typing import TYPE_CHECKING
 from beets import ui
 from beets.library import Album
 
+from beetsplug.noqlenmeta.credit_state import read_credit_state
 from beetsplug.noqlenmeta.domain import (
     ExternalIdentifier,
-    MetadataValue,
     ReleaseEnrichmentContext,
     canonical_uuid,
 )
+from beetsplug.noqlenmeta.evidence import CanonicalValue
 from beetsplug.noqlenmeta.integration import (
     _add_release_catalog_current,
     _optional_text,
@@ -75,9 +76,9 @@ def context_from_library_album(album: Album) -> ReleaseEnrichmentContext | None:
     )
 
 
-def current_values_from_library_album(album: Album) -> dict[str, MetadataValue]:
+def current_values_from_library_album(album: Album) -> dict[str, CanonicalValue]:
     """Copy persistent Album metadata into provider-independent canonical fields."""
-    current_values: dict[str, MetadataValue] = {}
+    current_values: dict[str, CanonicalValue] = {}
 
     genres = _text_tuple(album.genres)
     if genres:
@@ -115,6 +116,8 @@ def current_values_from_library_album(album: Album) -> dict[str, MetadataValue]:
         current_values["year"] = year
 
     _add_release_catalog_current(current_values, lambda field: album.get(field, None))
+    if isinstance(album.id, int):
+        current_values.update(read_credit_state(album._db, "album", album.id))
 
     return current_values
 

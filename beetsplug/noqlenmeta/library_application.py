@@ -10,6 +10,7 @@ from beets.dbcore.db import NotFoundError
 from beets.library import Album
 
 from beetsplug.noqlenmeta.beets_mapping import BeetsTargetShape
+from beetsplug.noqlenmeta.credit_state import apply_credit_state
 from beetsplug.noqlenmeta.library_integration import current_values_from_library_album
 from beetsplug.noqlenmeta.library_mapping import (
     LibraryMappingError,
@@ -100,11 +101,15 @@ def apply_library_target_plan(
         ) from None
 
     current_values = current_values_from_library_album(fresh_album)
-    for change in plan.mapped_changes:
-        current = current_values.get(change.canonical_field)
-        if type(current) is not type(change.source.before) or current != change.source.before:
+    for change in (*plan.mapped_changes, *plan.state_changes):
+        canonical_field = (
+            change.canonical_field if isinstance(change, LibraryTargetChange) else change.field
+        )
+        before = change.source.before if isinstance(change, LibraryTargetChange) else change.before
+        current = current_values.get(canonical_field)
+        if type(current) is not type(before) or current != before:
             raise LibraryApplicationError(
-                f"library metadata for {change.canonical_field!r} no longer matches the plan"
+                f"library metadata for {canonical_field!r} no longer matches the plan"
             )
 
     materialized = [
@@ -120,10 +125,14 @@ def apply_library_target_plan(
     for target_field, value in materialized:
         setattr(album, target_field, value)
 
-    if not materialized:
+    if not materialized and not plan.state_changes:
         return result
 
-    album.store(inherit=True)
+    if materialized:
+        album.store(inherit=True)
+    if not isinstance(album.id, int):
+        raise LibraryApplicationError("credit state requires a persisted Album")
+    apply_credit_state(album._db, "album", album.id, plan.state_changes)
     return LibraryApplicationResult(
         mode=mode,
         applied_changes=plan.mapped_changes,

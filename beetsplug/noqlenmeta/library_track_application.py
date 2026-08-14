@@ -9,6 +9,7 @@ from typing import Any
 from beets.dbcore.db import NotFoundError
 from beets.library import Item
 
+from beetsplug.noqlenmeta.credit_state import apply_credit_state
 from beetsplug.noqlenmeta.track_application import TrackApplicationMode
 from beetsplug.noqlenmeta.track_integration import current_values_from_library_item
 from beetsplug.noqlenmeta.track_mapping import (
@@ -97,12 +98,15 @@ def apply_library_track_plan(
         ) from None
 
     current_values = current_values_from_library_item(fresh)
-    for change in plan.mapped_changes:
-        current = current_values.get(change.canonical_field)
-        before = change.source.before
+    for change in (*plan.mapped_changes, *plan.state_changes):
+        canonical_field = (
+            change.canonical_field if isinstance(change, TrackTargetChange) else change.field
+        )
+        current = current_values.get(canonical_field)
+        before = change.source.before if isinstance(change, TrackTargetChange) else change.before
         if type(current) is not type(before) or current != before:
             raise LibraryTrackApplicationError(
-                f"library metadata for {change.canonical_field!r} no longer matches the plan"
+                f"library metadata for {canonical_field!r} no longer matches the plan"
             )
 
     materialized: list[tuple[str, Any]] = []
@@ -122,10 +126,14 @@ def apply_library_track_plan(
 
     for target_field, value in materialized:
         item[target_field] = value
-    if not materialized:
+    if not materialized and not plan.state_changes:
         return result
 
-    item.store()
+    if materialized:
+        item.store()
+    if not isinstance(item.id, int):
+        raise LibraryTrackApplicationError("credit state requires a persisted Item")
+    apply_credit_state(item._db, "item", item.id, plan.state_changes)
     return LibraryTrackApplicationResult(
         mode=mode,
         applied_changes=plan.mapped_changes,

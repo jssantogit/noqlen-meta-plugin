@@ -5,6 +5,7 @@ from beets.autotag.hooks import TrackInfo
 from beets.library import Item
 
 from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
+from beetsplug.noqlenmeta.credits import CreditParty, CreditReference, CreditRole
 from beetsplug.noqlenmeta.domain import ExternalIdentifier, MetadataCandidate
 from beetsplug.noqlenmeta.evidence import (
     AcquisitionMethod,
@@ -40,6 +41,22 @@ def planned_change(field: str, value: object) -> PlannedChange:
         source_id="42",
     )
     return PlannedChange(field, None, source.value, source, f"resolved {field}")
+
+
+def credit_change(field: str, value: object) -> PlannedChange:
+    source = MetadataEvidence(
+        field,
+        value,  # type: ignore[arg-type]
+        SubjectRef(
+            EntityKind.RECORDING,
+            (ExternalIdentifier("musicbrainz.recording", "22345678-1234-5678-9234-567812345678"),),
+        ),
+        "musicbrainz",
+        ProviderScope.TRACK,
+        "22345678-1234-5678-9234-567812345678",
+        AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+    )
+    return PlannedChange(field, None, value, source, f"resolved {field}")  # type: ignore[arg-type]
 
 
 def test_lyrics_maps_losslessly_to_track_info() -> None:
@@ -129,6 +146,49 @@ def test_single_work_maps_id_and_safe_title_without_flattening() -> None:
         "mb_workid": reference.mbid,
         "work": "Synthetic Work",
     }
+
+
+def test_composer_credit_maps_native_names_and_aligned_ids_plus_state() -> None:
+    composer = CreditReference(
+        CreditParty("Composer", "12345678-1234-5678-9234-567812345678"),
+        CreditRole.COMPOSER,
+        EntityKind.WORK,
+        source_entity_id="32345678-1234-5678-9234-567812345678",
+    )
+    change = credit_change("composers", (composer,))
+
+    result = map_change_plan_to_track_info(ChangePlan(changes=(change,)))
+
+    assert {mapped.target_field: mapped.target_value for mapped in result.mapped_changes} == {
+        "composers": ("Composer",),
+        "composers_ids": (composer.party.mbid,),
+    }
+    assert result.state_changes == (change,)
+    assert result.blocked_changes == ()
+
+
+def test_performer_projection_deduplicates_names_without_flattening_instrument() -> None:
+    party = CreditParty("Performer", "12345678-1234-5678-9234-567812345678")
+    references = (
+        CreditReference(
+            party,
+            CreditRole.PERFORMER,
+            EntityKind.RECORDING,
+            instrument="guitar",
+        ),
+        CreditReference(
+            party,
+            CreditRole.PERFORMER,
+            EntityKind.RECORDING,
+            instrument="vocals",
+        ),
+    )
+    change = credit_change("performers", references)
+
+    result = map_change_plan_to_track_info(ChangePlan(changes=(change,)))
+
+    assert result.mapped_changes[0].target_value == ("Performer",)
+    assert result.state_changes == (change,)
 
 
 def test_actual_track_info_exposes_lossless_plain_lyrics_item_data_target() -> None:
@@ -240,6 +300,18 @@ def test_target_registry_and_mapping_results_are_immutable() -> None:
         "recording_date": TrackFieldTarget(
             "recording_date", "recording_date", TrackTargetShape.SCALAR_STRING
         ),
+        **{
+            field: TrackFieldTarget(field, field, TrackTargetShape.STRING_LIST)
+            for field in (
+                "composers",
+                "lyricists",
+                "arrangers",
+                "producers",
+                "conductors",
+                "performers",
+                "featured_artists",
+            )
+        },
     }
     result = map_change_plan_to_track_info(
         ChangePlan(changes=(planned_change("lyrics", "Synthetic plain line"),))

@@ -9,6 +9,8 @@ from math import isfinite
 from types import MappingProxyType
 
 from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
+from beetsplug.noqlenmeta.credit_resolution import CREDIT_FIELDS
+from beetsplug.noqlenmeta.credits import ArtistCredit, CreditReference
 from beetsplug.noqlenmeta.domain import MetadataValue
 from beetsplug.noqlenmeta.field_contracts import IdentifierCollection, PartialDate
 from beetsplug.noqlenmeta.work_identity import WorkReference
@@ -67,6 +69,13 @@ _TARGETS = (
     TrackFieldTarget("iswcs", "iswcs", TrackTargetShape.STRING_LIST),
     TrackFieldTarget("works", "mb_workids", TrackTargetShape.STRING_LIST),
     TrackFieldTarget("recording_date", "recording_date", TrackTargetShape.SCALAR_STRING),
+    TrackFieldTarget("composers", "composers", TrackTargetShape.STRING_LIST),
+    TrackFieldTarget("lyricists", "lyricists", TrackTargetShape.STRING_LIST),
+    TrackFieldTarget("arrangers", "arrangers", TrackTargetShape.STRING_LIST),
+    TrackFieldTarget("producers", "producers", TrackTargetShape.STRING_LIST),
+    TrackFieldTarget("conductors", "conductors", TrackTargetShape.STRING_LIST),
+    TrackFieldTarget("performers", "performers", TrackTargetShape.STRING_LIST),
+    TrackFieldTarget("featured_artists", "featured_artists", TrackTargetShape.STRING_LIST),
 )
 
 TRACK_FIELD_TARGETS: Mapping[str, TrackFieldTarget] = MappingProxyType(
@@ -101,6 +110,7 @@ class TrackTargetPlan:
     source: ChangePlan
     mapped_changes: tuple[TrackTargetChange, ...] = ()
     blocked_changes: tuple[TrackMappingBlocker, ...] = ()
+    state_changes: tuple[PlannedChange, ...] = ()
 
     @property
     def has_mapping_blockers(self) -> bool:
@@ -122,7 +132,40 @@ def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
 
     mapped: list[TrackTargetChange] = []
     blocked: list[TrackMappingBlocker] = []
+    state_changes: list[PlannedChange] = []
     for change in sorted(plan.changes, key=lambda item: item.field):
+        if change.field in CREDIT_FIELDS:
+            state_changes.append(change)
+            if change.field == "structured_artist_credits":
+                if not isinstance(change.after, ArtistCredit):
+                    raise TrackMappingError(
+                        "'structured_artist_credits' requires ArtistCredit"
+                    )
+                continue
+            if not isinstance(change.after, tuple) or not all(
+                isinstance(value, CreditReference) for value in change.after
+            ):
+                raise TrackMappingError(f"{change.field!r} requires CreditReference values")
+            names = tuple(dict.fromkeys(value.party.name for value in change.after))
+            mapped.append(
+                _target_change(change, change.field, TrackTargetShape.STRING_LIST, names)
+            )
+            id_target = {
+                "composers": "composers_ids",
+                "lyricists": "lyricists_ids",
+                "arrangers": "arrangers_ids",
+            }.get(change.field)
+            ids = tuple(value.party.mbid for value in change.after)
+            if id_target is not None and all(ids):
+                mapped.append(
+                    _target_change(
+                        change,
+                        id_target,
+                        TrackTargetShape.STRING_LIST,
+                        tuple(dict.fromkeys(ids)),  # type: ignore[arg-type]
+                    )
+                )
+            continue
         if change.field in {"isrcs", "iswcs"}:
             if not isinstance(change.after, IdentifierCollection):
                 raise TrackMappingError(f"{change.field!r} requires IdentifierCollection")
@@ -237,7 +280,7 @@ def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
             )
         )
 
-    return TrackTargetPlan(plan, tuple(mapped), tuple(blocked))
+    return TrackTargetPlan(plan, tuple(mapped), tuple(blocked), tuple(state_changes))
 
 
 def _target_change(

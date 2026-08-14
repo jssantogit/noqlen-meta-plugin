@@ -55,6 +55,7 @@ class TrackApplicationResult:
     applied_changes: tuple[TrackTargetChange, ...] = ()
     resolution_review_count: int = 0
     mapping_blocker_count: int = 0
+    applied_state_changes: tuple[object, ...] = ()
 
     @property
     def has_withheld_fields(self) -> bool:
@@ -184,6 +185,7 @@ def apply_track_target_plan(
         applied_changes=plan.mapped_changes,
         resolution_review_count=result.resolution_review_count,
         mapping_blocker_count=result.mapping_blocker_count,
+        applied_state_changes=plan.state_changes,
     )
 
 

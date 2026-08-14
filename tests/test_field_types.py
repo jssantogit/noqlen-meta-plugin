@@ -68,3 +68,27 @@ def test_recording_work_fields_round_trip_on_item(tmp_path, loaded_plugin) -> No
     assert fresh["iswcs"] == ["T-123.456.789-0"]
     assert fresh["mb_workids"] == ["11111111-2222-3333-4444-555555555555"]
     assert fresh["recording_date"] == "2020-05"
+
+
+def test_credit_query_projections_round_trip_without_structured_encoding(
+    tmp_path, loaded_plugin
+) -> None:
+    library = Library(str(tmp_path / "credits.db"))
+    item = Item(path=b"synthetic.flac", title="Synthetic", artist="Artist")
+    item["producers"] = ["Producer One", "Producer Two"]
+    item["conductors"] = ["Conductor"]
+    item["performers"] = ["Performer"]
+    item["featured_artists"] = ["Guest"]
+    item.add(library)
+    album = Album(album="Synthetic", albumartist="Artist")
+    album["producers"] = ["Release Producer"]
+    album.add(library)
+
+    fresh_item = library.get_item(item.id)
+    fresh_album = library.get_album(album.id)
+
+    assert fresh_item["producers"] == ["Producer One", "Producer Two"]
+    assert fresh_item["conductors"] == ["Conductor"]
+    assert fresh_item["performers"] == ["Performer"]
+    assert fresh_item["featured_artists"] == ["Guest"]
+    assert fresh_album["producers"] == ["Release Producer"]

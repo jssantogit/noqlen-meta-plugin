@@ -7,11 +7,21 @@ from beets.util import cached_classproperty
 
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
-from beetsplug.noqlenmeta.domain import MetadataCandidate
+from beetsplug.noqlenmeta.credit_state import read_credit_state
+from beetsplug.noqlenmeta.credits import CreditParty, CreditReference, CreditRole
+from beetsplug.noqlenmeta.domain import ExternalIdentifier, MetadataCandidate
+from beetsplug.noqlenmeta.evidence import (
+    AcquisitionMethod,
+    AcquisitionProvenance,
+    MetadataEvidence,
+    SubjectRef,
+)
+from beetsplug.noqlenmeta.field_contracts import EntityKind
 from beetsplug.noqlenmeta.library_track_application import (
     LibraryTrackApplicationError,
     apply_library_track_plan,
 )
+from beetsplug.noqlenmeta.providers.specs import ProviderScope
 from beetsplug.noqlenmeta.track_application import TrackApplicationMode
 from beetsplug.noqlenmeta.track_mapping import map_change_plan_to_track_info
 
@@ -85,6 +95,40 @@ def test_fractional_bpm_round_trips_as_canonical_float(
 
     assert result.stored
     assert library.get_item(item.id).bpm == 126.4
+
+
+def test_credit_apply_persists_query_projection_and_structured_state(
+    loaded_plugin: None, library: Library
+) -> None:
+    item = add_item(library)
+    artist_id = "11111111-1111-4111-8111-111111111111"
+    recording_id = "22222222-2222-4222-8222-222222222222"
+    reference = CreditReference(
+        CreditParty("Performer", artist_id),
+        CreditRole.PERFORMER,
+        EntityKind.RECORDING,
+        instrument="electric guitar",
+        source_entity_id=recording_id,
+    )
+    evidence = MetadataEvidence(
+        "performers",
+        (reference,),
+        SubjectRef(
+            EntityKind.RECORDING,
+            (ExternalIdentifier("musicbrainz.recording", recording_id),),
+        ),
+        "musicbrainz",
+        ProviderScope.TRACK,
+        recording_id,
+        AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+    )
+    change = PlannedChange("performers", None, (reference,), evidence, "resolved")
+
+    result = apply_library_track_plan(item, target_plan(change))
+
+    assert result.stored
+    assert library.get_item(item.id)["performers"] == ["Performer"]
+    assert read_credit_state(library, "item", item.id) == {"performers": (reference,)}
 
 
 def test_stale_database_state_is_rejected(library: Library) -> None:

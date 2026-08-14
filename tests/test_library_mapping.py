@@ -5,7 +5,15 @@ from beets.library import Album
 
 from beetsplug.noqlenmeta.beets_mapping import BeetsTargetShape
 from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
-from beetsplug.noqlenmeta.domain import MetadataCandidate
+from beetsplug.noqlenmeta.credits import CreditParty, CreditReference, CreditRole
+from beetsplug.noqlenmeta.domain import ExternalIdentifier, MetadataCandidate
+from beetsplug.noqlenmeta.evidence import (
+    AcquisitionMethod,
+    AcquisitionProvenance,
+    MetadataEvidence,
+    SubjectRef,
+)
+from beetsplug.noqlenmeta.field_contracts import EntityKind
 from beetsplug.noqlenmeta.library_mapping import (
     LIBRARY_FIELD_TARGETS,
     LibraryFieldTarget,
@@ -13,6 +21,7 @@ from beetsplug.noqlenmeta.library_mapping import (
     LibraryTargetPlan,
     map_change_plan_to_library_album,
 )
+from beetsplug.noqlenmeta.providers.specs import ProviderScope
 from beetsplug.noqlenmeta.resolver import FieldDecision, ResolutionAction
 
 
@@ -31,6 +40,25 @@ def mapped_change(field: str, value: object) -> LibraryTargetPlan:
     return map_change_plan_to_library_album(
         ChangePlan(changes=(planned_change(field, value),))
     )
+
+
+def release_credit_change(field: str, role: CreditRole) -> PlannedChange:
+    reference = CreditReference(
+        CreditParty("Release Credit"), role, EntityKind.RELEASE, source_entity_id="123456"
+    )
+    evidence = MetadataEvidence(
+        field,
+        (reference,),
+        SubjectRef(
+            EntityKind.RELEASE,
+            (ExternalIdentifier("discogs.release", "123456"),),
+        ),
+        "discogs",
+        ProviderScope.RELEASE,
+        "123456",
+        AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+    )
+    return PlannedChange(field, None, (reference,), evidence, "resolved")
 
 
 @pytest.mark.parametrize(
@@ -79,6 +107,17 @@ def test_lossless_library_mapping(
     assert result.mapped_changes[0].target_value == target_value
     if field in {"genres", "styles"}:
         assert result.mapped_changes[0].target_value is result.source.changes[0].after
+
+
+def test_release_credit_maps_name_projection_and_structured_state() -> None:
+    change = release_credit_change("producers", CreditRole.PRODUCER)
+
+    result = map_change_plan_to_library_album(ChangePlan(changes=(change,)))
+
+    assert result.mapped_changes[0].target_field == "producers"
+    assert result.mapped_changes[0].target_value == ("Release Credit",)
+    assert result.state_changes == (change,)
+    assert result.blocked_changes == ()
 
 
 @pytest.mark.parametrize(
