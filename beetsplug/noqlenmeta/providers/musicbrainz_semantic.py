@@ -8,6 +8,14 @@ from dataclasses import dataclass
 
 from requests import RequestException
 
+from beetsplug.noqlenmeta.credits import (
+    ArtistCredit,
+    ArtistCreditNode,
+    CreditParty,
+    CreditReference,
+    CreditRole,
+    canonical_credit_references,
+)
 from beetsplug.noqlenmeta.domain import (
     ArtistEnrichmentContext,
     ExternalIdentifier,
@@ -57,6 +65,7 @@ _NON_SPECIFIC_LANGUAGES = frozenset({"mul", "und", "zxx"})
 _PERFORMANCE_TYPE_ID = "a3005666-a872-32c3-ad06-98af558e99b0"
 _RECORDED_AT_TYPE_ID = "ad462279-14b0-4180-9b58-571d0eef7c51"
 _RECORDING_SCHEMA_VERSION = "normalized-recording-v1"
+_WORK_SCHEMA_VERSION = "normalized-work-v2"
 _DEFAULT_FETCH_PROFILE = EntityFetchProfile()
 
 
@@ -104,7 +113,11 @@ class MusicBrainzSemanticClient:
             "musicbrainz",
             entity_type,
             canonical_id,
-            _RECORDING_SCHEMA_VERSION if entity_type == "recording" else "v1",
+            _RECORDING_SCHEMA_VERSION
+            if entity_type == "recording"
+            else _WORK_SCHEMA_VERSION
+            if entity_type == "work"
+            else "v1",
             profile,
         )
 
@@ -113,7 +126,7 @@ class MusicBrainzSemanticClient:
                 fetcher = self._fetchers[entity_type]
                 payload = (
                     fetcher(canonical_id, profile)
-                    if entity_type == "recording"
+                    if entity_type == "recording" or entity_type == "work" and profile.includes
                     else fetcher(canonical_id)
                 )
             except RequestException:
@@ -140,8 +153,10 @@ class MusicBrainzSemanticClient:
     ) -> Mapping[str, object] | None:
         return self._lookup("recording", entity_id, profile)
 
-    def lookup_work(self, entity_id: str) -> Mapping[str, object] | None:
-        return self._lookup("work", entity_id)
+    def lookup_work(
+        self, entity_id: str, profile: EntityFetchProfile = _DEFAULT_FETCH_PROFILE
+    ) -> Mapping[str, object] | None:
+        return self._lookup("work", entity_id, profile)
 
     def lookup_artist(self, entity_id: str) -> Mapping[str, object] | None:
         return self._lookup("artist", entity_id)
@@ -198,7 +213,18 @@ class MusicBrainzTrackProvider:
         if "recording_date" in self.enabled_fields:
             for recording_date in _recording_dates(payload):
                 evidence.append(_recording_evidence("recording_date", recording_date, recording_id))
-        work_fields = {"lyrics_languages", "artist_languages", "iswcs"}
+        for field, value in _recording_credit_values(payload, recording_id).items():
+            if field in self.enabled_fields:
+                evidence.append(_recording_evidence(field, value, recording_id))
+        if (
+            "structured_artist_credits" in self.enabled_fields
+            and (artist_credit := _artist_credit(payload, EntityKind.RECORDING, recording_id))
+        ):
+            evidence.append(
+                _recording_evidence("structured_artist_credits", artist_credit, recording_id)
+            )
+        work_credit_fields = {"composers", "lyricists", "arrangers"}
+        work_fields = {"lyrics_languages", "artist_languages", "iswcs"} | work_credit_fields
         if self.enabled_fields & work_fields:
             work_ids = (
                 tuple(reference.mbid for reference in work_references)
@@ -209,7 +235,12 @@ class MusicBrainzTrackProvider:
                 work_ids = _related_ids(payload, "work")
             for work_id in work_ids:
                 try:
-                    work = self.client.lookup_work(work_id)
+                    work = self.client.lookup_work(
+                        work_id,
+                        EntityFetchProfile(("artist-rels",))
+                        if self.enabled_fields & work_credit_fields
+                        else _DEFAULT_FETCH_PROFILE,
+                    )
                 except ProviderError:
                     unavailable_fields.update(
                         self.enabled_fields & {"lyrics_languages", "artist_languages"}
@@ -222,6 +253,9 @@ class MusicBrainzTrackProvider:
                     _append_unique(languages, language)
                 if "iswcs" in self.enabled_fields and (iswcs := _work_iswcs(work)):
                     evidence.append(_work_evidence("iswcs", iswcs, work_id, recording_id))
+                for field, value in _work_credit_values(work, work_id).items():
+                    if field in self.enabled_fields:
+                        evidence.append(_work_evidence(field, value, work_id, recording_id))
         metadata = ()
         if languages:
             metadata = (
@@ -491,7 +525,211 @@ def _recording_profile(enabled_fields: Collection[str]) -> EntityFetchProfile:
         includes.add("work-rels")
     if "recording_date" in fields:
         includes.add("place-rels")
+    if fields & {
+        "producers",
+        "arrangers",
+        "conductors",
+        "performers",
+        "featured_artists",
+        "structured_artist_credits",
+    }:
+        includes.add("artist-rels")
+    if fields & {"composers", "lyricists", "arrangers"}:
+        includes.add("work-rels")
     return EntityFetchProfile(tuple(includes))
+
+
+_RECORDING_CREDIT_TYPES = {
+    "5c0ceac3-feb4-41f0-868d-dc06f6e27fc0": ("producer", CreditRole.PRODUCER),
+    "22661fb8-cdb7-4f67-8385-b2a8be6c9f0d": ("arranger", CreditRole.ARRANGER),
+    "234670ce-5f22-4fd0-921b-ef1662695c5d": ("conductor", CreditRole.CONDUCTOR),
+    "628a9658-f54c-4142-b0c0-95f031b544da": ("performer", CreditRole.PERFORMER),
+    "59054b12-01ac-43ee-a618-285fd397e461": ("instrument", CreditRole.PERFORMER),
+    "0fdbe3c6-7700-4a31-ae54-b53f06ae1cfa": ("vocal", CreditRole.PERFORMER),
+    "3b6616c5-88ba-4341-b4ee-81ce1e6d7ebb": (
+        "performing orchestra",
+        CreditRole.PERFORMER,
+    ),
+}
+_WORK_CREDIT_TYPES = {
+    "d59d99ea-23d4-4a80-b066-edca32ee158f": ("composer", CreditRole.COMPOSER),
+    "3e48faba-ec01-47fd-8e89-30e81161661c": ("lyricist", CreditRole.LYRICIST),
+    "d3fd781c-5894-47e2-8c12-86cc0e2c8d08": ("arranger", CreditRole.ARRANGER),
+}
+_ROLE_FIELDS = {
+    CreditRole.COMPOSER: "composers",
+    CreditRole.LYRICIST: "lyricists",
+    CreditRole.PRODUCER: "producers",
+    CreditRole.ARRANGER: "arrangers",
+    CreditRole.CONDUCTOR: "conductors",
+    CreditRole.PERFORMER: "performers",
+    CreditRole.FEATURED_ARTIST: "featured_artists",
+    CreditRole.GUEST_ARTIST: "featured_artists",
+}
+
+
+def _recording_credit_values(
+    payload: Mapping[str, object], source_entity_id: str
+) -> dict[str, tuple[CreditReference, ...]]:
+    return _credit_values(
+        payload,
+        EntityKind.RECORDING,
+        source_entity_id,
+        _RECORDING_CREDIT_TYPES,
+    )
+
+
+def _work_credit_values(
+    payload: Mapping[str, object], source_entity_id: str
+) -> dict[str, tuple[CreditReference, ...]]:
+    return _credit_values(payload, EntityKind.WORK, source_entity_id, _WORK_CREDIT_TYPES)
+
+
+def _credit_values(
+    payload: Mapping[str, object],
+    scope: EntityKind,
+    source_entity_id: str,
+    accepted_types: Mapping[str, tuple[str, CreditRole]],
+) -> dict[str, tuple[CreditReference, ...]]:
+    grouped: dict[str, list[CreditReference]] = {}
+    for relation in _relation_rows(payload, "artist"):
+        relation_type = _text(relation.get("type"))
+        type_id_present = "type_id" in relation or "type-id" in relation
+        raw_type_id = relation.get("type_id", relation.get("type-id"))
+        relation_type_id = canonical_uuid(raw_type_id) if type_id_present else None
+        accepted = accepted_types.get(relation_type_id) if relation_type_id is not None else None
+        if type_id_present and accepted is None:
+            continue
+        if accepted is None:
+            accepted = next(
+                (
+                    value
+                    for value in accepted_types.values()
+                    if relation_type.casefold() == value[0]
+                ),
+                None,
+            )
+        if accepted is None or relation_type.casefold() != accepted[0]:
+            continue
+        artist = relation.get("artist")
+        if not isinstance(artist, Mapping):
+            continue
+        artist_id = canonical_uuid(artist.get("id"))
+        artist_name = _text(artist.get("name"))
+        if artist_id is None or not artist_name:
+            continue
+        attributes = tuple(
+            value.strip()
+            for value in relation.get("attributes", ())
+            if isinstance(value, str) and value.strip()
+        ) if _is_sequence(relation.get("attributes", ())) else ()
+        try:
+            party = CreditParty(
+                artist_name,
+                artist_id,
+                _text(relation.get("target_credit", relation.get("target-credit"))) or None,
+            )
+            instruments = _relation_instruments(relation, accepted[1])
+            references = [
+                CreditReference(
+                    party,
+                    accepted[1],
+                    scope,
+                    instrument=instrument,
+                    relation_type=relation_type,
+                    relation_type_id=relation_type_id,
+                    source_entity_id=source_entity_id,
+                    attributes=attributes,
+                    direction=_text(relation.get("direction")) or None,
+                    ordering_key=_non_negative_int(
+                        relation.get("ordering_key", relation.get("ordering-key"))
+                    ),
+                )
+                for instrument in instruments
+            ]
+        except (TypeError, ValueError):
+            continue
+        grouped.setdefault(_ROLE_FIELDS[accepted[1]], []).extend(references)
+        if scope is EntityKind.RECORDING and any(
+            attribute.casefold() == "guest" for attribute in attributes
+        ):
+            grouped.setdefault("featured_artists", []).append(
+                CreditReference(
+                    party,
+                    CreditRole.GUEST_ARTIST,
+                    scope,
+                    relation_type=relation_type,
+                    relation_type_id=relation_type_id,
+                    source_entity_id=source_entity_id,
+                    attributes=attributes,
+                    direction=_text(relation.get("direction")) or None,
+                )
+            )
+    return {
+        field: canonical_credit_references(references)
+        for field, references in grouped.items()
+        if references
+    }
+
+
+def _relation_instruments(
+    relation: Mapping[str, object], role: CreditRole
+) -> tuple[str | None, ...]:
+    if role is not CreditRole.PERFORMER:
+        return (None,)
+    relation_type = _text(relation.get("type")).casefold()
+    values = relation.get("attribute_values", relation.get("attribute-values"))
+    instruments: list[str] = []
+    if isinstance(values, Mapping):
+        for value in values.values():
+            text = _text(value)
+            if text:
+                _append_unique(instruments, text)
+    if instruments:
+        return tuple(instruments)
+    if relation_type == "vocal":
+        return ("vocals",)
+    return (None,)
+
+
+def _artist_credit(
+    payload: Mapping[str, object], scope: EntityKind, source_entity_id: str
+) -> ArtistCredit | None:
+    rows = payload.get("artist_credit", payload.get("artist-credit"))
+    if not _is_sequence(rows):
+        return None
+    nodes: list[ArtistCreditNode] = []
+    for position, row in enumerate(rows):
+        if not isinstance(row, Mapping):
+            return None
+        artist = row.get("artist")
+        if not isinstance(artist, Mapping):
+            return None
+        artist_id = canonical_uuid(artist.get("id"))
+        canonical_name = _text(artist.get("name"))
+        credited_name = _text(row.get("name"))
+        join_phrase = row.get("joinphrase", "")
+        if (
+            artist_id is None
+            or not canonical_name
+            or not credited_name
+            or not isinstance(join_phrase, str)
+        ):
+            return None
+        nodes.append(
+            ArtistCreditNode(
+                artist_id,
+                canonical_name,
+                credited_name,
+                join_phrase,
+                position,
+            )
+        )
+    return ArtistCredit(scope, tuple(nodes), source_entity_id) if nodes else None
+
+
+def _non_negative_int(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
 
 
 def _relation_rows(
@@ -706,10 +944,12 @@ def _fetch_recording(
     return MusicBrainzAPI().get_recording(entity_id, includes=list(profile.includes))
 
 
-def _fetch_work(entity_id: str) -> Mapping[str, object]:
+def _fetch_work(
+    entity_id: str, profile: EntityFetchProfile = _DEFAULT_FETCH_PROFILE
+) -> Mapping[str, object]:
     from beetsplug._utils.musicbrainz import MusicBrainzAPI
 
-    return MusicBrainzAPI().get_work(entity_id)
+    return MusicBrainzAPI().get_work(entity_id, includes=list(profile.includes))
 
 
 def _fetch_artist(entity_id: str) -> Mapping[str, object]:

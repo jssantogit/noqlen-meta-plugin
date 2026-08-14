@@ -10,6 +10,7 @@ from types import MappingProxyType
 from beetsplug.noqlenmeta.field_contracts import EntityKind, field_contract
 from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_CAPABILITY_REGISTRY,
+    CREDIT_PROVIDER_CAPABILITY_REGISTRY,
     RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY,
     ProviderScope,
 )
@@ -264,6 +265,50 @@ _RULES = (
         "iswcs", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.TRACK, EntityKind.WORK
     ),
     _rule("recording_date", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.TRACK),
+    _rule(
+        "composers",
+        "musicbrainz",
+        AuthorityRole.PRIMARY,
+        ProviderScope.TRACK,
+        EntityKind.WORK,
+    ),
+    _rule(
+        "lyricists",
+        "musicbrainz",
+        AuthorityRole.PRIMARY,
+        ProviderScope.TRACK,
+        EntityKind.WORK,
+    ),
+    _rule(
+        "arrangers",
+        "musicbrainz",
+        AuthorityRole.PRIMARY,
+        ProviderScope.TRACK,
+        EntityKind.WORK,
+    ),
+    _rule(
+        "arrangers",
+        "musicbrainz",
+        AuthorityRole.PRIMARY,
+        ProviderScope.TRACK,
+        EntityKind.RECORDING,
+    ),
+    *(
+        _rule(
+            field,
+            "musicbrainz",
+            AuthorityRole.PRIMARY,
+            ProviderScope.TRACK,
+            EntityKind.RECORDING,
+        )
+        for field in (
+            "producers",
+            "conductors",
+            "performers",
+            "featured_artists",
+            "structured_artist_credits",
+        )
+    ),
 )
 
 
@@ -277,7 +322,7 @@ def _validate_capabilities(rules: tuple[AuthorityRule, ...]) -> None:
         )
         if key not in BUILTIN_PROVIDER_CAPABILITY_REGISTRY and (
             key not in RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY
-        ):
+        ) and key not in CREDIT_PROVIDER_CAPABILITY_REGISTRY:
             raise ValueError(f"authority has no registered provider capability: {key!r}")
 
 

@@ -10,6 +10,8 @@ from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_SPECS,
     BUILTIN_RELEASE_PROVIDER_SPECS,
     BUILTIN_TRACK_PROVIDER_SPECS,
+    CREDIT_PROVIDER_CAPABILITIES,
+    CREDIT_PROVIDER_CAPABILITY_REGISTRY,
     DISCOGS_SPEC,
     ITUNES_SPEC,
     LASTFM_ARTIST_SPEC,
@@ -361,6 +363,25 @@ def test_release_catalog_capabilities_match_only_implemented_v3_methods() -> Non
         AcquisitionCharacteristic.SUPPORTING_TRAVERSAL in capability.characteristics
         for capability in release_group
     )
+
+
+def test_credit_capabilities_match_implemented_musicbrainz_scopes() -> None:
+    actual = {
+        (capability.provider, capability.field, capability.asserted_entity)
+        for capability in CREDIT_PROVIDER_CAPABILITIES
+    }
+    assert actual == {
+        ("musicbrainz", "composers", EntityKind.WORK),
+        ("musicbrainz", "lyricists", EntityKind.WORK),
+        ("musicbrainz", "arrangers", EntityKind.WORK),
+        ("musicbrainz", "arrangers", EntityKind.RECORDING),
+        ("musicbrainz", "producers", EntityKind.RECORDING),
+        ("musicbrainz", "conductors", EntityKind.RECORDING),
+        ("musicbrainz", "performers", EntityKind.RECORDING),
+        ("musicbrainz", "featured_artists", EntityKind.RECORDING),
+        ("musicbrainz", "structured_artist_credits", EntityKind.RECORDING),
+    }
+    assert len(CREDIT_PROVIDER_CAPABILITY_REGISTRY) == len(CREDIT_PROVIDER_CAPABILITIES)
 
 
 def test_capability_rejects_entity_outside_field_contract() -> None:

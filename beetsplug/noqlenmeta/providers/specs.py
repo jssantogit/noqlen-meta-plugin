@@ -332,6 +332,62 @@ RELEASE_CATALOG_PROVIDER_CAPABILITIES = (
 RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY = capability_registry(
     RELEASE_CATALOG_PROVIDER_CAPABILITIES
 )
+
+
+def _credit_capability(
+    provider: str,
+    field: str,
+    entity: EntityKind,
+    scope: ProviderScope,
+) -> ProviderCapability:
+    return ProviderCapability(
+        provider=provider,
+        field=field,
+        asserted_entity=entity,
+        acquisition_scope=scope,
+        identity_prerequisites=(
+            frozenset({IdentityPrerequisite.EXACT_CANONICAL_ID})
+            if provider == "musicbrainz"
+            else frozenset(
+                {
+                    IdentityPrerequisite.EXACT_PROVIDER_ID,
+                    IdentityPrerequisite.STRUCTURALLY_VALIDATED_CONTEXT,
+                }
+            )
+        ),
+        characteristics=frozenset(
+            {
+                AcquisitionCharacteristic.DIRECT_LOOKUP,
+                AcquisitionCharacteristic.RESPONSE_REUSE,
+                *(
+                    {AcquisitionCharacteristic.SUPPORTING_TRAVERSAL}
+                    if entity is EntityKind.WORK
+                    else set()
+                ),
+            }
+        ),
+    )
+
+
+CREDIT_PROVIDER_CAPABILITIES = (
+    _credit_capability("musicbrainz", "composers", EntityKind.WORK, ProviderScope.TRACK),
+    _credit_capability("musicbrainz", "lyricists", EntityKind.WORK, ProviderScope.TRACK),
+    _credit_capability("musicbrainz", "arrangers", EntityKind.WORK, ProviderScope.TRACK),
+    _credit_capability("musicbrainz", "arrangers", EntityKind.RECORDING, ProviderScope.TRACK),
+    _credit_capability("musicbrainz", "producers", EntityKind.RECORDING, ProviderScope.TRACK),
+    _credit_capability("musicbrainz", "conductors", EntityKind.RECORDING, ProviderScope.TRACK),
+    _credit_capability("musicbrainz", "performers", EntityKind.RECORDING, ProviderScope.TRACK),
+    _credit_capability(
+        "musicbrainz", "featured_artists", EntityKind.RECORDING, ProviderScope.TRACK
+    ),
+    _credit_capability(
+        "musicbrainz",
+        "structured_artist_credits",
+        EntityKind.RECORDING,
+        ProviderScope.TRACK,
+    ),
+)
+CREDIT_PROVIDER_CAPABILITY_REGISTRY = capability_registry(CREDIT_PROVIDER_CAPABILITIES)
 BUILTIN_PROVIDER_SPECS: Mapping[ProviderKey, ProviderSpec] = MappingProxyType(
     {(spec.name, spec.scope): spec for spec in _BUILTIN_PROVIDER_CAPABILITIES}
 )

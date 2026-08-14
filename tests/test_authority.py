@@ -144,3 +144,35 @@ def test_original_year_has_no_independent_provider_authority() -> None:
         )
         is AuthorityRole.INELIGIBLE
     )
+
+
+@pytest.mark.parametrize(
+    ("field", "entity"),
+    [
+        ("composers", EntityKind.WORK),
+        ("lyricists", EntityKind.WORK),
+        ("arrangers", EntityKind.WORK),
+        ("arrangers", EntityKind.RECORDING),
+        ("producers", EntityKind.RECORDING),
+        ("conductors", EntityKind.RECORDING),
+        ("performers", EntityKind.RECORDING),
+        ("featured_artists", EntityKind.RECORDING),
+        ("structured_artist_credits", EntityKind.RECORDING),
+    ],
+)
+def test_musicbrainz_credit_authority_matches_implemented_scopes(
+    field: str, entity: EntityKind
+) -> None:
+    assert (
+        AUTHORITY_MATRIX.role_for(field, entity, ProviderScope.TRACK, "musicbrainz")
+        is AuthorityRole.PRIMARY
+    )
+
+
+def test_unimplemented_recording_composer_authority_remains_ineligible() -> None:
+    assert (
+        AUTHORITY_MATRIX.role_for(
+            "composers", EntityKind.RECORDING, ProviderScope.TRACK, "musicbrainz"
+        )
+        is AuthorityRole.INELIGIBLE
+    )

@@ -4,6 +4,7 @@ import pytest
 from beetsplug._utils.musicbrainz import MusicBrainzAPI
 from requests import RequestException
 
+from beetsplug.noqlenmeta.credits import ArtistCredit, CreditReference, CreditRole
 from beetsplug.noqlenmeta.domain import (
     ArtistEnrichmentContext,
     ExternalIdentifier,
@@ -11,7 +12,7 @@ from beetsplug.noqlenmeta.domain import (
     SemanticCategory,
     TrackEnrichmentContext,
 )
-from beetsplug.noqlenmeta.field_contracts import PartialDate
+from beetsplug.noqlenmeta.field_contracts import EntityKind, PartialDate
 from beetsplug.noqlenmeta.genre_evidence import GenreEvidenceKind
 from beetsplug.noqlenmeta.provider_cache import CommandEntityCache
 from beetsplug.noqlenmeta.providers import ProviderError
@@ -31,6 +32,7 @@ WORK_TWO = "33333333-3333-4333-8333-333333333333"
 PERFORMANCE_TYPE_ID = "a3005666-a872-32c3-ad06-98af558e99b0"
 RECORDED_AT_TYPE_ID = "ad462279-14b0-4180-9b58-571d0eef7c51"
 ARTIST_MBID = "44444444-4444-4444-8444-444444444444"
+ARTIST_TWO_MBID = "88888888-8888-4888-8888-888888888888"
 SALVADOR_MBID = "55555555-5555-4555-8555-555555555555"
 BRAZIL_MBID = "66666666-6666-4666-8666-666666666666"
 FAILED_AREA_MBID = "77777777-7777-4777-8777-777777777777"
@@ -406,6 +408,179 @@ def test_production_recording_fetch_uses_one_deterministic_include_union(
             ("genres", "isrcs", "place-rels", "tags", "work-rels"),
         )
     ]
+
+
+def test_recording_credit_relations_and_artist_credit_use_normalized_shape() -> None:
+    normalized = MusicBrainzAPI._normalize_data(
+        {
+            "id": RECORDING_MBID,
+            "artist-credit": [
+                {
+                    "name": "Credited Artist",
+                    "joinphrase": " feat. ",
+                    "artist": {"id": ARTIST_MBID, "name": "Canonical Artist"},
+                },
+                {
+                    "name": "Guest Artist",
+                    "joinphrase": "",
+                    "artist": {"id": ARTIST_TWO_MBID, "name": "Guest Artist"},
+                },
+            ],
+            "relations": [
+                {
+                    "target-type": "artist",
+                    "type": "producer",
+                    "type-id": "5c0ceac3-feb4-41f0-868d-dc06f6e27fc0",
+                    "target-credit": "Credited Producer",
+                    "direction": "backward",
+                    "artist": {"id": ARTIST_MBID, "name": "Canonical Artist"},
+                },
+                {
+                    "target-type": "artist",
+                    "type": "instrument",
+                    "type-id": "59054b12-01ac-43ee-a618-285fd397e461",
+                    "attributes": ["guest", "solo"],
+                    "attribute-values": {"instrument": "electric guitar"},
+                    "artist": {"id": ARTIST_TWO_MBID, "name": "Guest Artist"},
+                },
+                {
+                    "target-type": "artist",
+                    "type": "vocal",
+                    "type-id": "0fdbe3c6-7700-4a31-ae54-b53f06ae1cfa",
+                    "artist": {"id": ARTIST_TWO_MBID, "name": "Guest Artist"},
+                },
+            ],
+        }
+    )
+    semantic_client, _ = client(recording=normalized)
+
+    enrichment = MusicBrainzTrackProvider(
+        semantic_client,
+        enabled_fields={
+            "producers",
+            "performers",
+            "featured_artists",
+            "structured_artist_credits",
+        },
+    ).get_enrichment(track_context())
+
+    fields = {item.field: item.value for item in enrichment.evidence}
+    assert fields["producers"] == (
+        CreditReference(
+            party=fields["producers"][0].party,
+            role=CreditRole.PRODUCER,
+            scope=EntityKind.RECORDING,
+            relation_type="producer",
+            relation_type_id="5c0ceac3-feb4-41f0-868d-dc06f6e27fc0",
+            source_entity_id=RECORDING_MBID,
+            direction="backward",
+        ),
+    )
+    assert fields["producers"][0].party.credited_as == "Credited Producer"
+    assert [(value.role, value.instrument) for value in fields["performers"]] == [
+        (CreditRole.PERFORMER, "electric guitar"),
+        (CreditRole.PERFORMER, "vocals"),
+    ]
+    assert fields["featured_artists"][0].role is CreditRole.GUEST_ARTIST
+    artist_credit = fields["structured_artist_credits"]
+    assert isinstance(artist_credit, ArtistCredit)
+    assert [node.canonical_name for node in artist_credit.nodes] == [
+        "Canonical Artist",
+        "Guest Artist",
+    ]
+    assert artist_credit.nodes[0].join_phrase == " feat. "
+
+
+def test_recording_credit_type_ids_fail_closed_per_relation() -> None:
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "artist_relations": [
+                {
+                    "type": "producer",
+                    "type_id": "invalid",
+                    "artist": {"id": ARTIST_MBID, "name": "Ignored"},
+                },
+                {
+                    "type": "producer",
+                    "artist": {"id": ARTIST_TWO_MBID, "name": "Accepted"},
+                },
+            ],
+        }
+    )
+
+    enrichment = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"producers"}
+    ).get_enrichment(track_context())
+
+    producers = next(item.value for item in enrichment.evidence if item.field == "producers")
+    assert [credit.party.name for credit in producers] == ["Accepted"]
+
+
+def test_work_credits_share_one_profiled_work_lookup_and_do_not_promote_writer() -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [
+                {
+                    "type": "performance",
+                    "type_id": PERFORMANCE_TYPE_ID,
+                    "work": {"id": WORK_ONE, "title": "Synthetic Work"},
+                }
+            ],
+        },
+        works={
+            WORK_ONE: {
+                "id": WORK_ONE,
+                "iswcs": ["T-123.456.789-0"],
+                "languages": ["eng"],
+                "artist_relations": [
+                    {
+                        "type": "composer",
+                        "type_id": "d59d99ea-23d4-4a80-b066-edca32ee158f",
+                        "artist": {"id": ARTIST_MBID, "name": "Composer"},
+                    },
+                    {
+                        "type": "lyricist",
+                        "type_id": "3e48faba-ec01-47fd-8e89-30e81161661c",
+                        "artist": {"id": ARTIST_TWO_MBID, "name": "Lyricist"},
+                    },
+                    {
+                        "type": "writer",
+                        "type_id": "a255bca1-b157-4518-9108-7b147dc3fc68",
+                        "artist": {"id": ARTIST_TWO_MBID, "name": "Writer"},
+                    },
+                ],
+            }
+        },
+    )
+
+    enrichment = MusicBrainzTrackProvider(
+        semantic_client,
+        enabled_fields={"works", "iswcs", "lyrics_languages", "composers", "lyricists"},
+    ).get_enrichment(track_context())
+
+    by_field = {item.field: item.value for item in enrichment.evidence}
+    assert [credit.party.name for credit in by_field["composers"]] == ["Composer"]
+    assert [credit.party.name for credit in by_field["lyricists"]] == ["Lyricist"]
+    assert calls["work"] == [WORK_ONE]
+
+
+def test_credit_fields_add_only_required_recording_include() -> None:
+    calls: list[tuple[str, ...]] = []
+
+    def fetch_recording(recording_id: str, profile: object) -> Mapping[str, object]:
+        calls.append(profile.includes)
+        return {"id": recording_id}
+
+    provider = MusicBrainzTrackProvider(
+        MusicBrainzSemanticClient(fetch_recording=fetch_recording),
+        enabled_fields={"producers", "structured_artist_credits"},
+    )
+
+    provider.get_enrichment(track_context())
+
+    assert calls == [("artist-rels",)]
 
 
 def test_recording_cache_does_not_reuse_insufficient_include_profile() -> None:
