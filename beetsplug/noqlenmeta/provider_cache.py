@@ -7,11 +7,23 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
+class EntityFetchProfile:
+    """Deterministic acquisition coverage for one exact entity response."""
+
+    includes: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        values = tuple(sorted({_include(value) for value in self.includes}))
+        object.__setattr__(self, "includes", values)
+
+
+@dataclass(frozen=True, slots=True)
 class EntityCacheKey:
     provider: str
     entity_type: str
     entity_id: str
     schema_version: str = "v1"
+    profile: EntityFetchProfile = EntityFetchProfile()
 
     def __post_init__(self) -> None:
         for field in ("provider", "entity_type", "entity_id", "schema_version"):
@@ -22,6 +34,14 @@ class EntityCacheKey:
             if field in {"provider", "entity_type"}:
                 normalized = normalized.casefold()
             object.__setattr__(self, field, normalized)
+        if not isinstance(self.profile, EntityFetchProfile):
+            raise TypeError("profile must be an EntityFetchProfile")
+
+
+def _include(value: object) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("include must be a non-empty string")
+    return value.strip()
 
 
 class CommandEntityCache:

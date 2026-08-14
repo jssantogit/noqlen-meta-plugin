@@ -31,7 +31,11 @@ from beetsplug.noqlenmeta.genre_taxonomy import (
     DEFAULT_GENRE_TAXONOMY,
     GenreSemanticCategory,
 )
-from beetsplug.noqlenmeta.provider_cache import CommandEntityCache, EntityCacheKey
+from beetsplug.noqlenmeta.provider_cache import (
+    CommandEntityCache,
+    EntityCacheKey,
+    EntityFetchProfile,
+)
 from beetsplug.noqlenmeta.providers.base import ProviderError
 from beetsplug.noqlenmeta.providers.specs import (
     MUSICBRAINZ_ARTIST_SPEC,
@@ -42,7 +46,7 @@ from beetsplug.noqlenmeta.release_catalog import parse_partial_date
 from beetsplug.noqlenmeta.semantic_tags import classify_semantic_tag
 from beetsplug.noqlenmeta.work_identity import WorkReference, canonical_work_references
 
-EntityFetcher = Callable[[str], Mapping[str, object] | None]
+EntityFetcher = Callable[..., Mapping[str, object] | None]
 
 _PUBLIC_URL = "https://musicbrainz.org/{}/{}"
 _DIRECT_CONFIDENCE = 0.99
@@ -50,6 +54,10 @@ _COMMUNITY_CONFIDENCE = 0.85
 _LANGUAGE = re.compile(r"[a-z]{3}")
 _ISWC = re.compile(r"T-\d{3}\.\d{3}\.\d{3}-\d")
 _NON_SPECIFIC_LANGUAGES = frozenset({"mul", "und", "zxx"})
+_PERFORMANCE_TYPE_ID = "a3005666-a872-32c3-ad06-98af558e99b0"
+_RECORDED_AT_TYPE_ID = "ad462279-14b0-4180-9b58-571d0eef7c51"
+_RECORDING_SCHEMA_VERSION = "normalized-recording-v1"
+_DEFAULT_FETCH_PROFILE = EntityFetchProfile()
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,15 +91,31 @@ class MusicBrainzSemanticClient:
             "area": fetch_area or _fetch_area,
         }
 
-    def _lookup(self, entity_type: str, entity_id: str) -> Mapping[str, object] | None:
+    def _lookup(
+        self,
+        entity_type: str,
+        entity_id: str,
+        profile: EntityFetchProfile = _DEFAULT_FETCH_PROFILE,
+    ) -> Mapping[str, object] | None:
         canonical_id = canonical_uuid(entity_id)
         if canonical_id is None:
             return None
-        key = EntityCacheKey("musicbrainz", entity_type, canonical_id)
+        key = EntityCacheKey(
+            "musicbrainz",
+            entity_type,
+            canonical_id,
+            _RECORDING_SCHEMA_VERSION if entity_type == "recording" else "v1",
+            profile,
+        )
 
         def fetch_and_validate() -> Mapping[str, object] | None:
             try:
-                payload = self._fetchers[entity_type](canonical_id)
+                fetcher = self._fetchers[entity_type]
+                payload = (
+                    fetcher(canonical_id, profile)
+                    if entity_type == "recording"
+                    else fetcher(canonical_id)
+                )
             except RequestException:
                 raise ProviderError("MusicBrainz API request failed") from None
             if payload is None:
@@ -111,8 +135,10 @@ class MusicBrainzSemanticClient:
     def lookup_release_group(self, entity_id: str) -> Mapping[str, object] | None:
         return self._lookup("release_group", entity_id)
 
-    def lookup_recording(self, entity_id: str) -> Mapping[str, object] | None:
-        return self._lookup("recording", entity_id)
+    def lookup_recording(
+        self, entity_id: str, profile: EntityFetchProfile = _DEFAULT_FETCH_PROFILE
+    ) -> Mapping[str, object] | None:
+        return self._lookup("recording", entity_id, profile)
 
     def lookup_work(self, entity_id: str) -> Mapping[str, object] | None:
         return self._lookup("work", entity_id)
@@ -135,16 +161,21 @@ class MusicBrainzTrackProvider:
         enabled_fields: Collection[str] | None = None,
     ) -> None:
         self.client = client or MusicBrainzSemanticClient()
-        self.enabled_fields = set(enabled_fields or self.supported_fields | {"artist_languages"})
+        defaults = self.supported_fields | {"artist_languages"}
+        self.enabled_fields = set(defaults if enabled_fields is None else enabled_fields)
 
     def get_semantic_evidence(self, context: TrackEnrichmentContext) -> SemanticEvidenceBundle:
         return self.get_enrichment(context).semantic
 
     def get_enrichment(self, context: TrackEnrichmentContext) -> MusicBrainzTrackEnrichment:
+        if not self.enabled_fields:
+            return MusicBrainzTrackEnrichment()
         recording_id = _context_mbid(context.external_ids, "musicbrainz.recording")
         if recording_id is None:
             return MusicBrainzTrackEnrichment()
-        payload = self.client.lookup_recording(recording_id)
+        payload = self.client.lookup_recording(
+            recording_id, _recording_profile(self.enabled_fields)
+        )
         if payload is None:
             return MusicBrainzTrackEnrichment()
         genres, tags = ((), ())
@@ -370,21 +401,19 @@ def _work_iswcs(payload: Mapping[str, object]) -> IdentifierCollection | None:
 
 
 def _work_references(payload: Mapping[str, object]) -> tuple[WorkReference, ...]:
-    relations = payload.get("relations")
-    if not isinstance(relations, Sequence) or isinstance(relations, (str, bytes)):
-        return ()
+    relations = _relation_rows(payload, "work")
     values: list[WorkReference] = []
     for relation in relations:
-        if not isinstance(relation, Mapping) or relation.get("target-type") != "work":
-            continue
         work = relation.get("work")
         if not isinstance(work, Mapping):
             continue
         work_id = canonical_uuid(work.get("id"))
         relation_type = _text(relation.get("type"))
-        if work_id is None or not relation_type:
+        type_id = canonical_uuid(relation.get("type_id") or relation.get("type-id"))
+        if work_id is None or not _relationship_matches(
+            type_id, relation_type, _PERFORMANCE_TYPE_ID, "performance"
+        ):
             continue
-        type_id = canonical_uuid(relation.get("type-id"))
         title = _text(work.get("title")) or None
         raw_attributes = relation.get("attributes")
         attributes = (
@@ -397,7 +426,7 @@ def _work_references(payload: Mapping[str, object]) -> tuple[WorkReference, ...]
             and not isinstance(raw_attributes, (str, bytes))
             else ()
         )
-        ordering = relation.get("ordering-key")
+        ordering = relation.get("ordering_key", relation.get("ordering-key"))
         ordering_key = (
             ordering if isinstance(ordering, int) and not isinstance(ordering, bool) else None
         )
@@ -415,18 +444,61 @@ def _work_references(payload: Mapping[str, object]) -> tuple[WorkReference, ...]
 
 
 def _recording_dates(payload: Mapping[str, object]) -> tuple[object, ...]:
-    relations = payload.get("relations")
-    if not isinstance(relations, Sequence) or isinstance(relations, (str, bytes)):
-        return ()
+    relations = _relation_rows(payload, "place")
     values = []
     for relation in relations:
-        if not isinstance(relation, Mapping) or relation.get("type") != "recorded at":
+        relation_type = _text(relation.get("type"))
+        type_id = canonical_uuid(relation.get("type_id") or relation.get("type-id"))
+        if not _relationship_matches(
+            type_id, relation_type, _RECORDED_AT_TYPE_ID, "recorded at"
+        ):
             continue
         begin = parse_partial_date(relation.get("begin"))
         end = parse_partial_date(relation.get("end"))
         if begin is not None and begin == end:
             values.append(begin)
     return tuple(sorted(set(values), key=str))
+
+
+def _recording_profile(enabled_fields: Collection[str]) -> EntityFetchProfile:
+    includes: set[str] = set()
+    fields = set(enabled_fields)
+    if fields & {"genres", "moods"}:
+        includes.update({"genres", "tags"})
+    if "isrcs" in fields:
+        includes.add("isrcs")
+    if fields & {"works", "iswcs", "lyrics_languages", "artist_languages"}:
+        includes.add("work-rels")
+    if "recording_date" in fields:
+        includes.add("place-rels")
+    return EntityFetchProfile(tuple(includes))
+
+
+def _relation_rows(
+    payload: Mapping[str, object], entity_type: str
+) -> tuple[Mapping[str, object], ...]:
+    normalized = payload.get(f"{entity_type}_relations")
+    if _is_sequence(normalized):
+        return tuple(row for row in normalized if isinstance(row, Mapping))
+    raw = payload.get("relations")
+    if not _is_sequence(raw):
+        return ()
+    return tuple(
+        row
+        for row in raw
+        if isinstance(row, Mapping) and row.get("target-type") == entity_type
+    )
+
+
+def _relationship_matches(
+    type_id: str | None,
+    relation_type: str,
+    expected_type_id: str,
+    expected_type: str,
+) -> bool:
+    if type_id is not None:
+        return type_id == expected_type_id and relation_type.casefold() == expected_type
+    return relation_type.casefold() == expected_type
 
 def semantic_tags_from_payload(
     payload: Mapping[str, object],
@@ -600,12 +672,12 @@ def _fetch_release_group(entity_id: str) -> Mapping[str, object]:
     return _fetch_generic("release-group", entity_id, [])
 
 
-def _fetch_recording(entity_id: str) -> Mapping[str, object]:
+def _fetch_recording(
+    entity_id: str, profile: EntityFetchProfile = _DEFAULT_FETCH_PROFILE
+) -> Mapping[str, object]:
     from beetsplug._utils.musicbrainz import MusicBrainzAPI
 
-    return MusicBrainzAPI().get_recording(
-        entity_id, includes=["genres", "tags", "artist-credits", "work-rels"]
-    )
+    return MusicBrainzAPI().get_recording(entity_id, includes=list(profile.includes))
 
 
 def _fetch_work(entity_id: str) -> Mapping[str, object]:

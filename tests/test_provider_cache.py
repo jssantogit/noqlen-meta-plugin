@@ -1,6 +1,10 @@
 from requests import RequestException
 
-from beetsplug.noqlenmeta.provider_cache import CommandEntityCache, EntityCacheKey
+from beetsplug.noqlenmeta.provider_cache import (
+    CommandEntityCache,
+    EntityCacheKey,
+    EntityFetchProfile,
+)
 
 
 def test_successful_payload_is_fetched_once_per_key() -> None:
@@ -34,6 +38,31 @@ def test_different_schema_versions_do_not_collide() -> None:
     assert cache.get_or_fetch(
         EntityCacheKey("musicbrainz", "recording", "recording-id", "v2"), fetch
     ) == {"call": 2}
+    assert calls == 2
+
+
+def test_fetch_profiles_are_ordered_deduplicated_and_part_of_cache_key() -> None:
+    cache = CommandEntityCache()
+    narrow = EntityFetchProfile((" isrcs ", "isrcs"))
+    equivalent = EntityFetchProfile(("isrcs",))
+    rich = EntityFetchProfile(("work-rels", "isrcs"))
+    calls = 0
+
+    def fetch() -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        return {"call": calls}
+
+    narrow_key = EntityCacheKey("musicbrainz", "recording", "recording-id", profile=narrow)
+    equivalent_key = EntityCacheKey(
+        "musicbrainz", "recording", "recording-id", profile=equivalent
+    )
+    rich_key = EntityCacheKey("musicbrainz", "recording", "recording-id", profile=rich)
+
+    assert narrow.includes == ("isrcs",)
+    assert cache.get_or_fetch(narrow_key, fetch) == {"call": 1}
+    assert cache.get_or_fetch(equivalent_key, fetch) == {"call": 1}
+    assert cache.get_or_fetch(rich_key, fetch) == {"call": 2}
     assert calls == 2
 
 

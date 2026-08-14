@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 
 import pytest
+from beetsplug._utils.musicbrainz import MusicBrainzAPI
 from requests import RequestException
 
 from beetsplug.noqlenmeta.domain import (
@@ -27,6 +28,8 @@ RELEASE_MBID = "6ea45c08-3cfa-461a-aa4d-4cc404fcfa86"
 RECORDING_MBID = "11111111-1111-4111-8111-111111111111"
 WORK_ONE = "22222222-2222-4222-8222-222222222222"
 WORK_TWO = "33333333-3333-4333-8333-333333333333"
+PERFORMANCE_TYPE_ID = "a3005666-a872-32c3-ad06-98af558e99b0"
+RECORDED_AT_TYPE_ID = "ad462279-14b0-4180-9b58-571d0eef7c51"
 ARTIST_MBID = "44444444-4444-4444-8444-444444444444"
 SALVADOR_MBID = "55555555-5555-4555-8555-555555555555"
 BRAZIL_MBID = "66666666-6666-4666-8666-666666666666"
@@ -66,7 +69,7 @@ def client(
         entity: str,
         values: Mapping[str, Mapping[str, object] | Exception | None],
     ):
-        def inner(entity_id: str) -> Mapping[str, object] | None:
+        def inner(entity_id: str, *_args: object) -> Mapping[str, object] | None:
             calls[entity].append(entity_id)
             value = values.get(entity_id)
             if isinstance(value, Exception):
@@ -218,7 +221,7 @@ def test_wave_one_enrichment_reuses_recording_and_work_payloads() -> None:
                 {
                     "target-type": "work",
                     "type": "performance",
-                    "type-id": "a3005666-a872-32c3-ad06-98af558e99b0",
+                    "type-id": PERFORMANCE_TYPE_ID,
                     "attributes": ["live"],
                     "ordering-key": 1,
                     "work": {"id": WORK_ONE, "title": "Synthetic Work"},
@@ -253,7 +256,7 @@ def test_wave_one_enrichment_reuses_recording_and_work_payloads() -> None:
             WORK_ONE,
             "Synthetic Work",
             "performance",
-            "a3005666-a872-32c3-ad06-98af558e99b0",
+            PERFORMANCE_TYPE_ID,
             ("live",),
             1,
         ),
@@ -280,6 +283,165 @@ def test_isrc_only_enrichment_never_fetches_work() -> None:
 
     assert [item.field for item in enrichment.evidence] == ["isrcs"]
     assert calls["work"] == []
+
+
+def test_explicit_empty_enabled_fields_produce_no_evidence_or_work_lookup() -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "isrcs": ["USAAA0100001"],
+            "work_relations": [
+                {
+                    "type": "performance",
+                    "type_id": PERFORMANCE_TYPE_ID,
+                    "work": {"id": WORK_ONE},
+                }
+            ],
+        },
+        works={WORK_ONE: {"id": WORK_ONE, "iswcs": ["T-123.456.789-0"]}},
+    )
+
+    enrichment = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields=()
+    ).get_enrichment(track_context())
+
+    assert enrichment == type(enrichment)()
+    assert calls["recording"] == []
+    assert calls["work"] == []
+
+
+def test_normalized_production_shape_emits_complete_wave_one_evidence() -> None:
+    raw = {
+        "id": RECORDING_MBID,
+        "first-release-date": "1999-01-02",
+        "isrcs": ["USAAA0100001"],
+        "relations": [
+            {
+                "target-type": "work",
+                "type": "performance",
+                "type-id": PERFORMANCE_TYPE_ID,
+                "ordering-key": 2,
+                "attributes": ["live"],
+                "work": {"id": WORK_ONE, "title": "Synthetic Work"},
+            },
+            {
+                "target-type": "place",
+                "type": "recorded at",
+                "type-id": RECORDED_AT_TYPE_ID,
+                "begin": "2020-05-17",
+                "end": "2020-05-17",
+                "place": {"id": SALVADOR_MBID, "name": "Synthetic Studio"},
+            },
+        ],
+    }
+    normalized = MusicBrainzAPI._normalize_data(raw)
+    assert "relations" not in normalized
+    assert "work_relations" in normalized
+    assert "place_relations" in normalized
+    semantic_client, calls = client(
+        recording=normalized,
+        works={WORK_ONE: {"id": WORK_ONE, "iswcs": ["T-123.456.789-0"]}},
+    )
+
+    enrichment = MusicBrainzTrackProvider(
+        semantic_client,
+        enabled_fields={"isrcs", "works", "iswcs", "recording_date"},
+    ).get_enrichment(track_context())
+
+    assert {item.field for item in enrichment.evidence} == {
+        "isrcs",
+        "works",
+        "iswcs",
+        "recording_date",
+    }
+    works = next(item.value for item in enrichment.evidence if item.field == "works")
+    assert works == (
+        WorkReference(
+            WORK_ONE,
+            "Synthetic Work",
+            "performance",
+            PERFORMANCE_TYPE_ID,
+            ("live",),
+            2,
+        ),
+    )
+    assert calls["recording"] == [RECORDING_MBID]
+    assert calls["work"] == [WORK_ONE]
+
+
+def test_production_recording_fetch_uses_one_deterministic_include_union(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, tuple[str, ...]]] = []
+
+    def get_recording(
+        _api: object, recording_id: str, *, includes: list[str]
+    ) -> Mapping[str, object]:
+        calls.append((recording_id, tuple(includes)))
+        return {"id": recording_id, "isrcs": ["USAAA0100001"]}
+
+    monkeypatch.setattr(MusicBrainzAPI, "get_recording", get_recording)
+    provider = MusicBrainzTrackProvider(
+        MusicBrainzSemanticClient(),
+        enabled_fields={"genres", "isrcs", "works", "iswcs", "recording_date"},
+    )
+
+    provider.get_enrichment(track_context())
+
+    assert calls == [
+        (
+            RECORDING_MBID,
+            ("genres", "isrcs", "place-rels", "tags", "work-rels"),
+        )
+    ]
+
+
+def test_recording_cache_does_not_reuse_insufficient_include_profile() -> None:
+    calls: list[tuple[str, ...]] = []
+
+    def fetch_recording(
+        recording_id: str, profile: object
+    ) -> Mapping[str, object]:
+        includes = profile.includes
+        calls.append(includes)
+        return {"id": recording_id}
+
+    semantic_client = MusicBrainzSemanticClient(fetch_recording=fetch_recording)
+    MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"genres"}
+    ).get_enrichment(track_context())
+    MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"isrcs"}
+    ).get_enrichment(track_context())
+
+    assert calls == [("genres", "tags"), ("isrcs",)]
+
+
+def test_only_performance_work_relationship_is_accepted() -> None:
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [
+                {
+                    "type": "performance",
+                    "type_id": PERFORMANCE_TYPE_ID,
+                    "work": {"id": WORK_ONE},
+                },
+                {
+                    "type": "other",
+                    "type_id": "11111111-2222-4333-8444-555555555555",
+                    "work": {"id": WORK_TWO},
+                },
+            ],
+        }
+    )
+
+    enrichment = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"works"}
+    ).get_enrichment(track_context())
+
+    works = next(item.value for item in enrichment.evidence if item.field == "works")
+    assert tuple(reference.mbid for reference in works) == (WORK_ONE,)
 
 
 def test_work_failure_preserves_isrc_and_work_reference() -> None:
@@ -347,6 +509,7 @@ def test_same_explicit_recorded_at_begin_end_emits_recording_date() -> None:
                 {
                     "target-type": "place",
                     "type": "recorded at",
+                    "type-id": RECORDED_AT_TYPE_ID,
                     "begin": "2020-01-02",
                     "end": "2020-01-02",
                 }
@@ -545,7 +708,7 @@ def test_begin_area_is_used_only_when_main_area_is_absent() -> None:
 def test_response_mismatch_and_transient_failure_are_not_negative_cached() -> None:
     calls = 0
 
-    def fetch_recording(recording_id: str) -> Mapping[str, object]:
+    def fetch_recording(recording_id: str, *_args: object) -> Mapping[str, object]:
         nonlocal calls
         calls += 1
         if calls == 1:
@@ -581,7 +744,7 @@ def test_failed_supporting_work_and_area_are_retried_not_negative_cached() -> No
         }
 
     semantic_client = MusicBrainzSemanticClient(
-        fetch_recording=lambda recording_id: {
+        fetch_recording=lambda recording_id, *_args: {
             "id": recording_id,
             "relations": [{"target-type": "work", "work": {"id": WORK_ONE}}],
         },
