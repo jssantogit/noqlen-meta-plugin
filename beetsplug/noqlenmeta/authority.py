@@ -309,6 +309,22 @@ _RULES = (
             "structured_artist_credits",
         )
     ),
+    *(
+        _rule(
+            field,
+            "musicbrainz",
+            AuthorityRole.PRIMARY,
+            ProviderScope.RELEASE,
+            EntityKind.RELEASE,
+        )
+        for field in (
+            "producers",
+            "conductors",
+            "performers",
+            "featured_artists",
+            "structured_artist_credits",
+        )
+    ),
 )
 
 

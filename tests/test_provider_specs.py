@@ -380,6 +380,11 @@ def test_credit_capabilities_match_implemented_musicbrainz_scopes() -> None:
         ("musicbrainz", "performers", EntityKind.RECORDING),
         ("musicbrainz", "featured_artists", EntityKind.RECORDING),
         ("musicbrainz", "structured_artist_credits", EntityKind.RECORDING),
+        ("musicbrainz", "producers", EntityKind.RELEASE),
+        ("musicbrainz", "conductors", EntityKind.RELEASE),
+        ("musicbrainz", "performers", EntityKind.RELEASE),
+        ("musicbrainz", "featured_artists", EntityKind.RELEASE),
+        ("musicbrainz", "structured_artist_credits", EntityKind.RELEASE),
     }
     assert len(CREDIT_PROVIDER_CAPABILITY_REGISTRY) == len(CREDIT_PROVIDER_CAPABILITIES)
 

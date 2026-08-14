@@ -176,3 +176,22 @@ def test_unimplemented_recording_composer_authority_remains_ineligible() -> None
         )
         is AuthorityRole.INELIGIBLE
     )
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "producers",
+        "conductors",
+        "performers",
+        "featured_artists",
+        "structured_artist_credits",
+    ],
+)
+def test_musicbrainz_release_credit_authority_is_primary(field: str) -> None:
+    assert (
+        AUTHORITY_MATRIX.role_for(
+            field, EntityKind.RELEASE, ProviderScope.RELEASE, "musicbrainz"
+        )
+        is AuthorityRole.PRIMARY
+    )

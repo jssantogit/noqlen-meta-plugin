@@ -3,6 +3,7 @@ from collections.abc import Mapping
 
 import pytest
 
+from beetsplug.noqlenmeta.credits import ArtistCredit, CreditRole
 from beetsplug.noqlenmeta.domain import ExternalIdentifier, ReleaseEnrichmentContext
 from beetsplug.noqlenmeta.field_contracts import EntityKind, PartialDate
 from beetsplug.noqlenmeta.provider_cache import CommandEntityCache
@@ -16,6 +17,7 @@ from beetsplug.noqlenmeta.release_catalog import (
 
 RELEASE_ID = "6ea45c08-3cfa-461a-aa4d-4cc404fcfa86"
 RELEASE_GROUP_ID = "11111111-2222-3333-4444-555555555555"
+ARTIST_ID = "22222222-2222-4222-8222-222222222222"
 
 
 def context(*, release_group_id: str | None = None) -> ReleaseEnrichmentContext:
@@ -239,6 +241,88 @@ def test_shared_enrichment_reuses_one_release_for_v2_and_v3() -> None:
         "date": PartialDate(2020, 5, 17),
         "release_status": ReleaseStatus.OFFICIAL,
     }
+    assert release.calls == [RELEASE_ID]
+
+
+def test_release_credits_and_artist_credit_share_profiled_release_lookup() -> None:
+    calls: list[tuple[str, ...]] = []
+    payload = release_payload()
+    payload.update(
+        {
+            "artist_credit": [
+                {
+                    "name": "Credited Artist",
+                    "joinphrase": "",
+                    "artist": {"id": ARTIST_ID, "name": "Canonical Artist"},
+                }
+            ],
+            "artist_relations": [
+                {
+                    "type": "producer",
+                    "type_id": "8bf377ba-8d71-4ecc-97f2-7bb2d8a2a75f",
+                    "artist": {"id": ARTIST_ID, "name": "Producer"},
+                },
+                {
+                    "type": "conductor",
+                    "type_id": "9ae9e4d0-f26b-42fb-ab5c-1149a47cf83b",
+                    "artist": {"id": ARTIST_ID, "name": "Conductor"},
+                },
+                {
+                    "type": "instrument",
+                    "type_id": "67555849-61e5-455b-96e3-29733f0115f5",
+                    "attributes": ["guest"],
+                    "attribute_values": {"instrument": "orchestra"},
+                    "artist": {"id": ARTIST_ID, "name": "Ensemble"},
+                },
+            ],
+        }
+    )
+
+    def fetch_release(release_id: str, profile: object) -> Mapping[str, object]:
+        calls.append(profile.includes)
+        return {**payload, "id": release_id}
+
+    enrichment = MusicBrainzProvider(fetch_release=fetch_release).get_enrichment(
+        context(),
+        {
+            "date",
+            "producers",
+            "conductors",
+            "performers",
+            "featured_artists",
+            "structured_artist_credits",
+        },
+    )
+
+    by_field = values(enrichment.evidence)
+    assert by_field["date"] == PartialDate(2020, 5, 17)
+    assert by_field["producers"][0].role is CreditRole.PRODUCER
+    assert by_field["conductors"][0].role is CreditRole.CONDUCTOR
+    assert by_field["performers"][0].instrument == "orchestra"
+    assert by_field["featured_artists"][0].role is CreditRole.GUEST_ARTIST
+    assert isinstance(by_field["structured_artist_credits"], ArtistCredit)
+    assert calls == [("artist-rels",)]
+
+
+def test_structured_artist_credit_alone_adds_no_relationship_include() -> None:
+    release = Fetcher(
+        {
+            **release_payload(),
+            "artist_credit": [
+                {
+                    "name": "Artist",
+                    "joinphrase": "",
+                    "artist": {"id": ARTIST_ID, "name": "Artist"},
+                }
+            ],
+        }
+    )
+
+    evidence = MusicBrainzProvider(fetch_release=release).get_enrichment(
+        context(), {"structured_artist_credits"}
+    ).evidence
+
+    assert isinstance(values(evidence)["structured_artist_credits"], ArtistCredit)
     assert release.calls == [RELEASE_ID]
 
 

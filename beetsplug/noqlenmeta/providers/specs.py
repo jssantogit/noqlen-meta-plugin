@@ -386,6 +386,16 @@ CREDIT_PROVIDER_CAPABILITIES = (
         EntityKind.RECORDING,
         ProviderScope.TRACK,
     ),
+    *(
+        _credit_capability("musicbrainz", field, EntityKind.RELEASE, ProviderScope.RELEASE)
+        for field in (
+            "producers",
+            "conductors",
+            "performers",
+            "featured_artists",
+            "structured_artist_credits",
+        )
+    ),
 )
 CREDIT_PROVIDER_CAPABILITY_REGISTRY = capability_registry(CREDIT_PROVIDER_CAPABILITIES)
 BUILTIN_PROVIDER_SPECS: Mapping[ProviderKey, ProviderSpec] = MappingProxyType(

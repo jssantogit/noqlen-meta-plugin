@@ -20,10 +20,12 @@ from beetsplug.noqlenmeta.evidence import (
     SubjectRef,
 )
 from beetsplug.noqlenmeta.field_contracts import EntityKind
-from beetsplug.noqlenmeta.provider_cache import CommandEntityCache
+from beetsplug.noqlenmeta.provider_cache import CommandEntityCache, EntityFetchProfile
 from beetsplug.noqlenmeta.providers.base import ProviderError, ReleaseProviderEnrichment
 from beetsplug.noqlenmeta.providers.musicbrainz_semantic import (
     MusicBrainzSemanticClient,
+    artist_credit_from_payload,
+    release_credit_values,
     semantic_tags_from_payload,
 )
 from beetsplug.noqlenmeta.providers.specs import MUSICBRAINZ_SPEC, ProviderScope
@@ -60,7 +62,7 @@ class MusicBrainzProvider:
     ) -> None:
         self._semantic_client = MusicBrainzSemanticClient(
             cache=cache,
-            fetch_release=fetch_release or _fetch_release,
+            fetch_release=fetch_release,
             fetch_release_group=fetch_release_group,
         )
 
@@ -76,12 +78,23 @@ class MusicBrainzProvider:
         if release_mbid is None:
             return ReleaseProviderEnrichment()
 
-        payload = self._semantic_client.lookup_release(release_mbid)
+        relationship_fields = {
+            "producers",
+            "conductors",
+            "performers",
+            "featured_artists",
+        }
+        profile = (
+            EntityFetchProfile(("artist-rels",))
+            if set(enabled_fields) & relationship_fields
+            else EntityFetchProfile()
+        )
+        payload = self._semantic_client.lookup_release(release_mbid, profile)
         if not isinstance(payload, Mapping):
             raise ProviderError("MusicBrainz release response is invalid")
         return ReleaseProviderEnrichment(
             tuple(_normalize_release(payload, release_mbid)),
-            self._catalog_evidence(context, payload, release_mbid, enabled_fields),
+            self._v3_evidence(context, payload, release_mbid, enabled_fields),
         )
 
     def get_semantic_evidence(self, context: ReleaseEnrichmentContext) -> SemanticEvidenceBundle:
@@ -150,13 +163,46 @@ class MusicBrainzProvider:
         )
         return tuple(evidence)
 
+    def _v3_evidence(
+        self,
+        context: ReleaseEnrichmentContext,
+        payload: Mapping[str, object],
+        release_mbid: str,
+        enabled_fields: Collection[str],
+    ) -> tuple[MetadataEvidence, ...]:
+        evidence = list(self._catalog_evidence(context, payload, release_mbid, enabled_fields))
+        enabled = set(enabled_fields)
+        for field, value in release_credit_values(payload, release_mbid).items():
+            if field in enabled:
+                evidence.append(_release_evidence(field, value, release_mbid))
+        if (
+            "structured_artist_credits" in enabled
+            and (
+                credit := artist_credit_from_payload(
+                    payload, EntityKind.RELEASE, release_mbid
+                )
+            )
+        ):
+            evidence.append(
+                _release_evidence("structured_artist_credits", credit, release_mbid)
+            )
+        return tuple(evidence)
 
-def _fetch_release(release_mbid: str) -> Mapping[str, object]:
-    from beetsplug._utils.musicbrainz import MusicBrainzAPI
 
-    return MusicBrainzAPI().get_release(
-        release_mbid,
-        includes=["labels", "media", "genres", "tags", "recordings", "artist-credits"],
+def _release_evidence(field: str, value: object, release_mbid: str) -> MetadataEvidence:
+    return MetadataEvidence(
+        field=field,
+        value=value,  # type: ignore[arg-type]
+        subject=SubjectRef(
+            EntityKind.RELEASE,
+            (ExternalIdentifier("musicbrainz.release", release_mbid),),
+        ),
+        provider="musicbrainz",
+        acquisition_scope=ProviderScope.RELEASE,
+        source_id=release_mbid,
+        source_url=_PUBLIC_RELEASE_URL.format(release_mbid),
+        provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+        confidence=_DIRECT_CONFIDENCE,
     )
 
 

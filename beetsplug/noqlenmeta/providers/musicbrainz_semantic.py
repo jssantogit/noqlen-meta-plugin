@@ -126,7 +126,8 @@ class MusicBrainzSemanticClient:
                 fetcher = self._fetchers[entity_type]
                 payload = (
                     fetcher(canonical_id, profile)
-                    if entity_type == "recording" or entity_type == "work" and profile.includes
+                    if entity_type == "recording"
+                    or entity_type in {"release", "work"} and profile.includes
                     else fetcher(canonical_id)
                 )
             except RequestException:
@@ -142,8 +143,10 @@ class MusicBrainzSemanticClient:
 
         return self.cache.get_or_fetch(key, fetch_and_validate)
 
-    def lookup_release(self, entity_id: str) -> Mapping[str, object] | None:
-        return self._lookup("release", entity_id)
+    def lookup_release(
+        self, entity_id: str, profile: EntityFetchProfile = _DEFAULT_FETCH_PROFILE
+    ) -> Mapping[str, object] | None:
+        return self._lookup("release", entity_id, profile)
 
     def lookup_release_group(self, entity_id: str) -> Mapping[str, object] | None:
         return self._lookup("release_group", entity_id)
@@ -218,7 +221,11 @@ class MusicBrainzTrackProvider:
                 evidence.append(_recording_evidence(field, value, recording_id))
         if (
             "structured_artist_credits" in self.enabled_fields
-            and (artist_credit := _artist_credit(payload, EntityKind.RECORDING, recording_id))
+            and (
+                artist_credit := artist_credit_from_payload(
+                    payload, EntityKind.RECORDING, recording_id
+                )
+            )
         ):
             evidence.append(
                 _recording_evidence("structured_artist_credits", artist_credit, recording_id)
@@ -556,6 +563,17 @@ _WORK_CREDIT_TYPES = {
     "3e48faba-ec01-47fd-8e89-30e81161661c": ("lyricist", CreditRole.LYRICIST),
     "d3fd781c-5894-47e2-8c12-86cc0e2c8d08": ("arranger", CreditRole.ARRANGER),
 }
+_RELEASE_CREDIT_TYPES = {
+    "8bf377ba-8d71-4ecc-97f2-7bb2d8a2a75f": ("producer", CreditRole.PRODUCER),
+    "9ae9e4d0-f26b-42fb-ab5c-1149a47cf83b": ("conductor", CreditRole.CONDUCTOR),
+    "888a2320-52e4-4fe8-a8a0-7a4c8dfde167": ("performer", CreditRole.PERFORMER),
+    "67555849-61e5-455b-96e3-29733f0115f5": ("instrument", CreditRole.PERFORMER),
+    "eb10f8a0-0f4c-4dce-aa47-87bcb2bc42f3": ("vocal", CreditRole.PERFORMER),
+    "23a2e2e7-81ca-4865-8d05-2243848a77bf": (
+        "performing orchestra",
+        CreditRole.PERFORMER,
+    ),
+}
 _ROLE_FIELDS = {
     CreditRole.COMPOSER: "composers",
     CreditRole.LYRICIST: "lyricists",
@@ -583,6 +601,17 @@ def _work_credit_values(
     payload: Mapping[str, object], source_entity_id: str
 ) -> dict[str, tuple[CreditReference, ...]]:
     return _credit_values(payload, EntityKind.WORK, source_entity_id, _WORK_CREDIT_TYPES)
+
+
+def release_credit_values(
+    payload: Mapping[str, object], source_entity_id: str
+) -> dict[str, tuple[CreditReference, ...]]:
+    return _credit_values(
+        payload,
+        EntityKind.RELEASE,
+        source_entity_id,
+        _RELEASE_CREDIT_TYPES,
+    )
 
 
 def _credit_values(
@@ -650,7 +679,7 @@ def _credit_values(
         except (TypeError, ValueError):
             continue
         grouped.setdefault(_ROLE_FIELDS[accepted[1]], []).extend(references)
-        if scope is EntityKind.RECORDING and any(
+        if scope in {EntityKind.RECORDING, EntityKind.RELEASE} and any(
             attribute.casefold() == "guest" for attribute in attributes
         ):
             grouped.setdefault("featured_artists", []).append(
@@ -692,7 +721,7 @@ def _relation_instruments(
     return (None,)
 
 
-def _artist_credit(
+def artist_credit_from_payload(
     payload: Mapping[str, object], scope: EntityKind, source_entity_id: str
 ) -> ArtistCredit | None:
     rows = payload.get("artist_credit", payload.get("artist-credit"))
@@ -923,13 +952,13 @@ def _append_unique(values: list[str], value: str) -> None:
         values.append(value)
 
 
-def _fetch_release(entity_id: str) -> Mapping[str, object]:
+def _fetch_release(
+    entity_id: str, profile: EntityFetchProfile = _DEFAULT_FETCH_PROFILE
+) -> Mapping[str, object]:
     from beetsplug._utils.musicbrainz import MusicBrainzAPI
 
-    return MusicBrainzAPI().get_release(
-        entity_id,
-        includes=["labels", "media", "genres", "tags", "recordings", "artist-credits"],
-    )
+    includes = ("labels", "media", "genres", "tags", "recordings", "artist-credits")
+    return MusicBrainzAPI().get_release(entity_id, includes=[*includes, *profile.includes])
 
 
 def _fetch_release_group(entity_id: str) -> Mapping[str, object]:
