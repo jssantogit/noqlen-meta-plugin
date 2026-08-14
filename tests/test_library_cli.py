@@ -10,6 +10,7 @@ from beets.importer.actions import Action
 from beets.importer.tasks import ImportTask
 from beets.library import Album, Item, Library
 from beets.ui import Subcommand
+from beetsplug._utils.musicbrainz import MusicBrainzAPI
 
 import beetsplug.noqlenmeta as plugin_module
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
@@ -36,6 +37,7 @@ from beetsplug.noqlenmeta.release_catalog import ReleaseSecondaryType, ReleaseTy
 
 TOKEN = "test-personal-token"
 RELEASE_MBID = "6ea45c08-3cfa-461a-aa4d-4cc404fcfa86"
+RECORDING_MBID = "55555555-5555-4555-8555-555555555555"
 ALBUM_GENRES = {
     "Album A": "Rock",
     "Album B": "Metal",
@@ -259,6 +261,112 @@ def test_track_only_provider_skips_album_selection_and_queries_items(
     )
 
     invoke(plugin, lib, ["--all"])
+
+
+def test_v3_only_library_item_uses_exact_recording_and_previews_isrcs(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    calls: list[tuple[str, tuple[str, ...]]] = []
+    output: list[str] = []
+
+    def get_recording(
+        _api: object, recording_id: str, *, includes: list[str]
+    ) -> dict[str, object]:
+        calls.append((recording_id, tuple(includes)))
+        return {"id": recording_id, "isrcs": ["USAAA0100001"]}
+
+    monkeypatch.setattr(MusicBrainzAPI, "get_recording", get_recording)
+    monkeypatch.setattr(
+        "beetsplug.noqlenmeta.library_track_preview.ui.print_", output.append
+    )
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, discogs=False, musicbrainz=True)
+    plugin.config["fields"].set(
+        {field: field == "isrcs" for field in plugin.config["fields"]}
+    )
+    library.add(
+        Item(
+            path=b"track.flac",
+            artist="Synthetic Artist",
+            title="Synthetic Track",
+            mb_trackid=RECORDING_MBID,
+        )
+    )
+
+    invoke(plugin, library, ["title:Synthetic Track"])
+
+    assert calls == [(RECORDING_MBID, ("isrcs",))]
+    preview = next(value for value in output if "library track plan" in value)
+    assert "target: Item.isrcs" in preview
+    assert "entity=recording" in preview
+    assert "method=exact_lookup" in preview
+
+
+def test_v3_only_library_item_without_recording_mbid_does_not_search(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    calls = 0
+
+    def get_recording(*args: object, **kwargs: object) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        return pytest.fail("Recording lookup requires an exact MBID")
+
+    monkeypatch.setattr(MusicBrainzAPI, "get_recording", get_recording)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, discogs=False, musicbrainz=True)
+    plugin.config["fields"].set(
+        {field: field == "isrcs" for field in plugin.config["fields"]}
+    )
+    library.add(
+        Item(
+            path=b"track.flac",
+            artist="Synthetic Artist",
+            title="Synthetic Track",
+        )
+    )
+
+    invoke(plugin, library, ["title:Synthetic Track"])
+
+    assert calls == 0
+
+
+def test_album_semantic_then_item_planning_fetches_recording_once(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    calls: list[tuple[str, tuple[str, ...]]] = []
+
+    def get_recording(
+        _api: object, recording_id: str, *, includes: list[str]
+    ) -> dict[str, object]:
+        calls.append((recording_id, tuple(includes)))
+        return {"id": recording_id, "isrcs": ["USAAA0100001"]}
+
+    monkeypatch.setattr(MusicBrainzAPI, "get_recording", get_recording)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(plugin, discogs=False, musicbrainz=True)
+    enabled = {
+        "artist_languages",
+        "genres",
+        "moods",
+        "isrcs",
+        "works",
+        "iswcs",
+        "recording_date",
+    }
+    plugin.config["fields"].set(
+        {field: field in enabled for field in plugin.config["fields"]}
+    )
+    add_album(library, mb_trackid=RECORDING_MBID)
+
+    invoke(plugin, library, ["album:From Mars to Sirius"])
+
+    assert calls == [
+        (
+            RECORDING_MBID,
+            ("genres", "isrcs", "place-rels", "tags", "work-rels"),
+        )
+    ]
 
 
 def test_invalid_resolution_fails_before_provider_and_library_query(

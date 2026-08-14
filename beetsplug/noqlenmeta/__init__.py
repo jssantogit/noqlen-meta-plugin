@@ -2144,7 +2144,16 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
                 musicbrainz_release = collect_musicbrainz_release
                 client = self._musicbrainz_client()
-                track_semantic_fields = release_semantic_fields & {"artist_languages"}
+                track_semantic_fields = {
+                    field
+                    for field in ("genres", "moods", "artist_languages")
+                    if policy.is_field_enabled(field)
+                }
+                track_semantic_fields |= {
+                    field
+                    for field in ("isrcs", "works", "iswcs", "recording_date")
+                    if policy.is_field_enabled(field)
+                }
                 musicbrainz_tracks = (
                     tuple(
                         lambda track=track: MusicBrainzTrackProvider(

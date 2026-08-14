@@ -15,6 +15,17 @@ ISRC lookup or AcoustID shortcut. Release and Release Group enrichment likewise
 uses only established exact IDs. Existing IDs are acquisition anchors, never
 positive evidence for the separate four-MBID repair subsystem.
 
+At the production boundary, beets `MusicBrainzAPI` normalizes raw `relations`
+into entity-specific `work_relations` and `place_relations`, and converts
+hyphenated response keys to underscore keys. The semantic parser consumes that
+normalized shape while retaining controlled raw-shape fixture support.
+
+Recording acquisition includes are derived from enabled fields: genres or moods
+request `genres` and `tags`; `isrcs` requests `isrcs`; Works, ISWC or language
+traversal requests `work-rels`; and `recording_date` requests `place-rels`. The
+required includes are unioned into one deterministic profile for each required
+Recording acquisition.
+
 ## ISRC
 
 MusicBrainz Recording is primary. Every structurally valid ISRC is normalized,
@@ -43,6 +54,12 @@ and relation identity and sort by explicit ordering key, then stable identity
 tie-breaks. Works are never inferred or searched by title. Existing
 `mb_workid`/`mb_workids` values are current state, not proof of a relationship.
 
+Only Recording-to-Work `performance` relationships are eligible. Their
+canonical relationship UUID is `a3005666-a872-32c3-ad06-98af558e99b0`; arbitrary
+Work relationships are ignored. Controlled textual fallback is allowed only
+when the relationship type ID is absent, never when a present ID is malformed
+or different.
+
 The queryable Item field `mb_workids` stores all accepted Work IDs. Exactly one
 Work may also project to native `mb_workid`; its safe relation title may fill
 native `work`. Multiple Works are never flattened and no parallel work-title
@@ -67,6 +84,11 @@ only when its begin and end parse to the same safe `PartialDate`. It rejects
 intervals, one-sided dates, divergent dates, inferred Event/Place names and any
 release date. Recording `first_release_date` is explicitly ineligible.
 
+The accepted Place/Recording `recorded at` relationship UUID is
+`ad462279-14b0-4180-9b58-571d0eef7c51`. Controlled textual fallback is allowed
+only when its type ID is absent. A present malformed or different ID is
+ineligible even when its text says `recorded at`.
+
 Safe values persist only as queryable Item `recording_date` text in canonical
 ISO partial-date form: `YYYY`, `YYYY-MM` or `YYYY-MM-DD`. There is no DATE/TDRC
 or other embedded file projection. Coverage is intentionally limited; no safe
@@ -80,6 +102,19 @@ MusicBrainz exact Recording evidence is primary for `isrcs`, `works` and
 is used. V2 ordinal `resolution.authority` is not reinterpreted as V3 role
 ordering. The specialized resolver preserves existing values, permits only safe
 superset enrichment, and routes material conflict to REVIEW.
+
+The V3 capability matrix independently enables `isrcs`, `works`, `iswcs` and
+`recording_date` contribution. These fields do not depend on V2 ordinal
+`resolution.authority` entries.
+
+## Command cache coverage
+
+One successful or definitive-missing exact entity acquisition may satisfy a
+later request only when provider, entity type, entity ID and schema version are
+equal and the cached include profile covers every requested include. Sufficient
+cached coverage may therefore satisfy a narrower request; insufficient coverage
+never satisfies a richer request. In particular, a negative narrow lookup does
+not prove that a richer lookup is missing.
 
 ## Wave 1 release integration
 

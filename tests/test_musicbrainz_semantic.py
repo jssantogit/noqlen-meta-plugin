@@ -456,6 +456,41 @@ def test_only_performance_work_relationship_is_accepted() -> None:
     assert tuple(reference.mbid for reference in works) == (WORK_ONE,)
 
 
+@pytest.mark.parametrize(
+    ("relation", "accepted"),
+    [
+        ({"type": "performance"}, True),
+        ({"type": "performance", "type_id": "not-a-uuid"}, False),
+        ({"type": "performance", "type_id": PERFORMANCE_TYPE_ID}, True),
+        (
+            {
+                "type": "performance",
+                "type_id": "11111111-2222-4333-8444-555555555555",
+            },
+            False,
+        ),
+    ],
+)
+def test_performance_relation_type_id_fails_closed(
+    relation: Mapping[str, object], accepted: bool
+) -> None:
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [
+                {**relation, "work": {"id": WORK_ONE, "title": "Synthetic Work"}}
+            ],
+        }
+    )
+
+    enrichment = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"works"}
+    ).get_enrichment(track_context())
+
+    works = [item for item in enrichment.evidence if item.field == "works"]
+    assert bool(works) is accepted
+
+
 def test_work_failure_preserves_isrc_and_work_reference() -> None:
     semantic_client, _ = client(
         recording={
@@ -536,6 +571,41 @@ def test_same_explicit_recorded_at_begin_end_emits_recording_date() -> None:
     assert [(item.field, item.value) for item in enrichment.evidence] == [
         ("recording_date", PartialDate(2020, 1, 2))
     ]
+
+
+@pytest.mark.parametrize(
+    ("relation", "accepted"),
+    [
+        ({"type": "recorded at"}, True),
+        ({"type": "recorded at", "type_id": "not-a-uuid"}, False),
+        ({"type": "recorded at", "type_id": RECORDED_AT_TYPE_ID}, True),
+        (
+            {
+                "type": "recorded at",
+                "type_id": "11111111-2222-4333-8444-555555555555",
+            },
+            False,
+        ),
+    ],
+)
+def test_recorded_at_relation_type_id_fails_closed(
+    relation: Mapping[str, object], accepted: bool
+) -> None:
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "place_relations": [
+                {**relation, "begin": "2020-01-02", "end": "2020-01-02"}
+            ],
+        }
+    )
+
+    enrichment = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"recording_date"}
+    ).get_enrichment(track_context())
+
+    dates = [item for item in enrichment.evidence if item.field == "recording_date"]
+    assert bool(dates) is accepted
 
 
 def test_release_semantics_reuse_the_existing_exact_release_payload() -> None:

@@ -66,6 +66,114 @@ def test_fetch_profiles_are_ordered_deduplicated_and_part_of_cache_key() -> None
     assert calls == 2
 
 
+def test_broad_fetch_profile_satisfies_later_narrow_request() -> None:
+    cache = CommandEntityCache()
+    broad = EntityCacheKey(
+        "musicbrainz",
+        "recording",
+        "recording-id",
+        profile=EntityFetchProfile(
+            ("genres", "tags", "isrcs", "work-rels", "place-rels")
+        ),
+    )
+    narrow = EntityCacheKey(
+        "musicbrainz",
+        "recording",
+        "recording-id",
+        profile=EntityFetchProfile(("work-rels",)),
+    )
+    calls = 0
+
+    def fetch() -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        return {"call": calls}
+
+    assert cache.get_or_fetch(broad, fetch) == {"call": 1}
+    assert cache.get_or_fetch(narrow, fetch) == {"call": 1}
+    assert calls == 1
+
+
+def test_narrow_fetch_profile_does_not_satisfy_later_broad_request() -> None:
+    cache = CommandEntityCache()
+    narrow = EntityCacheKey(
+        "musicbrainz",
+        "recording",
+        "recording-id",
+        profile=EntityFetchProfile(("work-rels",)),
+    )
+    broad = EntityCacheKey(
+        "musicbrainz",
+        "recording",
+        "recording-id",
+        profile=EntityFetchProfile(
+            ("genres", "tags", "isrcs", "work-rels", "place-rels")
+        ),
+    )
+    calls = 0
+
+    def fetch() -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        return {"call": calls}
+
+    assert cache.get_or_fetch(narrow, fetch) == {"call": 1}
+    assert cache.get_or_fetch(broad, fetch) == {"call": 2}
+    assert calls == 2
+
+
+def test_equivalent_fetch_profiles_with_different_order_share_payload() -> None:
+    cache = CommandEntityCache()
+    first = EntityCacheKey(
+        "musicbrainz",
+        "recording",
+        "recording-id",
+        profile=EntityFetchProfile(("work-rels", "isrcs")),
+    )
+    reordered = EntityCacheKey(
+        "musicbrainz",
+        "recording",
+        "recording-id",
+        profile=EntityFetchProfile(("isrcs", "work-rels")),
+    )
+    calls = 0
+
+    def fetch() -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        return {"call": calls}
+
+    assert cache.get_or_fetch(first, fetch) == {"call": 1}
+    assert cache.get_or_fetch(reordered, fetch) == {"call": 1}
+    assert calls == 1
+
+
+def test_narrow_negative_cache_does_not_satisfy_later_broad_request() -> None:
+    cache = CommandEntityCache()
+    narrow = EntityCacheKey(
+        "musicbrainz",
+        "recording",
+        "recording-id",
+        profile=EntityFetchProfile(("work-rels",)),
+    )
+    broad = EntityCacheKey(
+        "musicbrainz",
+        "recording",
+        "recording-id",
+        profile=EntityFetchProfile(("isrcs", "work-rels")),
+    )
+    calls = 0
+
+    def fetch() -> None:
+        nonlocal calls
+        calls += 1
+        return None
+
+    assert cache.get_or_fetch(narrow, fetch) is None
+    assert cache.get_or_fetch(broad, fetch) is None
+    assert calls == 2
+
+
 def test_schema_version_is_normalized_but_not_case_folded() -> None:
     assert EntityCacheKey("provider", "entity", "id", " Parser-V1 ").schema_version == (
         "Parser-V1"

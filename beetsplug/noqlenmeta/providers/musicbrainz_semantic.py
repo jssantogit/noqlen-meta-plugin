@@ -409,9 +409,19 @@ def _work_references(payload: Mapping[str, object]) -> tuple[WorkReference, ...]
             continue
         work_id = canonical_uuid(work.get("id"))
         relation_type = _text(relation.get("type"))
-        type_id = canonical_uuid(relation.get("type_id") or relation.get("type-id"))
+        type_id_present = "type_id" in relation or "type-id" in relation
+        raw_type_id = (
+            relation.get("type_id")
+            if "type_id" in relation
+            else relation.get("type-id")
+        )
+        type_id = canonical_uuid(raw_type_id)
         if work_id is None or not _relationship_matches(
-            type_id, relation_type, _PERFORMANCE_TYPE_ID, "performance"
+            type_id,
+            relation_type,
+            _PERFORMANCE_TYPE_ID,
+            "performance",
+            type_id_present=type_id_present,
         ):
             continue
         title = _text(work.get("title")) or None
@@ -448,9 +458,19 @@ def _recording_dates(payload: Mapping[str, object]) -> tuple[object, ...]:
     values = []
     for relation in relations:
         relation_type = _text(relation.get("type"))
-        type_id = canonical_uuid(relation.get("type_id") or relation.get("type-id"))
+        type_id_present = "type_id" in relation or "type-id" in relation
+        raw_type_id = (
+            relation.get("type_id")
+            if "type_id" in relation
+            else relation.get("type-id")
+        )
+        type_id = canonical_uuid(raw_type_id)
         if not _relationship_matches(
-            type_id, relation_type, _RECORDED_AT_TYPE_ID, "recorded at"
+            type_id,
+            relation_type,
+            _RECORDED_AT_TYPE_ID,
+            "recorded at",
+            type_id_present=type_id_present,
         ):
             continue
         begin = parse_partial_date(relation.get("begin"))
@@ -495,9 +515,15 @@ def _relationship_matches(
     relation_type: str,
     expected_type_id: str,
     expected_type: str,
+    *,
+    type_id_present: bool,
 ) -> bool:
-    if type_id is not None:
-        return type_id == expected_type_id and relation_type.casefold() == expected_type
+    if type_id_present:
+        return (
+            type_id is not None
+            and type_id == expected_type_id
+            and relation_type.casefold() == expected_type
+        )
     return relation_type.casefold() == expected_type
 
 def semantic_tags_from_payload(

@@ -10,6 +10,7 @@ from beets.autotag.hooks import AlbumInfo, TrackInfo
 from beets.importer.actions import Action
 from beets.importer.tasks import ImportTask
 from beets.library import Item
+from beetsplug._utils.musicbrainz import MusicBrainzAPI
 
 import beetsplug.noqlenmeta as plugin_module
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
@@ -42,6 +43,7 @@ from beetsplug.noqlenmeta.resolver import default_resolution_policy
 
 TOKEN = "test-personal-token"
 RELEASE_MBID = "6ea45c08-3cfa-461a-aa4d-4cc404fcfa86"
+RECORDING_MBID = "55555555-5555-4555-8555-555555555555"
 DISCOGS_FIELDS = (
     "genres",
     "styles",
@@ -2012,6 +2014,80 @@ def test_normal_later_beets_application_consumes_enriched_selected_info(
     task.apply_metadata()
 
     assert item.genres == ["Metal", "Rock"]
+
+
+def test_v3_only_importer_apply_enriches_exact_recording_isrcs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, tuple[str, ...]]] = []
+    output: list[str] = []
+
+    def get_recording(
+        _api: object, recording_id: str, *, includes: list[str]
+    ) -> dict[str, object]:
+        calls.append((recording_id, tuple(includes)))
+        return {"id": recording_id, "isrcs": ["USAAA0100001"]}
+
+    monkeypatch.setattr(MusicBrainzAPI, "get_recording", get_recording)
+    monkeypatch.setattr("beetsplug.noqlenmeta.track_preview.ui.print_", output.append)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(
+        plugin,
+        apply=True,
+        fields={field: field == "isrcs" for field in plugin.config["fields"]},
+        discogs=False,
+        musicbrainz=True,
+    )
+    item = Item(title="Local Track")
+    track = TrackInfo(
+        title="Selected Track",
+        artist="Synthetic Artist",
+        mb_trackid=RECORDING_MBID,
+    )
+    info = album_info(tracks=[track])
+    task = ImportTask(None, [], [item])
+    task.choice_flag = Action.APPLY
+    task.match = AlbumMatch(None, info, {item: track})  # type: ignore[arg-type]
+
+    plugin._import_task_choice(None, task)
+
+    assert calls == [(RECORDING_MBID, ("isrcs",))]
+    assert track.get("isrcs") == ["USAAA0100001"]
+    assert next(value for value in output if "Noqlen Meta / track plan:" in value)
+
+
+def test_v3_only_importer_does_not_request_disabled_musicbrainz(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    def get_recording(*args: object, **kwargs: object) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        return pytest.fail("disabled MusicBrainz was requested")
+
+    monkeypatch.setattr(MusicBrainzAPI, "get_recording", get_recording)
+    plugin = NoqlenMetaPlugin()
+    configure_enabled(
+        plugin,
+        fields={field: field == "isrcs" for field in plugin.config["fields"]},
+        discogs=False,
+        musicbrainz=False,
+    )
+    item = Item(title="Local Track")
+    track = TrackInfo(
+        title="Selected Track",
+        artist="Synthetic Artist",
+        mb_trackid=RECORDING_MBID,
+    )
+    info = album_info(tracks=[track])
+    task = ImportTask(None, [], [item])
+    task.choice_flag = Action.APPLY
+    task.match = AlbumMatch(None, info, {item: track})  # type: ignore[arg-type]
+
+    plugin._import_task_choice(None, task)
+
+    assert calls == 0
 
 
 def test_normal_later_beets_application_consumes_only_partial_mapped_subset(

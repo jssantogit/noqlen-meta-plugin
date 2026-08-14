@@ -56,9 +56,13 @@ class CommandEntityCache:
         key: EntityCacheKey,
         fetcher: Callable[[], Mapping[str, object] | None],
     ) -> Mapping[str, object] | None:
-        if key in self._payloads:
-            return self._payloads[key]
-        if key in self._missing:
+        cached_key = next(
+            (candidate for candidate in self._payloads if _covers(candidate, key)),
+            None,
+        )
+        if cached_key is not None:
+            return self._payloads[cached_key]
+        if any(_covers(candidate, key) for candidate in self._missing):
             return None
         payload = fetcher()
         if payload is None:
@@ -66,3 +70,13 @@ class CommandEntityCache:
             return None
         self._payloads[key] = payload
         return payload
+
+
+def _covers(cached: EntityCacheKey, requested: EntityCacheKey) -> bool:
+    return (
+        cached.provider == requested.provider
+        and cached.entity_type == requested.entity_type
+        and cached.entity_id == requested.entity_id
+        and cached.schema_version == requested.schema_version
+        and set(cached.profile.includes).issuperset(requested.profile.includes)
+    )
