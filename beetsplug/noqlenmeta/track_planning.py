@@ -10,6 +10,7 @@ from types import MappingProxyType
 from beets.library import Item
 
 from beetsplug.noqlenmeta.changeplan import ChangePlan, build_change_plan, compose_change_plans
+from beetsplug.noqlenmeta.credit_resolution import CREDIT_FIELDS, resolve_credits
 from beetsplug.noqlenmeta.domain import (
     MetadataCandidate,
     MetadataValue,
@@ -174,7 +175,18 @@ def build_track_planning_result(
     decisions = resolve_metadata(current_values, collected, policy)
     change_plan = compose_change_plans(
         build_change_plan(decisions),
-        build_change_plan(resolve_recording_identity(current_values, evidence)),
+        build_change_plan(
+            resolve_recording_identity(
+                current_values,
+                tuple(item for item in evidence if item.field not in CREDIT_FIELDS),
+            )
+        ),
+        build_change_plan(
+            resolve_credits(
+                current_values,
+                tuple(item for item in evidence if item.field in CREDIT_FIELDS),
+            )
+        ),
     )
     target_plan = map_change_plan_to_track_info(change_plan)
     outcomes = reconcile_semantic_outcomes(

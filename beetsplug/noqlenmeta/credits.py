@@ -54,6 +54,7 @@ class CreditParty:
     name: str
     mbid: str | None = None
     credited_as: str | None = None
+    credited_as_variants: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "name", _text(self.name, "party name"))
@@ -67,6 +68,13 @@ class CreditParty:
             "credited_as",
             _optional_text(self.credited_as, "credited-as name"),
         )
+        if isinstance(self.credited_as_variants, str):
+            raise TypeError("credited-as variants must be a collection of strings")
+        variants: list[str] = []
+        for value in (self.credited_as, *self.credited_as_variants):
+            if value is not None and (text := _text(value, "credited-as variant")) not in variants:
+                variants.append(text)
+        object.__setattr__(self, "credited_as_variants", tuple(variants))
 
 
 @dataclass(frozen=True, slots=True)

@@ -6,6 +6,7 @@ from beets.autotag.distance import Distance
 from beets.autotag.hooks import AlbumInfo, TrackInfo
 from beets.library import Item
 
+from beetsplug.noqlenmeta.credits import CreditParty, CreditReference, CreditRole
 from beetsplug.noqlenmeta.domain import (
     ExternalIdentifier,
     MetadataCandidate,
@@ -314,6 +315,38 @@ def test_generic_track_planning_collects_candidates_once() -> None:
     assert result.context is context
     assert result.candidate_count == 1
     assert result.target_plan.mapped_changes[0].target_value == 126.4
+
+
+def test_track_planning_routes_credit_evidence_to_specialized_resolver() -> None:
+    producer = CreditReference(
+        CreditParty("Producer", RECORDING_ID),
+        CreditRole.PRODUCER,
+        EntityKind.RECORDING,
+        source_entity_id=RECORDING_ID,
+    )
+    item = MetadataEvidence(
+        "producers",
+        (producer,),
+        SubjectRef(
+            EntityKind.RECORDING,
+            (ExternalIdentifier("musicbrainz.recording", RECORDING_ID),),
+        ),
+        "musicbrainz",
+        ProviderScope.TRACK,
+        RECORDING_ID,
+        AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+    )
+
+    result = build_track_planning_result(
+        TrackEnrichmentContext("Synthetic Artist", "Synthetic Track"),
+        {},
+        candidates=(),
+        evidence=(item,),
+        policy=ResolutionPolicy({}, {"musicbrainz": True}),
+    )
+
+    assert result.change_plan.changes[0].field == "producers"
+    assert result.target_plan.blocked_changes[0].source.field == "producers"
 
 
 def test_proposed_synced_lyrics_becomes_mapping_blocker() -> None:

@@ -58,6 +58,7 @@ from beetsplug.noqlenmeta.configuration import (
     validate_bpm_config,
     validate_local_analysis_config,
 )
+from beetsplug.noqlenmeta.credit_resolution import CREDIT_FIELDS, resolve_credits
 from beetsplug.noqlenmeta.domain import (
     ArtistEnrichmentContext,
     MetadataCandidate,
@@ -2226,14 +2227,23 @@ class NoqlenMetaPlugin(BeetsPlugin):
         ordinary_plan = build_change_plan(
             tuple(sorted(decisions, key=lambda decision: decision.field))
         )
-        catalog_decisions = resolve_release_catalog(current_values, catalog_evidence)
+        catalog_decisions = resolve_release_catalog(
+            current_values,
+            tuple(item for item in catalog_evidence if item.field not in CREDIT_FIELDS),
+        )
         catalog_plan = (
             build_change_plan(catalog_decisions) if catalog_decisions else ChangePlan()
         )
+        credit_decisions = resolve_credits(
+            current_values,
+            tuple(item for item in catalog_evidence if item.field in CREDIT_FIELDS),
+        )
+        credit_plan = build_change_plan(credit_decisions) if credit_decisions else ChangePlan()
         return ReleasePlanningResult(
             compose_change_plans(
                 ordinary_plan,
                 catalog_plan,
+                credit_plan,
                 suppress_fields=("year",) if "date" in catalog_fields else (),
             ),
             semantic_outcomes,
