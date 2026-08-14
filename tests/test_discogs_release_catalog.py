@@ -2,6 +2,7 @@ import copy
 import json
 from pathlib import Path
 
+from beetsplug.noqlenmeta.credits import CreditRole
 from beetsplug.noqlenmeta.domain import ExternalIdentifier, ReleaseEnrichmentContext
 from beetsplug.noqlenmeta.evidence import AcquisitionMethod
 from beetsplug.noqlenmeta.field_contracts import PartialDate
@@ -113,3 +114,54 @@ def test_shared_enrichment_uses_one_concrete_discogs_release() -> None:
     assert enrichment.candidates
     assert enrichment.evidence
     assert client.release_ids == [123456]
+
+
+def test_discogs_release_credits_reuse_one_concrete_release() -> None:
+    data = payload()
+    data["extraartists"] = [
+        {"name": "Producer", "anv": "Credited Producer", "role": "Producer", "tracks": ""},
+        {"name": "Conductor", "role": "Conductor", "tracks": ""},
+        {"name": "Guitarist", "role": "Electric Guitar", "tracks": ""},
+        {"name": "Featured", "role": "Featuring", "tracks": ""},
+        {"name": "Guest", "role": "Guest", "tracks": ""},
+    ]
+    client = Client(data)
+
+    enrichment = DiscogsProvider(client=client).get_enrichment(
+        context(), {"producers", "conductors", "performers", "featured_artists"}
+    )
+
+    by_field = {item.field: item.value for item in enrichment.evidence}
+    assert by_field["producers"][0].party.credited_as == "Credited Producer"
+    assert by_field["conductors"][0].role is CreditRole.CONDUCTOR
+    assert by_field["performers"][0].instrument == "electric guitar"
+    assert [credit.role for credit in by_field["featured_artists"]] == [
+        CreditRole.FEATURED_ARTIST,
+        CreditRole.GUEST_ARTIST,
+    ]
+    assert all(credit.scope.value == "release" for values in by_field.values() for credit in values)
+    assert client.release_ids == [123456]
+
+
+def test_discogs_ambiguous_roles_and_nonblank_track_scopes_are_not_promoted() -> None:
+    data = payload()
+    data["extraartists"] = [
+        {"name": "Writer", "role": "Written-By", "tracks": ""},
+        {"name": "Vague", "role": "Co-Producer-ish", "tracks": ""},
+        {"name": "Scoped", "role": "Producer", "tracks": "1-1"},
+        {"name": "Compound", "role": "Producer, Artwork", "tracks": ""},
+        {"name": "Malformed", "role": None, "tracks": ""},
+    ]
+    data["tracklist"] = [
+        {
+            "position": "1-1",
+            "title": "Synthetic Track",
+            "extraartists": [{"name": "Track Producer", "role": "Producer"}],
+        }
+    ]
+
+    enrichment = DiscogsProvider(client=Client(data)).get_enrichment(
+        context(), {"producers", "performers", "featured_artists"}
+    )
+
+    assert enrichment.evidence == ()

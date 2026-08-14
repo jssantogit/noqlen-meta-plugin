@@ -13,6 +13,12 @@ import discogs_client
 from discogs_client.exceptions import DiscogsAPIError
 from requests.exceptions import RequestException
 
+from beetsplug.noqlenmeta.credits import (
+    CreditParty,
+    CreditReference,
+    CreditRole,
+    canonical_credit_references,
+)
 from beetsplug.noqlenmeta.domain import (
     ExternalIdentifier,
     MetadataCandidate,
@@ -95,7 +101,7 @@ class DiscogsProvider:
         release, release_id, confidence, method = resolved
         return ReleaseProviderEnrichment(
             tuple(_normalize_release(release, release_id, confidence)),
-            self._catalog_evidence(release, release_id, confidence, method, enabled_fields),
+            self._v3_evidence(release, release_id, confidence, method, enabled_fields),
         )
 
     def get_release_catalog_evidence(
@@ -141,6 +147,39 @@ class DiscogsProvider:
             )
             for field, value in fields
         )
+
+    def _v3_evidence(
+        self,
+        release: Mapping[str, object],
+        release_id: int,
+        confidence: float,
+        method: AcquisitionMethod,
+        enabled_fields: Collection[str],
+    ) -> tuple[MetadataEvidence, ...]:
+        evidence = list(
+            self._catalog_evidence(release, release_id, confidence, method, enabled_fields)
+        )
+        enabled = set(enabled_fields)
+        for field, value in _release_credits(release, release_id).items():
+            if field not in enabled:
+                continue
+            evidence.append(
+                MetadataEvidence(
+                    field=field,
+                    value=value,
+                    subject=SubjectRef(
+                        EntityKind.RELEASE,
+                        (ExternalIdentifier("discogs.release", str(release_id)),),
+                    ),
+                    provider="discogs",
+                    acquisition_scope=ProviderScope.RELEASE,
+                    source_id=str(release_id),
+                    source_url=_optional_string(release.get("uri")) or None,
+                    provenance=AcquisitionProvenance(method),
+                    confidence=confidence,
+                )
+            )
+        return tuple(evidence)
 
     def _resolve_release(
         self, context: ReleaseEnrichmentContext
@@ -379,6 +418,68 @@ def _ordered_strings(value: object) -> tuple[str, ...]:
     return tuple(values)
 
 
+_DISCOGS_INSTRUMENTS = {
+    "acoustic guitar": "acoustic guitar",
+    "bass": "bass",
+    "bass guitar": "bass guitar",
+    "drums": "drums",
+    "electric guitar": "electric guitar",
+    "guitar": "guitar",
+    "keyboards": "keyboards",
+    "orchestra": "orchestra",
+    "percussion": "percussion",
+    "piano": "piano",
+    "synthesizer": "synthesizer",
+    "vocals": "vocals",
+}
+_DISCOGS_ROLE_FIELDS = {
+    "producer": ("producers", CreditRole.PRODUCER, None),
+    "conductor": ("conductors", CreditRole.CONDUCTOR, None),
+    "featuring": ("featured_artists", CreditRole.FEATURED_ARTIST, None),
+    "guest": ("featured_artists", CreditRole.GUEST_ARTIST, None),
+}
+
+
+def _release_credits(
+    release: Mapping[str, object], release_id: int
+) -> dict[str, tuple[CreditReference, ...]]:
+    rows = release.get("extraartists")
+    if not _is_sequence(rows):
+        return {}
+    grouped: dict[str, list[CreditReference]] = {}
+    for row in rows:
+        if not isinstance(row, Mapping) or _optional_string(row.get("tracks")):
+            continue
+        name = _optional_string(row.get("name"))
+        role = _optional_string(row.get("role"))
+        if not name or not role:
+            continue
+        role_key = role.casefold()
+        mapped = _DISCOGS_ROLE_FIELDS.get(role_key)
+        if mapped is None and role_key in _DISCOGS_INSTRUMENTS:
+            mapped = ("performers", CreditRole.PERFORMER, _DISCOGS_INSTRUMENTS[role_key])
+        if mapped is None:
+            continue
+        field, credit_role, instrument = mapped
+        try:
+            reference = CreditReference(
+                CreditParty(name, credited_as=_optional_string(row.get("anv")) or None),
+                credit_role,
+                EntityKind.RELEASE,
+                instrument=instrument,
+                relation_type=role,
+                source_entity_id=str(release_id),
+            )
+        except (TypeError, ValueError):
+            continue
+        grouped.setdefault(field, []).append(reference)
+    return {
+        field: canonical_credit_references(references)
+        for field, references in grouped.items()
+        if references
+    }
+
+
 def _matches_any(expected: str | None, actual: object) -> bool:
     if expected is None:
         return False
@@ -426,6 +527,10 @@ def _positive_int(value: object) -> int | None:
 
 def _optional_string(value: object) -> str:
     return value.strip() if isinstance(value, str) else ""
+
+
+def _is_sequence(value: object) -> bool:
+    return isinstance(value, Sequence) and not isinstance(value, (str, bytes))
 
 
 def _append_unique(values: list[str], value: str) -> None:

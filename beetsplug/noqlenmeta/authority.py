@@ -325,6 +325,16 @@ _RULES = (
             "structured_artist_credits",
         )
     ),
+    *(
+        _rule(
+            field,
+            "discogs",
+            AuthorityRole.SECONDARY,
+            ProviderScope.RELEASE,
+            EntityKind.RELEASE,
+        )
+        for field in ("producers", "conductors", "performers", "featured_artists")
+    ),
 )
 
 

@@ -195,3 +195,13 @@ def test_musicbrainz_release_credit_authority_is_primary(field: str) -> None:
         )
         is AuthorityRole.PRIMARY
     )
+
+
+@pytest.mark.parametrize(
+    "field", ["producers", "conductors", "performers", "featured_artists"]
+)
+def test_discogs_release_credit_authority_is_secondary(field: str) -> None:
+    assert (
+        AUTHORITY_MATRIX.role_for(field, EntityKind.RELEASE, ProviderScope.RELEASE, "discogs")
+        is AuthorityRole.SECONDARY
+    )
