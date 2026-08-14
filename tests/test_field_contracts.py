@@ -37,7 +37,7 @@ V3_CORE_FIELDS = frozenset(
         "performers",
         "featured_artists",
         "guest_artists",
-        "artist_credits",
+        "structured_artist_credits",
         "alternate_titles",
         "language",
         "script",
@@ -172,7 +172,7 @@ def test_isrc_iswc_and_work_contracts_preserve_multiplicity() -> None:
         ("performers", {EntityKind.RECORDING, EntityKind.RELEASE}),
         ("featured_artists", {EntityKind.RECORDING, EntityKind.RELEASE}),
         ("guest_artists", {EntityKind.RECORDING, EntityKind.RELEASE}),
-        ("artist_credits", {EntityKind.RECORDING, EntityKind.RELEASE}),
+        ("structured_artist_credits", {EntityKind.RECORDING, EntityKind.RELEASE}),
         (
             "alternate_titles",
             {EntityKind.RECORDING, EntityKind.RELEASE, EntityKind.WORK},

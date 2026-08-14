@@ -360,27 +360,76 @@ _CONTRACTS = (
         ),
     # Credits and structured title/language concepts.
     _field(
-        "composers", _WORK_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _NATIVE, _INTERNAL
+        "composers",
+        _WORK_RECORDING_ENTITIES,
+        _MANY,
+        ResolverKind.STRUCTURED,
+        _NATIVE,
+        _INTERNAL,
+        default_enabled=True,
     ),
     _field(
-        "lyricists", _WORK_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _NATIVE, _INTERNAL
+        "lyricists",
+        _WORK_RECORDING_ENTITIES,
+        _MANY,
+        ResolverKind.STRUCTURED,
+        _NATIVE,
+        _INTERNAL,
+        default_enabled=True,
     ),
     _field(
-        "producers", _RELEASE_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _DB, _INTERNAL
+        "producers",
+        _RELEASE_RECORDING_ENTITIES,
+        _MANY,
+        ResolverKind.STRUCTURED,
+        _DB,
+        _INTERNAL,
+        default_enabled=True,
     ),
     _field(
-        "arrangers", _WORK_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _NATIVE, _INTERNAL
+        "arrangers",
+        _WORK_RECORDING_ENTITIES,
+        _MANY,
+        ResolverKind.STRUCTURED,
+        _NATIVE,
+        _INTERNAL,
+        default_enabled=True,
     ),
     _field(
-        "conductors", _RELEASE_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _DB, _INTERNAL
+        "conductors",
+        _RELEASE_RECORDING_ENTITIES,
+        _MANY,
+        ResolverKind.STRUCTURED,
+        _DB,
+        _INTERNAL,
+        default_enabled=True,
     ),
-    _field("performers", _RELEASE_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _INTERNAL),
     _field(
-        "featured_artists", _RELEASE_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _INTERNAL
+        "performers",
+        _RELEASE_RECORDING_ENTITIES,
+        _MANY,
+        ResolverKind.STRUCTURED,
+        _DB,
+        _INTERNAL,
+        default_enabled=True,
+    ),
+    _field(
+        "featured_artists",
+        _RELEASE_RECORDING_ENTITIES,
+        _MANY,
+        ResolverKind.STRUCTURED,
+        _DB,
+        _INTERNAL,
+        default_enabled=True,
     ),
     _field("guest_artists", _RELEASE_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _INTERNAL),
     _field(
-        "artist_credits", _RELEASE_RECORDING_ENTITIES, _MANY, ResolverKind.STRUCTURED, _INTERNAL
+        "structured_artist_credits",
+        _RELEASE_RECORDING_ENTITIES,
+        _MANY,
+        ResolverKind.STRUCTURED,
+        _INTERNAL,
+        default_enabled=True,
     ),
     _field("alternate_titles", _TITLE_ENTITIES, _MANY, ResolverKind.STRUCTURED, _INTERNAL),
     _field("language", EntityKind.RELEASE, _ONE, ResolverKind.EXCLUSIVE, _NATIVE),

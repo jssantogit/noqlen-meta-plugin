@@ -7,6 +7,7 @@ from enum import Enum
 from math import isfinite
 from typing import TypeAlias
 
+from beetsplug.noqlenmeta.credits import ArtistCredit, CreditReference
 from beetsplug.noqlenmeta.domain import ExternalIdentifier, MetadataValue
 from beetsplug.noqlenmeta.field_contracts import (
     EntityKind,
@@ -30,6 +31,8 @@ CanonicalValue: TypeAlias = (
     | ReleaseStatus
     | tuple[ReleaseSecondaryType, ...]
     | tuple[WorkReference, ...]
+    | tuple[CreditReference, ...]
+    | ArtistCredit
 )
 
 
@@ -113,6 +116,7 @@ class MetadataEvidence:
                 IdentifierCollection,
                 ReleaseType,
                 ReleaseStatus,
+                ArtistCredit,
             ),
         ):
             raise TypeError("canonical value has an unsupported type")
@@ -123,6 +127,7 @@ class MetadataEvidence:
                 all(isinstance(value, str) and value.strip() for value in self.value)
                 or all(isinstance(value, ReleaseSecondaryType) for value in self.value)
                 or all(isinstance(value, WorkReference) for value in self.value)
+                or all(isinstance(value, CreditReference) for value in self.value)
             ):
                 raise ValueError("canonical multi-value contains invalid values")
         if isinstance(self.value, float) and not isfinite(self.value):
