@@ -37,15 +37,26 @@ WAVE_ONE_FIELDS = {
     "works",
     "recording_date",
 }
+WAVE_TWO_A_FIELDS = {
+    "composers",
+    "lyricists",
+    "producers",
+    "arrangers",
+    "conductors",
+    "performers",
+    "featured_artists",
+    "structured_artist_credits",
+}
 
 
-def test_v2_public_fields_are_preserved_when_wave_one_is_added() -> None:
+def test_v2_public_fields_are_preserved_when_v3_fields_are_added() -> None:
     config = default_config()
 
-    assert set(config["fields"]) == V2_FIELDS | WAVE_ONE_FIELDS
+    assert set(config["fields"]) == V2_FIELDS | WAVE_ONE_FIELDS | WAVE_TWO_A_FIELDS
     assert config["fields"]["cover"] is True
     assert "vocal_languages" not in config["fields"]
     assert all(config["fields"][field] is True for field in WAVE_ONE_FIELDS)
+    assert all(config["fields"][field] is True for field in WAVE_TWO_A_FIELDS)
 
 
 def test_v2_semantics_are_not_reassigned_by_aliases() -> None:

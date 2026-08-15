@@ -25,6 +25,14 @@ can be represented safely.
 | `lyrics` | off | LRCLIB | Selected `TrackInfo.lyrics` | Item lyrics | Importer and existing-library Items share LRCLIB resolution. |
 | `synced_lyrics` | off | LRCLIB | No lossless target | No lossless target | Previewed as blocked; synchronized lyrics/SYLT are not applied. |
 | `cover` | on | Cover Art Archive | Album sidecar/embed | Album sidecar/embed | Exact approved main front; fixed `cover.jpg`; no singleton artwork. |
+| `composers` | on | MusicBrainz Work relations | Native names/IDs plus structured state | Native names/IDs plus structured state | Exact Work scope; generic writer is not promoted. |
+| `lyricists` | on | MusicBrainz Work relations | Native names/IDs plus structured state | Native names/IDs plus structured state | Exact Work scope; generic writer is not promoted. |
+| `producers` | on | MusicBrainz, Discogs | Typed names plus structured state | Typed Item/Album names plus structured state | Recording and Release remain separate. |
+| `arrangers` | on | MusicBrainz | Native names/IDs plus structured state | Native names/IDs plus structured state | Work and Recording remain separate. |
+| `conductors` | on | MusicBrainz, Discogs | Typed names plus structured state | Typed Item/Album names plus structured state | Release values are not copied to Items. |
+| `performers` | on | MusicBrainz, Discogs | Typed name view plus structured state | Typed name view plus structured state | Instruments and vocals are separate typed relations, never delimiter-encoded. |
+| `featured_artists` | on | MusicBrainz guest attributes, Discogs explicit Featuring/Guest | Typed name view plus structured state | Typed name view plus structured state | Does not rewrite `artist` or `albumartist`. |
+| `structured_artist_credits` | on | MusicBrainz | Structured state | Structured state | Preserves node order, MBIDs, credited names, and exact joins without primary-name takeover. |
 
 Provider candidates retain structured values. If beets offers only a singular
 target and a provider offers multiple values, strict mode blocks the target;
@@ -44,3 +52,10 @@ release group, recording, and release track IDs.
 BPM is canonical `float`. `round: true` is useful for formats whose BPM tag
 cannot preserve a fraction. Artwork remains a separate verified binary pipeline,
 not an ordinary scalar field change.
+
+Complete credits are stored in normalized plugin-owned tables in the current
+beets library database. The name fields are query projections, not a second
+canonical representation. Composer, lyricist, and arranger names use audited
+MediaFile targets; multiple MP3 values are blocked because ID3v2.3 can flatten
+them. Producer, conductor, performer/instrument, featured/guest, and structured
+artist-credit state remain database-only.

@@ -55,6 +55,14 @@ noqlenmeta:
     works: true
     iswcs: true
     recording_date: true
+    composers: true
+    lyricists: true
+    producers: true
+    arrangers: true
+    conductors: true
+    performers: true
+    featured_artists: true
+    structured_artist_credits: true
 
   genres:
     num_genres: 1

@@ -38,6 +38,14 @@ write anything by themselves and do not enable providers.
 | `lyrics` | off | Plain track lyrics from LRCLIB when that provider is enabled. |
 | `synced_lyrics` | off | Synchronized LRCLIB lyrics. They can be previewed as blocked, but Noqlen currently has no lossless writable target for them. |
 | `cover` | on | Album artwork handled through the verified Cover Art Archive pipeline. |
+| `composers` | on | Structured Work composer relations plus native name/ID projections. |
+| `lyricists` | on | Structured Work lyricist relations plus native name/ID projections. |
+| `producers` | on | Recording- or Release-scoped producer relations without inheritance. |
+| `arrangers` | on | Work- or Recording-scoped arranger relations. |
+| `conductors` | on | Recording- or Release-scoped conductor relations. |
+| `performers` | on | Performer relations with instruments preserved in structured database state. |
+| `featured_artists` | on | Explicit featured or guest participation; vocals alone never qualify. |
+| `structured_artist_credits` | on | Ordered MusicBrainz artist-credit nodes, credited names, MBIDs, and join phrases. |
 
 Most fields default on. The deliberate opt-ins are `lyrics`, `synced_lyrics`,
 and `artist_areas`.

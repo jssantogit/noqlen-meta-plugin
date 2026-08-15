@@ -7,8 +7,8 @@ behavior. Enabling a provider does not make it support every field.
 
 | Provider | Enablement/credentials | Scope and fields | Ordinary library | Importer | Identity requirement |
 | --- | --- | --- | ---: | ---: | --- |
-| Discogs | `providers.discogs.enabled`; optional extra and token for search | Release: genres, structured ordered styles, labels, catalog numbers, barcodes, country, year, media, format descriptions | Yes | Yes | Direct release ID preferred; conservative search otherwise. |
-| MusicBrainz enrichment | `providers.musicbrainz.enabled`; no plugin credential | Exact release metadata includes labels, catalog numbers, barcode, country, year, media, and genres. Release/Recording/Artist genres and community tags also provide classified semantic evidence for genres/styles/moods; Recording-to-Work and Artist/Area lookups provide language and geography metadata where enabled. | Yes | Yes | Exact existing Release/Recording/Work/Artist MBIDs; no fuzzy rematching. Artist languages are derived from current-target Work languages. |
+| Discogs | `providers.discogs.enabled`; optional extra and token for search | Release catalog plus explicitly global producer, conductor, performer, featured, and guest credits | Yes | Yes | Direct release ID preferred; conservative search otherwise. Nonblank track scope is never promoted. |
+| MusicBrainz enrichment | `providers.musicbrainz.enabled`; no plugin credential | Exact release catalog, Recording/Work identifiers, scoped core relationships, and ordered artist credits, plus existing semantic evidence | Yes | Yes | Exact existing Release/Recording/Work/Artist MBIDs; no fuzzy rematching. |
 | Last.fm | `providers.lastfm.enabled`; uses beets' shared API key | Release, Track, Artist: classified genres, styles, moods | Yes | Yes | Scoped fallback while requested semantic fields remain unresolved. |
 | iTunes | `providers.itunes.enabled`; no key; two-letter storefront | Release: genre, year | Yes | Yes | Direct collection/UPC preferred, then exact normalized search. |
 | LRCLIB | `providers.lrclib.enabled`; no key | Track: plain and synchronized lyrics | Items | Yes | Exact title/artist/album/duration signature, about two-second duration tolerance; synchronized lyrics have no lossless writable target. |
@@ -33,6 +33,12 @@ a service will be available.
 - MusicBrainz enrichment uses exact known MBIDs for the release and any required
   Recording, Work, Artist, or Area semantic lookups; it does not fuzzy-rematch
   those entities.
+- Enabled Recording credits add only `artist-rels`; Work credits share one
+  profile-aware exact Work payload with ISWC/language; Release credits reuse the
+  exact Release payload. Disabling credits adds no relationship include.
+- Discogs credits reuse the same concrete Release response. Track-scoped text
+  and tracklist credits are currently omitted because no safe occurrence map is
+  available at that adapter boundary.
 - Last.fm contributes only vocabulary-classified semantic tags and is used as a
   scoped fallback while requested semantic fields remain unresolved.
 - iTunes examines at most ten search results and requests no artwork/previews.

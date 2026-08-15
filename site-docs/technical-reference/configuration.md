@@ -121,6 +121,14 @@ exist. Enabling a field does not guarantee an enabled provider can supply it.
 | `noqlenmeta.fields.works` | `true` | Recording | Item | Structured exact Work relationships; plural Work IDs persist in the database. |
 | `noqlenmeta.fields.iswcs` | `true` | Work | Item | Work-scoped plural ISWCs; database only. |
 | `noqlenmeta.fields.recording_date` | `true` | Recording | Item | Structurally proven date; canonical partial-date database text only. |
+| `noqlenmeta.fields.composers` | `true` | Work credits | Item | Native plural names/IDs plus structured state; generic writer is not promoted. |
+| `noqlenmeta.fields.lyricists` | `true` | Work credits | Item | Native plural names/IDs plus structured state. |
+| `noqlenmeta.fields.producers` | `true` | Recording/Release credits | Item/Album | Scope is preserved; database-only structured relation. |
+| `noqlenmeta.fields.arrangers` | `true` | Work/Recording credits | Item | Native plural names/IDs plus structured state. |
+| `noqlenmeta.fields.conductors` | `true` | Recording/Release credits | Item/Album | Scope is preserved; database-only structured relation. |
+| `noqlenmeta.fields.performers` | `true` | Recording/Release credits | Item/Album | Instruments remain in structured state rather than encoded text. |
+| `noqlenmeta.fields.featured_artists` | `true` | Explicit featured/guest credits | Item/Album | Does not rewrite primary artist fields. |
+| `noqlenmeta.fields.structured_artist_credits` | `true` | Ordered MusicBrainz credits | Item/Album | Preserves credited names, MBIDs, order, and join phrases. |
 
 Example:
 

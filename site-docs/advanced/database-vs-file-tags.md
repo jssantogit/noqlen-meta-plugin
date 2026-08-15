@@ -2,6 +2,13 @@
 
 Wave 1 keeps plural ISRCs, ISWCs, and Work IDs queryable in the Item database. File writing expands known release/original date components and supports release type/status plus exactly one ISRC or Work ID. Multiple ISRCs/Works, ISWC, recording date, edition, and separate secondary release types are blocked for file sync. Under partial mode, those blockers do not prevent safe database application.
 
+Core credits add typed name projections and normalized relationship tables to
+the same beets library database. The tables reference existing Items/Albums and
+store roles, scope, instruments, IDs, credited names, relation identity, and
+provenance without JSON or delimiter encoding. Release credits are never copied
+to track rows. Only composer, lyricist, and arranger name projections have
+audited file targets; richer credit structure remains database-only.
+
 Noqlen can affect three distinct places:
 
 ```text
