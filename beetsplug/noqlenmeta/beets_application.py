@@ -15,6 +15,7 @@ from beetsplug.noqlenmeta.beets_mapping import (
     BeetsTargetShape,
     map_change_plan_to_beets,
 )
+from beetsplug.noqlenmeta.changeplan import PlannedChange
 from beetsplug.noqlenmeta.integration import current_values_from_album_info
 
 
@@ -50,6 +51,7 @@ class BeetsApplicationResult:
     applied_changes: tuple[BeetsTargetChange, ...] = ()
     resolution_review_count: int = 0
     mapping_blocker_count: int = 0
+    applied_state_changes: tuple[PlannedChange, ...] = ()
 
     @property
     def has_withheld_fields(self) -> bool:
@@ -131,6 +133,7 @@ def apply_beets_target_plan(
         applied_changes=plan.mapped_changes,
         resolution_review_count=result.resolution_review_count,
         mapping_blocker_count=result.mapping_blocker_count,
+        applied_state_changes=plan.state_changes,
     )
 
 

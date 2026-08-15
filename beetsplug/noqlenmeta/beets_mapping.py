@@ -8,6 +8,8 @@ from enum import Enum
 from types import MappingProxyType
 
 from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
+from beetsplug.noqlenmeta.credit_resolution import CREDIT_FIELDS
+from beetsplug.noqlenmeta.credits import ArtistCredit, CreditReference
 from beetsplug.noqlenmeta.domain import MetadataValue
 from beetsplug.noqlenmeta.release_catalog_mapping import map_release_catalog_plan
 
@@ -58,6 +60,10 @@ _TARGETS = (
     BeetsFieldTarget("country", "country", BeetsTargetShape.SCALAR_STRING),
     BeetsFieldTarget("year", "year", BeetsTargetShape.SCALAR_INT),
     BeetsFieldTarget("media", "media", BeetsTargetShape.SCALAR_STRING),
+    BeetsFieldTarget("producers", "producers", BeetsTargetShape.STRING_LIST),
+    BeetsFieldTarget("conductors", "conductors", BeetsTargetShape.STRING_LIST),
+    BeetsFieldTarget("performers", "performers", BeetsTargetShape.STRING_LIST),
+    BeetsFieldTarget("featured_artists", "featured_artists", BeetsTargetShape.STRING_LIST),
 )
 
 BEETS_FIELD_TARGETS: Mapping[str, BeetsFieldTarget] = MappingProxyType(
@@ -92,6 +98,7 @@ class BeetsTargetPlan:
     source: ChangePlan
     mapped_changes: tuple[BeetsTargetChange, ...] = ()
     blocked_changes: tuple[BeetsMappingBlocker, ...] = ()
+    state_changes: tuple[PlannedChange, ...] = ()
 
     @property
     def has_mapping_blockers(self) -> bool:
@@ -113,6 +120,7 @@ def map_change_plan_to_beets(plan: ChangePlan) -> BeetsTargetPlan:
 
     mapped: list[BeetsTargetChange] = []
     blocked: list[BeetsMappingBlocker] = []
+    state_changes: list[PlannedChange] = []
     catalog_fields = {
         "date", "original_date", "release_type", "release_secondary_types",
         "release_status", "edition",
@@ -141,6 +149,34 @@ def map_change_plan_to_beets(plan: ChangePlan) -> BeetsTargetPlan:
             )
     for change in sorted(plan.changes, key=lambda item: item.field):
         if change.field in catalog_fields:
+            continue
+        if change.field in CREDIT_FIELDS:
+            state_changes.append(change)
+            if change.field == "structured_artist_credits":
+                if not isinstance(change.after, ArtistCredit):
+                    raise BeetsMappingError(
+                        "'structured_artist_credits' requires ArtistCredit"
+                    )
+                continue
+            if not isinstance(change.after, tuple) or not all(
+                isinstance(value, CreditReference) for value in change.after
+            ):
+                raise BeetsMappingError(f"{change.field!r} requires CreditReference values")
+            target = BEETS_FIELD_TARGETS.get(change.field)
+            if target is None:
+                raise BeetsMappingError(
+                    f"no selected-release credit projection exists for {change.field!r}"
+                )
+            names = tuple(dict.fromkeys(value.party.name for value in change.after))
+            mapped.append(
+                BeetsTargetChange(
+                    change.field,
+                    target.target_field,
+                    target.shape,
+                    names,
+                    change,
+                )
+            )
             continue
         target = BEETS_FIELD_TARGETS.get(change.field)
         if target is None:
@@ -176,7 +212,7 @@ def map_change_plan_to_beets(plan: ChangePlan) -> BeetsTargetPlan:
             )
         )
 
-    return BeetsTargetPlan(plan, tuple(mapped), tuple(blocked))
+    return BeetsTargetPlan(plan, tuple(mapped), tuple(blocked), tuple(state_changes))
 
 
 def _map_value(change: PlannedChange, target: BeetsFieldTarget) -> MetadataValue | None:

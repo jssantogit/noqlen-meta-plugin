@@ -12,6 +12,12 @@ from beets.importer.actions import Action
 from beets.library import Item
 
 from beetsplug.noqlenmeta.credit_state import read_credit_state
+from beetsplug.noqlenmeta.credits import (
+    CreditParty,
+    CreditReference,
+    CreditRole,
+    canonical_credit_references,
+)
 from beetsplug.noqlenmeta.domain import (
     ArtistEnrichmentContext,
     ExternalIdentifier,
@@ -21,7 +27,7 @@ from beetsplug.noqlenmeta.domain import (
     canonical_uuid,
 )
 from beetsplug.noqlenmeta.evidence import CanonicalValue
-from beetsplug.noqlenmeta.field_contracts import IdentifierCollection
+from beetsplug.noqlenmeta.field_contracts import EntityKind, IdentifierCollection
 from beetsplug.noqlenmeta.release_catalog import parse_partial_date
 from beetsplug.noqlenmeta.work_identity import WorkReference, canonical_work_references
 
@@ -378,6 +384,45 @@ def _current_track_values(getter: Callable[[str], object]) -> dict[str, Canonica
         )
     if recording_date := parse_partial_date(getter("recording_date")):
         values["recording_date"] = recording_date
+    work_source = work_ids[0].value if len(work_ids) == 1 else None
+    recording_source = canonical_uuid(getter("mb_trackid"))
+    for field, role in (
+        ("composers", CreditRole.COMPOSER),
+        ("lyricists", CreditRole.LYRICIST),
+        ("arrangers", CreditRole.ARRANGER),
+    ):
+        names = _text_tuple(getter(field))
+        ids = _text_tuple(getter(f"{field}_ids"))
+        if names:
+            references = []
+            for position, name in enumerate(names):
+                mbid = canonical_uuid(ids[position]) if len(ids) == len(names) else None
+                references.append(
+                    CreditReference(
+                        CreditParty(name, mbid),
+                        role,
+                        EntityKind.WORK,
+                        source_entity_id=work_source,
+                    )
+                )
+            values[field] = canonical_credit_references(references)
+    for field, role in (
+        ("producers", CreditRole.PRODUCER),
+        ("conductors", CreditRole.CONDUCTOR),
+        ("performers", CreditRole.PERFORMER),
+        ("featured_artists", CreditRole.FEATURED_ARTIST),
+    ):
+        names = _text_tuple(getter(field))
+        if names:
+            values[field] = canonical_credit_references(
+                CreditReference(
+                    CreditParty(name),
+                    role,
+                    EntityKind.RECORDING,
+                    source_entity_id=recording_source,
+                )
+                for name in names
+            )
     return values
 
 

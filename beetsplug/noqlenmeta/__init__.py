@@ -59,6 +59,7 @@ from beetsplug.noqlenmeta.configuration import (
     validate_local_analysis_config,
 )
 from beetsplug.noqlenmeta.credit_resolution import CREDIT_FIELDS, resolve_credits
+from beetsplug.noqlenmeta.credit_state import apply_credit_state
 from beetsplug.noqlenmeta.domain import (
     ArtistEnrichmentContext,
     MetadataCandidate,
@@ -171,6 +172,7 @@ from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_NAMES,
     BUILTIN_RELEASE_PROVIDER_SPECS,
     BUILTIN_TRACK_PROVIDER_SPECS,
+    CREDIT_PROVIDER_CAPABILITIES,
     DISCOGS_SPEC,
     ITUNES_SPEC,
     LRCLIB_SPEC,
@@ -244,6 +246,18 @@ class _CanonicalBpmFloat(db_types.Float):
 
 
 _CANONICAL_BPM_FLOAT = _CanonicalBpmFloat()
+
+
+def _context_external_id(
+    context: ReleaseEnrichmentContext | TrackEnrichmentContext,
+    namespace: str,
+) -> str | None:
+    values = {
+        identifier.value
+        for identifier in context.external_ids
+        if identifier.namespace == namespace
+    }
+    return next(iter(values)) if len(values) == 1 else None
 
 
 def _identity_backend_forbidden() -> FingerprintBackend:
@@ -416,8 +430,12 @@ class NoqlenMetaPlugin(BeetsPlugin):
         self._pending_import_artwork: dict[
             tuple[str, str, str, int], list[PreparedImportArtwork]
         ] = {}
+        self._pending_import_credits: dict[
+            tuple[str, str], list[tuple[PlannedChange, ...]]
+        ] = {}
         self.register_listener("import_task_choice", self._import_task_choice)
         self.register_listener("album_imported", self._album_imported)
+        self.register_listener("item_imported", self._item_imported)
         self._command = Subcommand(
             "noqlenmeta",
             help="preview or apply metadata and MusicBrainz identity workflows",
@@ -588,6 +606,15 @@ class NoqlenMetaPlugin(BeetsPlugin):
                         target_plan,
                         mode=application_mode,
                     )
+                    release_id = _context_external_id(
+                        context, "musicbrainz.release"
+                    )
+                    if release_id and application_result.applied_state_changes:
+                        self._queue_import_credit_state(
+                            "album",
+                            release_id,
+                            application_result.applied_state_changes,
+                        )
                 if preview_enabled:
                     render_beets_target_plan(
                         target_plan, application_result, semantic_outcomes
@@ -656,6 +683,18 @@ class NoqlenMetaPlugin(BeetsPlugin):
                         from_scratch=from_scratch,
                         mode=track_application_mode,
                     )
+                    recording_id = _context_external_id(
+                        context, "musicbrainz.recording"
+                    )
+                    if (
+                        recording_id
+                        and track_application_result.applied_state_changes
+                    ):
+                        self._queue_import_credit_state(
+                            "item",
+                            recording_id,
+                            track_application_result.applied_state_changes,
+                        )
                 if preview_enabled:
                     render_import_track_plan(planning_result, track_application_result)
                 elif track_application_result is not None:
@@ -1664,8 +1703,50 @@ class NoqlenMetaPlugin(BeetsPlugin):
         self._render_artwork_plan(preview_plan)
         return PreparedImportArtwork(key, lookup, settings, local_source, write_enabled)
 
+    def _queue_import_credit_state(
+        self,
+        owner_kind: str,
+        entity_id: str,
+        changes: Sequence[PlannedChange],
+    ) -> None:
+        values = tuple(changes)
+        if values:
+            self._pending_import_credits.setdefault(
+                (owner_kind, entity_id), []
+            ).append(values)
+
+    def _pop_import_credit_state(
+        self, owner_kind: str, entity_id: str
+    ) -> tuple[PlannedChange, ...]:
+        key = (owner_kind, entity_id)
+        pending = self._pending_import_credits.get(key)
+        if not pending:
+            return ()
+        values = pending.pop(0)
+        if not pending:
+            self._pending_import_credits.pop(key, None)
+        return values
+
+    def _persist_import_item_credits(self, lib: Library, item: Item) -> None:
+        recording_id = str(item.get("mb_trackid") or "").strip()
+        if not recording_id or not isinstance(item.id, int):
+            return
+        changes = self._pop_import_credit_state("item", recording_id)
+        if changes:
+            apply_credit_state(lib, "item", item.id, changes)
+
+    def _item_imported(self, lib: Library, item: Item) -> None:
+        self._persist_import_item_credits(lib, item)
+
     def _album_imported(self, lib: Library, album: Album) -> None:
         items = tuple(album.items())
+        release_id = str(album.get("mb_albumid") or "").strip()
+        if release_id and isinstance(album.id, int):
+            changes = self._pop_import_credit_state("album", release_id)
+            if changes:
+                apply_credit_state(lib, "album", album.id, changes)
+        for item in items:
+            self._persist_import_item_credits(lib, item)
         key = (
             str(album.get("mb_albumid") or "").strip(),
             str(album.albumartist or "").strip(),
@@ -1813,7 +1894,11 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 capability.provider == spec.name
                 and policy.is_provider_enabled(spec.name)
                 and policy.is_field_enabled(capability.field)
-                for capability in RELEASE_CATALOG_PROVIDER_CAPABILITIES
+                for capability in (
+                    *RELEASE_CATALOG_PROVIDER_CAPABILITIES,
+                    *CREDIT_PROVIDER_CAPABILITIES,
+                )
+                if capability.acquisition_scope is ProviderScope.RELEASE
             )
             for spec in BUILTIN_RELEASE_PROVIDER_SPECS.values()
         )
@@ -1827,8 +1912,13 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 and capability.acquisition_scope is ProviderScope.TRACK
                 and policy.is_provider_enabled(spec.name)
                 and policy.is_field_enabled(capability.field)
-                for capability in BUILTIN_PROVIDER_CAPABILITIES
-                if capability.field in {"isrcs", "works", "iswcs", "recording_date"}
+                for capability in (
+                    *BUILTIN_PROVIDER_CAPABILITIES,
+                    *CREDIT_PROVIDER_CAPABILITIES,
+                )
+                if capability.acquisition_scope is ProviderScope.TRACK
+                and capability.field
+                in {"isrcs", "works", "iswcs", "recording_date", *CREDIT_FIELDS}
             )
             for spec in BUILTIN_TRACK_PROVIDER_SPECS.values()
         )
@@ -1942,7 +2032,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         }
         wave_fields = {
             field
-            for field in ("isrcs", "works", "iswcs", "recording_date")
+            for field in ("isrcs", "works", "iswcs", "recording_date", *CREDIT_FIELDS)
             if policy.is_field_enabled(field)
         }
         recording_evidence = ()
@@ -2279,7 +2369,11 @@ class NoqlenMetaPlugin(BeetsPlugin):
             capability.provider == spec.name
             and policy.is_provider_enabled(spec.name)
             and policy.is_field_enabled(capability.field)
-            for capability in RELEASE_CATALOG_PROVIDER_CAPABILITIES
+            for capability in (
+                *RELEASE_CATALOG_PROVIDER_CAPABILITIES,
+                *CREDIT_PROVIDER_CAPABILITIES,
+            )
+            if capability.acquisition_scope is ProviderScope.RELEASE
         )
 
     def _discogs_candidates(
@@ -2360,6 +2454,11 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 "release_secondary_types",
                 "release_status",
                 "edition",
+                "producers",
+                "conductors",
+                "performers",
+                "featured_artists",
+                "structured_artist_credits",
             )
             if self.config["fields"][field].get(bool)
         )

@@ -12,6 +12,7 @@ from typing import Any
 from beets.autotag.hooks import AlbumInfo, TrackInfo
 from beets.library import Item
 
+from beetsplug.noqlenmeta.changeplan import PlannedChange
 from beetsplug.noqlenmeta.track_integration import SelectedImportTrack
 from beetsplug.noqlenmeta.track_mapping import (
     TrackMappingError,
@@ -55,7 +56,7 @@ class TrackApplicationResult:
     applied_changes: tuple[TrackTargetChange, ...] = ()
     resolution_review_count: int = 0
     mapping_blocker_count: int = 0
-    applied_state_changes: tuple[object, ...] = ()
+    applied_state_changes: tuple[PlannedChange, ...] = ()
 
     @property
     def has_withheld_fields(self) -> bool:

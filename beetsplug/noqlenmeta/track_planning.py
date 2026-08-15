@@ -57,6 +57,16 @@ _TRACK_SOURCE_FIELDS = (
     "mb_workid",
     "work",
     "recording_date",
+    "composers",
+    "composers_ids",
+    "lyricists",
+    "lyricists_ids",
+    "arrangers",
+    "arrangers_ids",
+    "producers",
+    "conductors",
+    "performers",
+    "featured_artists",
 )
 
 

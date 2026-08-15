@@ -10,6 +10,7 @@ from mediafile import MediaFile
 import beetsplug.noqlenmeta.file_sync as file_sync_module
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.changeplan import PlannedChange
+from beetsplug.noqlenmeta.credits import CreditParty, CreditReference, CreditRole
 from beetsplug.noqlenmeta.domain import ExternalIdentifier, MetadataCandidate
 from beetsplug.noqlenmeta.evidence import (
     AcquisitionMethod,
@@ -70,6 +71,32 @@ def planned_change(field: str, value: object) -> PlannedChange:
         return PlannedChange(field, None, value, evidence, f"resolved {field}")
     candidate = MetadataCandidate(field, value, "catalog", 0.95, "42")  # type: ignore[arg-type]
     return PlannedChange(field, None, candidate.value, candidate, f"resolved {field}")
+
+
+def credit_planned_change(
+    field: str, role: CreditRole, names: tuple[str, ...]
+) -> PlannedChange:
+    recording_id = "11111111-1111-4111-8111-111111111111"
+    scope = EntityKind.WORK
+    references = tuple(
+        CreditReference(
+            CreditParty(name), role, scope, source_entity_id=recording_id
+        )
+        for name in names
+    )
+    evidence = MetadataEvidence(
+        field,
+        references,
+        SubjectRef(
+            scope,
+            (ExternalIdentifier("musicbrainz.work", recording_id),),
+        ),
+        "musicbrainz",
+        ProviderScope.TRACK,
+        recording_id,
+        AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+    )
+    return PlannedChange(field, None, references, evidence, f"resolved {field}")
 
 
 def test_planner_maps_supported_values_without_mutating_item(media_item) -> None:
@@ -144,6 +171,80 @@ def test_apply_writes_synthetic_lyrics(media_item) -> None:
     apply_file_sync_plan(library, plan)
 
     assert MediaFile(path).lyrics == "Synthetic line"
+
+
+@pytest.mark.parametrize("fixture", FORMAT_FIXTURES, ids=lambda path: path.suffix)
+def test_single_composer_projection_round_trips_across_formats(
+    tmp_path: Path, fixture: Path
+) -> None:
+    NoqlenMetaPlugin()
+    path = tmp_path / f"credit{fixture.suffix}"
+    shutil.copy2(fixture, path)
+    library = Library(str(tmp_path / "credits.db"), set_music_dir=False)
+    item = Item(path=os.fsencode(path), artist="Artist", title="Track", mtime=17.0)
+    library.add(item)
+    item = library.get_item(item.id)
+
+    plan = plan_file_sync(
+        item,
+        (credit_planned_change("composers", CreditRole.COMPOSER, ("Composer",)),),
+    )
+    result = apply_file_sync_plan(library, plan)
+
+    assert result.committed
+    assert tuple(MediaFile(path).composers) == ("Composer",)
+
+
+def test_multiple_composers_are_blocked_for_mp3_id3v23_safety(tmp_path: Path) -> None:
+    path = tmp_path / "credit.mp3"
+    shutil.copy2(FORMAT_FIXTURES[1], path)
+    library = Library(str(tmp_path / "credits.db"), set_music_dir=False)
+    item = Item(path=os.fsencode(path), artist="Artist", title="Track", mtime=17.0)
+    library.add(item)
+
+    plan = plan_file_sync(
+        library.get_item(item.id),
+        (
+            credit_planned_change(
+                "composers", CreditRole.COMPOSER, ("Composer One", "Composer Two")
+            ),
+        ),
+    )
+
+    assert plan.changes == ()
+    assert "ID3v2.3" in plan.blockers[0].reason
+
+
+def test_performer_instrument_remains_file_blocked(media_item) -> None:
+    _, item, _ = media_item
+    recording_id = "11111111-1111-4111-8111-111111111111"
+    reference = CreditReference(
+        CreditParty("Performer"),
+        CreditRole.PERFORMER,
+        EntityKind.RECORDING,
+        instrument="electric guitar",
+        source_entity_id=recording_id,
+    )
+    evidence = MetadataEvidence(
+        "performers",
+        (reference,),
+        SubjectRef(
+            EntityKind.RECORDING,
+            (ExternalIdentifier("musicbrainz.recording", recording_id),),
+        ),
+        "musicbrainz",
+        ProviderScope.TRACK,
+        recording_id,
+        AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+    )
+
+    plan = plan_file_sync(
+        item,
+        (PlannedChange("performers", None, (reference,), evidence, "resolved"),),
+    )
+
+    assert plan.changes == ()
+    assert plan.blockers[0].canonical_field == "performers"
 
 
 @pytest.mark.parametrize("fixture", FORMAT_FIXTURES, ids=lambda path: path.suffix)

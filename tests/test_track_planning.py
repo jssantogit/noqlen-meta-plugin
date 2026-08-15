@@ -346,7 +346,8 @@ def test_track_planning_routes_credit_evidence_to_specialized_resolver() -> None
     )
 
     assert result.change_plan.changes[0].field == "producers"
-    assert result.target_plan.blocked_changes[0].source.field == "producers"
+    assert result.target_plan.blocked_changes == ()
+    assert result.target_plan.state_changes[0].field == "producers"
 
 
 def test_proposed_synced_lyrics_becomes_mapping_blocker() -> None:

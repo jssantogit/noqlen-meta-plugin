@@ -17,6 +17,7 @@ from beets.library import Item, Library
 from mediafile import MediaFile
 
 from beetsplug.noqlenmeta.changeplan import PlannedChange
+from beetsplug.noqlenmeta.credits import CreditReference
 from beetsplug.noqlenmeta.field_contracts import IdentifierCollection, PartialDate
 from beetsplug.noqlenmeta.media_snapshot import (
     MediaFileSnapshot,
@@ -116,11 +117,24 @@ FILE_TAG_TARGETS: Mapping[str, FileTagTarget] = MappingProxyType(
     {target.canonical_field: target for target in _TARGETS}
 )
 _EXPANDED_FIELDS = frozenset(
-    {"date", "original_date", "isrcs", "works", "release_type", "release_status"}
+    {
+        "date",
+        "original_date",
+        "isrcs",
+        "works",
+        "release_type",
+        "release_status",
+        "composers",
+        "lyricists",
+        "arrangers",
+    }
 )
 _RELATED_MEDIA_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType(
     {
         "genres": frozenset({"genres", "genre"}),
+        "composers": frozenset({"composers", "composer"}),
+        "lyricists": frozenset({"lyricists", "lyricist"}),
+        "arrangers": frozenset({"arrangers", "arranger"}),
         **{
             field: frozenset({"date", "year", "month", "day"})
             for field in ("date", "year", "month", "day")
@@ -170,6 +184,14 @@ def plan_file_sync(item: Item, changes: Sequence[PlannedChange]) -> FileSyncPlan
         if change.field in _EXPANDED_FIELDS:
             try:
                 projections = _expanded_targets(change)
+                if (
+                    snapshot.format_name == "MP3"
+                    and change.field in {"composers", "lyricists", "arrangers"}
+                    and len(projections[0][1]) > 1
+                ):
+                    raise ValueError(
+                        "ID3v2.3 cannot preserve multiple credit names losslessly"
+                    )
             except ValueError as error:
                 blocked.append(FileSyncBlocker(change.field, str(error), change))
                 continue
@@ -515,6 +537,12 @@ def _expanded_targets(
             raise ValueError("multiple Works cannot be represented losslessly by MediaFile")
         target = FileTagTarget(change.field, "mb_workid", FileTagShape.SCALAR_STRING)
         return ((target, value[0].mbid),)
+    if change.field in {"composers", "lyricists", "arrangers"} and isinstance(
+        value, tuple
+    ) and value and all(isinstance(reference, CreditReference) for reference in value):
+        names = tuple(dict.fromkeys(reference.party.name for reference in value))
+        target = FileTagTarget(change.field, change.field, FileTagShape.STRING_LIST)
+        return ((target, list(names)),)
     raise ValueError("canonical value cannot be represented losslessly by MediaFile")
 
 
