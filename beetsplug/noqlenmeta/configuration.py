@@ -173,8 +173,12 @@ def validate_local_bpm_config(value: object) -> None:
 
 
 def validate_local_analysis_config(value: object) -> None:
-    """Validate local analysis configuration without loading optional backends."""
-    if not isinstance(value, Mapping) or set(value) != {"bpm", "mood"}:
+    """Validate frozen V2 settings plus an optional, explicitly enabled V3 key."""
+    if (
+        not isinstance(value, Mapping)
+        or not {"bpm", "mood"} <= set(value)
+        or set(value) - {"bpm", "mood", "key"}
+    ):
         raise ValueError("local_analysis must contain bpm and mood sections")
     bpm = value["bpm"]
     mood = value["mood"]
@@ -183,3 +187,7 @@ def validate_local_analysis_config(value: object) -> None:
         raise ValueError("local_analysis.mood is invalid")
     if type(mood["enabled"]) is not bool:
         raise ValueError("local_analysis.mood is invalid")
+    if "key" in value:
+        from beetsplug.noqlenmeta.key_analysis import key_settings_from_config
+
+        key_settings_from_config(value["key"])
