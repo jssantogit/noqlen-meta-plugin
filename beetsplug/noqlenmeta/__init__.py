@@ -221,6 +221,11 @@ from beetsplug.noqlenmeta.tempo import (
     local_bpm_settings_from_config,
     plan_bpm,
 )
+from beetsplug.noqlenmeta.title_aliases import (
+    TitleAliasPlan,
+    apply_title_alias_plan,
+    plan_title_aliases,
+)
 from beetsplug.noqlenmeta.track_application import (
     TrackApplicationMode,
     TrackApplicationResult,
@@ -388,6 +393,7 @@ class LibraryItemPlan:
     semantic_outcomes: Mapping[str, SemanticFieldOutcome]
     bpm_result: BpmPlanningResult | None = None
     lyrics_sidecar: LyricsSidecarPlan | None = None
+    title_aliases: TitleAliasPlan | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1115,6 +1121,11 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     planning.semantic_outcomes,
                     bpm_result,
                     lyrics_plan,
+                    (
+                        plan_title_aliases(lib, item, track_enrichment.aliases)
+                        if policy.is_field_enabled("alternate_titles")
+                        else None
+                    ),
                 )
             )
 
@@ -1260,6 +1271,25 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 or application_result is not None
                 and application_result.stored
             )
+
+        # Structured aliases have their own lossless SQLite table. They are
+        # not a flattened TrackInfo target and never replace the native title.
+        for item_plan in prepared_items:
+            alias_plan = item_plan.title_aliases
+            if alias_plan is None:
+                continue
+            ui.print_(
+                "Noqlen Meta / structured title aliases: "
+                f"Item {alias_plan.item_id}; status={alias_plan.status}; "
+                f"new={len(alias_plan.additions)}"
+            )
+            if apply_enabled and alias_plan.status == "PROPOSE":
+                result = apply_title_alias_plan(lib, alias_plan)
+                ui.print_(
+                    "Noqlen Meta / structured alias application: "
+                    f"Item {result.item_id}; status={result.status}; "
+                    f"stored={result.stored}; reason={result.reason}"
+                )
 
         # Preview was prepared before any mutation and the sidecar commit
         # rechecks the live Item and target path with atomic no-clobber create.
@@ -1681,7 +1711,9 @@ class NoqlenMetaPlugin(BeetsPlugin):
         # The V2 defaults remain frozen. Read only known V3 opt-in keys
         # explicitly supplied by the caller; never turn them on by default.
         available_fields = set(self.config["fields"].keys())
-        for field in ("instrumental", "explicitness", "vocal_languages"):
+        for field in (
+            "instrumental", "explicitness", "vocal_languages", "alternate_titles"
+        ):
             if field in available_fields:
                 field_settings[field] = self.config["fields"][field].get(bool)
         provider_settings = {
@@ -2040,7 +2072,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 and capability.field
                 in {
                     "isrcs", "works", "iswcs", "recording_date",
-                    "instrumental", "vocal_languages", *CREDIT_FIELDS
+                    "instrumental", "vocal_languages", "alternate_titles",
+                    *CREDIT_FIELDS
                 }
             )
             for spec in BUILTIN_TRACK_PROVIDER_SPECS.values()
@@ -2135,6 +2168,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         candidates: list[MetadataCandidate] = []
         semantic_outcomes: Mapping[str, SemanticFieldOutcome] = {}
         lrclib_instrumental: tuple[MetadataEvidence, ...] = ()
+        title_aliases = ()
         lyrics_requested = provider_can_contribute(policy, LRCLIB_SPEC)
         instrumental_requested = (
             policy.is_provider_enabled("lrclib")
@@ -2192,6 +2226,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 "recording_date",
                 "instrumental",
                 "vocal_languages",
+                "alternate_titles",
                 *CREDIT_FIELDS,
             )
             if policy.is_field_enabled(field)
@@ -2212,6 +2247,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     enabled_fields=semantic_fields | wave_fields,
                 ).get_enrichment(context)
                 recording_evidence = (*recording_evidence, *track_enrichment.evidence)
+                title_aliases = track_enrichment.aliases
                 musicbrainz_tracks = (
                     (lambda: track_enrichment.semantic,) if semantic_fields else ()
                 )
@@ -2298,7 +2334,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 candidates.extend(semantic.candidates)
                 semantic_outcomes = semantic.outcomes
         return SemanticEnrichmentResult(
-            tuple(candidates), semantic_outcomes, tuple(recording_evidence)
+            tuple(candidates), semantic_outcomes, tuple(recording_evidence),
+            title_aliases,
         )
 
     def _build_change_plan_for_release(
