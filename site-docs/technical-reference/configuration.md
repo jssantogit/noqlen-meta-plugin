@@ -111,6 +111,7 @@ exist. Enabling a field does not guarantee an enabled provider can supply it.
 | `noqlenmeta.fields.moods` | `true` | Typed track target | Typed Item target | Classified MusicBrainz tags; optional Last.fm corroboration/fallback. |
 | `noqlenmeta.fields.bpm` | `true` | Numeric track target | Float Item target | Enables preservation/sync and optional local Librosa analysis. |
 | `noqlenmeta.fields.lyrics_languages` | `true` | Typed track target | Typed Item target | Exact Recording -> Work lookup; stores three-letter codes. |
+| `noqlenmeta.fields.instrumental` | `true` | Boolean TrackInfo target | Nullable typed Item field (database only) | Only explicit MusicBrainz Recording-to-Work performance attribute `instrumental` yields `true`; absent evidence remains unknown, existing `false` requires review. No media-file write. |
 | `noqlenmeta.fields.artist_countries` | `true` | Typed release/track targets | Typed Album/Item targets | Structurally derived MusicBrainz geographic identification. |
 | `noqlenmeta.fields.artist_areas` | `false` | Typed release/track targets | Typed Album/Item targets | Trustworthy MusicBrainz main area; no string inference. |
 | `noqlenmeta.fields.artist_languages` | `true` | Typed release/track targets | Typed Album/Item targets | Three-letter codes derived only from current-target Works. |
