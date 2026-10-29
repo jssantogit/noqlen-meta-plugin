@@ -194,3 +194,52 @@ def test_disabled_explicitness_never_queries_itunes_track_adapter() -> None:
     result = plugin._collect_track_candidates(context(), policy)
     assert all(item.field != "explicitness" for item in result.evidence)
     assert urls == []
+
+
+def test_distinct_track_searches_are_paced_but_cache_hits_are_free() -> None:
+    clock = [100.0]
+    sleeps: list[float] = []
+    requests: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        clock[0] += seconds
+
+    def request(url: str) -> dict[str, object]:
+        requests.append(clock[0])
+        return {"results": []}
+
+    provider = ITunesTrackExplicitnessProvider(
+        request_json=request,
+        clock=lambda: clock[0],
+        sleep=sleep,
+    )
+    assert provider.get_evidence(context()) == ()
+    assert provider.get_evidence(context()) == ()
+    assert provider.get_evidence(context(title="Second Song")) == ()
+
+    assert len(requests) == 2
+    assert requests[1] - requests[0] >= 3.0
+    assert len(sleeps) == 1
+
+
+def test_rate_limit_still_applies_after_failed_search() -> None:
+    clock = [100.0]
+    calls: list[float] = []
+
+    def request(url: str) -> dict[str, object]:
+        calls.append(clock[0])
+        if len(calls) == 1:
+            raise OSError("unavailable")
+        return {"results": []}
+
+    provider = ITunesTrackExplicitnessProvider(
+        request_json=request,
+        clock=lambda: clock[0],
+        sleep=lambda delay: clock.__setitem__(0, clock[0] + delay),
+    )
+    with pytest.raises(ProviderError, match="iTunes track advisory lookup failed"):
+        provider.get_evidence(context())
+    assert provider.get_evidence(context()) == ()
+    assert len(calls) == 2
+    assert calls[1] - calls[0] >= 3.0
