@@ -604,6 +604,40 @@ def test_recording_cache_does_not_reuse_insufficient_include_profile() -> None:
     assert calls == [("genres", "tags"), ("isrcs",)]
 
 
+def test_work_credit_acquisition_rejects_non_performance_relations() -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [
+                {
+                    "type": "other",
+                    "type_id": "11111111-2222-4333-8444-555555555555",
+                    "work": {"id": WORK_TWO},
+                }
+            ],
+        },
+        works={
+            WORK_TWO: {
+                "id": WORK_TWO,
+                "iswcs": ["T-123.456.789-0"],
+                "artist_relations": [
+                    {
+                        "type": "composer",
+                        "type_id": "d59d99ea-23d4-4a80-b066-edca32ee158f",
+                        "artist": {"id": ARTIST_MBID, "name": "Wrong Composer"},
+                    }
+                ],
+            }
+        },
+    )
+    enrichment = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"composers", "iswcs"}
+    ).get_enrichment(track_context())
+
+    assert calls["work"] == []
+    assert not any(item.field in {"composers", "iswcs"} for item in enrichment.evidence)
+
+
 def test_only_performance_work_relationship_is_accepted() -> None:
     semantic_client, _ = client(
         recording={
