@@ -156,7 +156,10 @@ def test_credit_persistence_failure_rolls_back_native_projection(
     )
     change = PlannedChange("performers", None, (reference,), evidence, "resolved")
 
+    original_apply = application_module.apply_credit_state
+
     def fail_credit_write(*args: object, **kwargs: object) -> int:
+        original_apply(*args, **kwargs)
         raise RuntimeError("simulated credit persistence failure")
 
     monkeypatch.setattr(application_module, "apply_credit_state", fail_credit_write)
@@ -165,6 +168,7 @@ def test_credit_persistence_failure_rolls_back_native_projection(
 
     assert library.get_item(item.id).get("performers") is None
     assert item.get("performers") is None
+    assert read_credit_state(library, "item", item.id) == {}
 
 
 def test_stale_database_state_is_rejected(library: Library) -> None:
