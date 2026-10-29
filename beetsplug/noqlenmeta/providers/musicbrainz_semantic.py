@@ -231,15 +231,18 @@ class MusicBrainzTrackProvider:
                 _recording_evidence("structured_artist_credits", artist_credit, recording_id)
             )
         work_credit_fields = {"composers", "lyricists", "arrangers"}
-        work_fields = {"lyrics_languages", "artist_languages", "iswcs"} | work_credit_fields
+        legacy_language_fields = {"lyrics_languages", "artist_languages"}
+        work_fields = legacy_language_fields | {"iswcs"} | work_credit_fields
         if self.enabled_fields & work_fields:
-            work_ids = (
-                tuple(reference.mbid for reference in work_references)
-                if self.enabled_fields & {"works", "iswcs"}
-                else _related_ids(payload, "work")
+            # Legacy V2 language lookups retain their established breadth, but
+            # V3 identity and credit evidence must only follow performance edges.
+            performance_ids = tuple(reference.mbid for reference in work_references)
+            language_ids = (
+                _related_ids(payload, "work")
+                if self.enabled_fields & legacy_language_fields
+                else ()
             )
-            if not work_ids:
-                work_ids = _related_ids(payload, "work")
+            work_ids = tuple(dict.fromkeys((*performance_ids, *language_ids)))
             for work_id in work_ids:
                 try:
                     work = self.client.lookup_work(
@@ -258,11 +261,12 @@ class MusicBrainzTrackProvider:
                     continue
                 for language in _work_languages(work):
                     _append_unique(languages, language)
-                if "iswcs" in self.enabled_fields and (iswcs := _work_iswcs(work)):
-                    evidence.append(_work_evidence("iswcs", iswcs, work_id, recording_id))
-                for field, value in _work_credit_values(work, work_id).items():
-                    if field in self.enabled_fields:
-                        evidence.append(_work_evidence(field, value, work_id, recording_id))
+                if work_id in performance_ids:
+                    if "iswcs" in self.enabled_fields and (iswcs := _work_iswcs(work)):
+                        evidence.append(_work_evidence("iswcs", iswcs, work_id, recording_id))
+                    for field, value in _work_credit_values(work, work_id).items():
+                        if field in self.enabled_fields:
+                            evidence.append(_work_evidence(field, value, work_id, recording_id))
         metadata = ()
         if languages:
             metadata = (
