@@ -105,6 +105,33 @@ def test_lyrics_forms_are_emitted_only_when_independently_present(
     assert [candidate.field for candidate in candidates] == expected_fields
 
 
+def test_v3_instrumental_assertion_is_separate_from_legacy_lyrics_candidates() -> None:
+    payload = fixture()
+    payload["instrumental"] = True
+    fetch = FetchRecord(payload)
+    provider = LRCLIBProvider(fetch_record=fetch)
+
+    assert provider.get_candidates(context()) == ()
+    evidence = provider.get_instrumental_evidence(context())
+    assert len(evidence) == 1
+    assert evidence[0].field == "instrumental"
+    assert evidence[0].value is True
+    assert evidence[0].provider == "lrclib"
+    assert len(fetch.calls) == 1
+
+
+def test_v3_lrclib_false_does_not_claim_vocal_state() -> None:
+    fetch = FetchRecord(fixture())
+    provider = LRCLIBProvider(fetch_record=fetch)
+
+    assert provider.get_instrumental_evidence(context()) == ()
+    assert [candidate.field for candidate in provider.get_candidates(context())] == [
+        "lyrics",
+        "synced_lyrics",
+    ]
+    assert len(fetch.calls) == 1
+
+
 def test_instrumental_record_emits_no_candidates() -> None:
     payload = fixture()
     payload["instrumental"] = True
