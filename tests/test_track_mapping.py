@@ -191,6 +191,16 @@ def test_same_name_distinct_composer_mbids_stay_positionally_aligned() -> None:
     assert targets["composers_ids"] == (first_id, second_id)
 
 
+def test_v3_vocal_languages_map_to_typed_item_only() -> None:
+    plan = map_change_plan_to_track_info(
+        ChangePlan(changes=(planned_change("vocal_languages", ("kor", "eng")),))
+    )
+    assert len(plan.mapped_changes) == 1
+    assert plan.mapped_changes[0].target_field == "vocal_languages"
+    assert plan.mapped_changes[0].target_shape is TrackTargetShape.STRING_LIST
+    assert plan.blocked_changes == ()
+
+
 def test_explicitness_maps_only_known_canonical_values_to_v3_db_target() -> None:
     for advisory in ("explicit", "clean"):
         plan = map_change_plan_to_track_info(
