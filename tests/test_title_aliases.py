@@ -167,3 +167,28 @@ def test_typed_aliases_preview_and_apply_through_real_library_command(
     command.func(library, opts, args)
     assert read_title_aliases(library, item.id) == aliases()
     assert library.get_item(item.id).title == "Original Title"
+
+
+def test_transliteration_only_configuration_uses_same_typed_store(
+    target: tuple[Library, Item],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from beetsplug.noqlenmeta import NoqlenMetaPlugin
+    from beetsplug.noqlenmeta.semantic_enrichment import SemanticEnrichmentResult
+
+    library, item = target
+    plugin = NoqlenMetaPlugin()
+    plugin.config["fields"].set({
+        **{field: False for field in plugin.config["fields"].keys()},
+        "transliterations": True,
+    })
+    monkeypatch.setattr(
+        plugin,
+        "_collect_track_candidates",
+        lambda *_: SemanticEnrichmentResult((), {}, aliases=aliases()[1:]),
+    )
+    command = plugin.commands()[0]
+    opts, args = command.parse_args(["--apply", "--all"])
+    command.func(library, opts, args)
+
+    assert read_title_aliases(library, item.id) == aliases()[1:]
