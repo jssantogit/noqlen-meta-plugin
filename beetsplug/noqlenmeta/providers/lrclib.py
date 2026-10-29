@@ -14,7 +14,18 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from beetsplug.noqlenmeta.domain import MetadataCandidate, TrackEnrichmentContext
+from beetsplug.noqlenmeta.domain import (
+    ExternalIdentifier,
+    MetadataCandidate,
+    TrackEnrichmentContext,
+)
+from beetsplug.noqlenmeta.evidence import (
+    AcquisitionMethod,
+    AcquisitionProvenance,
+    MetadataEvidence,
+    SubjectRef,
+)
+from beetsplug.noqlenmeta.field_contracts import EntityKind
 from beetsplug.noqlenmeta.providers.base import ProviderError
 from beetsplug.noqlenmeta.providers.specs import LRCLIB_SPEC
 
@@ -154,6 +165,9 @@ class LRCLIBProvider:
         self._cache: dict[
             tuple[str, str, str, float], tuple[MetadataCandidate, ...]
         ] = {}
+        self._instrumental_cache: dict[
+            tuple[str, str, str, float], MetadataEvidence | None
+        ] = {}
 
     def get_candidates(
         self,
@@ -180,10 +194,46 @@ class LRCLIBProvider:
         )
         if payload is None:
             self._cache[cache_key] = ()
+            self._instrumental_cache[cache_key] = None
             return ()
         candidates = self._normalize_payload(payload, context)
+        if payload["instrumental"] is True:
+            record_id = str(payload["id"])
+            self._instrumental_cache[cache_key] = MetadataEvidence(
+                "instrumental",
+                True,
+                SubjectRef(
+                    EntityKind.RECORDING,
+                    (ExternalIdentifier("lrclib.recording", record_id),),
+                ),
+                self.name,
+                LRCLIB_SPEC.scope,
+                record_id,
+                AcquisitionProvenance(AcquisitionMethod.STRUCTURALLY_VALIDATED),
+                source_url=f"{_PUBLIC_RECORD_URL}/{record_id}",
+                confidence=_CONFIDENCE,
+            )
+        else:
+            self._instrumental_cache[cache_key] = None
         self._cache[cache_key] = candidates
         return candidates
+
+    def get_instrumental_evidence(
+        self, context: TrackEnrichmentContext
+    ) -> tuple[MetadataEvidence, ...]:
+        """V3-only, positive assertion; never infer vocal/false from absence."""
+        if context.album_title is None or context.duration is None:
+            return ()
+        cache_key = (
+            context.artist,
+            context.title,
+            context.album_title,
+            context.duration,
+        )
+        if cache_key not in self._cache:
+            self.get_candidates(context)
+        item = self._instrumental_cache.get(cache_key)
+        return (item,) if item is not None else ()
 
     def _normalize_payload(
         self,
