@@ -171,6 +171,24 @@ def test_credit_persistence_failure_rolls_back_native_projection(
     assert read_credit_state(library, "item", item.id) == {}
 
 
+def test_v3_vocal_languages_persist_to_typed_item_database(
+    loaded_plugin: None, library: Library
+) -> None:
+    from beetsplug.noqlenmeta.track_integration import current_values_from_library_item
+
+    item = add_item(library)
+    assert "vocal_languages" not in current_values_from_library_item(item)
+    result = apply_library_track_plan(
+        item, target_plan(planned_change("vocal_languages", ("eng", "kor")))
+    )
+    fresh = library.get_item(item.id)
+    assert result.stored
+    assert fresh["vocal_languages"] == ["eng", "kor"]
+    assert current_values_from_library_item(fresh)["vocal_languages"] == (
+        "eng", "kor"
+    )
+
+
 def test_explicitness_is_database_only_and_preserves_unknown_state(
     loaded_plugin: None, library: Library
 ) -> None:
