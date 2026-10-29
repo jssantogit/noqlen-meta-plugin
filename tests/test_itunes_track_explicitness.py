@@ -243,3 +243,36 @@ def test_rate_limit_still_applies_after_failed_search() -> None:
     assert provider.get_evidence(context()) == ()
     assert len(calls) == 2
     assert calls[1] - calls[0] >= 3.0
+
+
+def test_known_itunes_track_id_must_match_search_result() -> None:
+    from beetsplug.noqlenmeta.domain import ExternalIdentifier
+
+    provider = ITunesTrackExplicitnessProvider(
+        request_json=lambda _: {"results": [dict(TRACK)]}
+    )
+    match = context(
+        external_ids=(ExternalIdentifier("itunes.track", "1234"),)
+    )
+    mismatch = context(
+        external_ids=(ExternalIdentifier("itunes.track", "9999"),)
+    )
+    assert provider.get_evidence(match)[0].value == "explicit"
+    assert provider.get_evidence(mismatch) == ()
+
+
+def test_known_itunes_collection_id_restricts_same_named_editions() -> None:
+    from beetsplug.noqlenmeta.domain import ExternalIdentifier, ReleaseEnrichmentContext
+
+    album = lambda collection_id: ReleaseEnrichmentContext(
+        "Synthetic Artist",
+        "Synthetic Album",
+        external_ids=(ExternalIdentifier("itunes.collection", str(collection_id)),),
+    )
+    row = dict(TRACK, collectionId=777)
+    provider = ITunesTrackExplicitnessProvider(
+        request_json=lambda _: {"results": [row]}
+    )
+
+    assert provider.get_evidence(context(release=album(777)))[0].value == "explicit"
+    assert provider.get_evidence(context(release=album(778))) == ()
