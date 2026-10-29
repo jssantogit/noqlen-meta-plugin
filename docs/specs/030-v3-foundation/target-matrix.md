@@ -343,6 +343,8 @@ conservative evidence, **not** ground-truth key recognition: modal ambiguity,
 modulation, atonal content, percussion, silence and poor harmonic separation
 can yield no assertion. The canonical beets notation (`C` major, `Am` minor, etc.) maps to native
 `initial_key` and the interoperable `INITIALKEY` file tag. Existing keys are
-always preserved; only verified missing values may be proposed. Analysis occurs
-only in library preview/apply at this stage, not during importer matching.
+always preserved; only verified missing values may be proposed. Analysis is available on library preview/apply and on the selected importer
+track path, after matching (never as matching/identity evidence). Importer
+preview is side-effect-free; opt-in application updates the selected TrackInfo
+only, with beets remaining responsible for the subsequent import lifecycle.
 The audio backend is loaded lazily and the default remains disabled.
