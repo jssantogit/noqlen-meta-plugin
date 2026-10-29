@@ -20,6 +20,8 @@ ITEM_FIELD_TYPES = MappingProxyType(
         "vocal_languages": types.MULTI_VALUE_DSV,
         "instrumental": types.BOOLEAN,
         "explicitness": types.STRING,
+        "track_version_type": types.STRING,
+        "track_version_description": types.STRING,
         "producers": types.MULTI_VALUE_DSV,
         "conductors": types.MULTI_VALUE_DSV,
         "performers": types.MULTI_VALUE_DSV,
