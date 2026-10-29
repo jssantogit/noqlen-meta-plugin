@@ -52,7 +52,7 @@ def default_config() -> dict[str, Any]:
             "moods": True,
             "bpm": True,
             "lyrics_languages": True,
-            "instrumental": True,
+            "instrumental": False,
             "artist_countries": True,
             "artist_areas": False,
             "artist_languages": True,
