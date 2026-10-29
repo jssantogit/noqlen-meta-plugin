@@ -40,6 +40,13 @@ from beetsplug.noqlenmeta.artwork_application import (
     ArtworkApplicationResult,
     apply_artwork_plan,
 )
+from beetsplug.noqlenmeta.back_artwork import (
+    BackArtworkPlan,
+    apply_back_artwork_plan,
+    back_artwork_requires_lookup,
+    plan_back_artwork,
+    resolve_caa_back_artwork,
+)
 from beetsplug.noqlenmeta.beets_application import (
     BeetsApplicationMode,
     apply_beets_target_plan,
@@ -895,7 +902,13 @@ class NoqlenMetaPlugin(BeetsPlugin):
             )
         )
         artwork_enabled = self.config["fields"]["cover"].get(bool)
-        release_can_contribute = ordinary_release_can_contribute or artwork_enabled
+        back_enabled = (
+            "back_artwork" in set(self.config["fields"].keys())
+            and self.config["fields"]["back_artwork"].get(bool)
+        )
+        release_can_contribute = (
+            ordinary_release_can_contribute or artwork_enabled or back_enabled
+        )
         track_can_contribute = self._has_contributing_track_provider(policy) or (
             policy.is_field_enabled("bpm")
             and (local_bpm_settings.enabled or write_enabled)
@@ -913,6 +926,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
         prepared_albums: list[LibraryAlbumPlan] = []
         prepared_artwork: list[tuple[Album, ArtworkPlan]] = []
+        prepared_back_artwork: list[tuple[Album, BackArtworkPlan]] = []
         artwork_settings = self._artwork_settings()
         total = len(albums)
         for position, album in enumerate(albums, 1):
@@ -943,6 +957,36 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     )
                 prepared_artwork.append((album, artwork_plan))
                 self._render_artwork_plan(artwork_plan)
+            if back_enabled:
+                try:
+                    back_context = artwork_context_from_album(
+                        album, tuple(album.items())
+                    )
+                    back_lookup = None
+                    if (
+                        back_artwork_requires_lookup(back_context)
+                        and self.config["providers"]["coverartarchive"]["enabled"].get(bool)
+                    ):
+                        if self._coverartarchive_client is None:
+                            self._coverartarchive_client = CoverArtArchiveClient()
+                        back_lookup = resolve_caa_back_artwork(
+                            self._coverartarchive_client,
+                            back_context.release_mbid,
+                            artwork_settings,
+                        )
+                    back_plan = plan_back_artwork(back_context, back_lookup)
+                    prepared_back_artwork.append((album, back_plan))
+                    ui.print_(
+                        "Noqlen Meta / Back artwork PREVIEW: "
+                        f"Album {back_plan.album_id}; status={back_plan.status}; "
+                        f"reason={back_plan.reason}"
+                    )
+                except ValueError as error:
+                    ui.print_(
+                        f"Noqlen Meta / Back artwork BLOCKED: Album {album.id}; "
+                        f"reason={error}"
+                    )
+
             if not ordinary_release_can_contribute:
                 continue
             context = context_from_library_album(album)
@@ -1247,6 +1291,13 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     lib, artwork_album, artwork_plan
                 )
                 self._render_artwork_application_result(artwork_result)
+            for back_album, back_plan in prepared_back_artwork:
+                result = apply_back_artwork_plan(lib, back_album, back_plan)
+                ui.print_(
+                    "Noqlen Meta / Back artwork application: "
+                    f"Album {result.album_id}; status={result.status}; "
+                    f"sidecars={len(result.committed)}; reason={result.reason}"
+                )
 
         for album_plan, application_result in zip(
             prepared_albums, album_results, strict=True
