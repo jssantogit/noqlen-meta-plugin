@@ -8,6 +8,8 @@ from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_CAPABILITY_REGISTRY,
     CREDIT_PROVIDER_CAPABILITIES,
     CREDIT_PROVIDER_CAPABILITY_REGISTRY,
+    RECORDING_SEMANTIC_PROVIDER_CAPABILITIES,
+    RECORDING_SEMANTIC_PROVIDER_CAPABILITY_REGISTRY,
     RELEASE_CATALOG_PROVIDER_CAPABILITIES,
     RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY,
 )
@@ -19,6 +21,7 @@ def test_provider_capabilities_reference_field_registry() -> None:
         *BUILTIN_PROVIDER_CAPABILITIES,
         *RELEASE_CATALOG_PROVIDER_CAPABILITIES,
         *CREDIT_PROVIDER_CAPABILITIES,
+        *RECORDING_SEMANTIC_PROVIDER_CAPABILITIES,
     ):
         assert capability.field in FIELD_CONTRACTS
         assert capability.asserted_entity in FIELD_CONTRACTS[capability.field].allowed_entities
@@ -35,7 +38,9 @@ def test_authority_matrix_references_registered_capabilities() -> None:
         )
         assert key in BUILTIN_PROVIDER_CAPABILITY_REGISTRY or (
             key in RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY
-        ) or key in CREDIT_PROVIDER_CAPABILITY_REGISTRY
+        ) or key in CREDIT_PROVIDER_CAPABILITY_REGISTRY or (
+            key in RECORDING_SEMANTIC_PROVIDER_CAPABILITY_REGISTRY
+        )
 
 
 def test_current_target_mappings_reference_field_registry() -> None:
