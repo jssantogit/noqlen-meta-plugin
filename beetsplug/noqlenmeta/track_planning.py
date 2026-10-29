@@ -45,6 +45,7 @@ _TRACK_CURRENT_FIELDS = (
     "lyrics",
     "synced_lyrics",
     "bpm",
+    "initial_key",
     "genres",
     "moods",
     "lyrics_languages",
@@ -240,6 +241,7 @@ def _current_values_surviving_beets_clear(item: Item) -> dict[str, MetadataValue
         field: value
         for field, value in current.items()
         if field not in Item._media_tag_fields
+        and not (field == "key" and "initial_key" in Item._media_tag_fields)
     }
 
 
