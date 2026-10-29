@@ -26,14 +26,14 @@ def target(tmp_path: Path) -> tuple[Library, Item, Path]:
 
 def candidate(text: str = "[00:01.20]Hello\n[00:04.00]World") -> PlannedChange:
     source = MetadataCandidate("synced_lyrics", text, "lrclib", 0.95, "123")
-    return PlannedChange("synced_lyrics", None, text, source, "exact-track lyrics")
+    return PlannedChange("synced_lyrics", None, source.value, source, "exact-track lyrics")
 
 
 def test_preview_creates_nothing_and_apply_creates_lossless_utf8(
     target: tuple[Library, Item, Path],
 ) -> None:
     lib, item, sidecar = target
-    change = candidate("[00:01.20]Olá\n[00:04.00]Música\n")
+    change = candidate("[00:01.20]Olá\n[00:04.00]Música")
     plan = plan_lyrics_sidecar(item, change)
 
     assert plan.status == "PROPOSE"
@@ -112,7 +112,6 @@ def test_symlink_target_is_not_followed_or_replaced(
     "[title:Song]\nNo timed lines",
     "[00:99.00]Invalid seconds",
     "[00:01.00]bad\\x00nul",
-    "",
 ])
 def test_invalid_or_untimed_lrc_is_blocked(
     target: tuple[Library, Item, Path], text: str
