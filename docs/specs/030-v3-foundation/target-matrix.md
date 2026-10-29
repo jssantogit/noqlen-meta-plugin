@@ -109,3 +109,29 @@ Primary technical references:
 [Vorbis comments](https://xiph.org/vorbis/doc/v-comment.html),
 [Mutagen ID3](https://mutagen.readthedocs.io/en/latest/api/id3_frames.html), and
 [Mutagen MP4](https://mutagen.readthedocs.io/en/latest/api/mp4.html).
+
+
+## Instrumental V3 implementation — 2026-10-29
+
+The executable V3 `instrumental` field is a **nullable Boolean Item value**.
+Only an explicit positive assertion may be proposed; no evidence means
+**unknown**, never `false`. An existing explicit `false` is preserved and
+conflicting positive evidence produces REVIEW.
+
+MusicBrainz is primary only when the canonical Recording-to-Work `performance`
+relationship explicitly includes the `instrumental` attribute. Non-performance
+edges, missing attributes, free-text genres/titles and unrelated Work metadata
+do not prove instrumental state.
+
+LRCLIB is secondary and may assert `true` only after its existing exact
+artist/title/album/duration validation and explicit `instrumental: true`.
+Its explicit `false` is deliberately not accepted as proof of vocals. The V2
+`get_candidates()` lyrics behavior and request/cache scope are unchanged;
+the same normalized response supplies the separate V3 evidence.
+
+The V2 public configuration defaults, provider spec capability sets and
+`TRACK_FIELD_TARGETS` remain unchanged. The separate V3 authority capability
+registry and track mapper support `fields.instrumental: true` as an explicit
+opt-in in development configuration. Application is database-only through the
+normal ChangePlan/preview/review/SQLite rollback pipeline. No media-file tag is
+advertised or written for instrumental state.
