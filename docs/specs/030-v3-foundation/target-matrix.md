@@ -317,3 +317,32 @@ display title and both previous values, using the same explicit SQLite
 SAVEPOINT-backed database mutation pattern as other V3 fields.
 Importer-side version projection and richer relationship-typed mix/version
 semantics remain open.
+
+
+
+## Conservative local Key V3 — implementation 2026-10-29
+
+The V3 library command can opt into local key estimation with two explicit
+switches, without modifying V2 public defaults:
+
+```yaml
+noqlenmeta:
+  fields:
+    key: true
+  local_analysis:
+    key:
+      enabled: true
+      analysis_mode: window  # full or window
+      window_seconds: 90
+```
+
+The optional `[audio]` Librosa backend computes a pitch-class distribution and
+correlates it against 24 major/minor templates. The policy abstains unless the
+leading correlation is >= 0.70 and at least 0.10 above the runner-up. This is
+conservative evidence, **not** ground-truth key recognition: modal ambiguity,
+modulation, atonal content, percussion, silence and poor harmonic separation
+can yield no assertion. The canonical beets notation (`C` major, `Am` minor, etc.) maps to native
+`initial_key` and the interoperable `INITIALKEY` file tag. Existing keys are
+always preserved; only verified missing values may be proposed. Analysis occurs
+only in library preview/apply at this stage, not during importer matching.
+The audio backend is loaded lazily and the default remains disabled.

@@ -145,6 +145,13 @@ from beetsplug.noqlenmeta.integration import (
     resolution_policy_from_settings,
     resolve_discogs_token,
 )
+from beetsplug.noqlenmeta.key_analysis import (
+    KeyPlanningResult,
+    KeySettings,
+    LibrosaKeyAnalyzer,
+    key_settings_from_config,
+    plan_key,
+)
 from beetsplug.noqlenmeta.library_application import (
     LibraryApplicationError,
     LibraryApplicationMode,
@@ -370,6 +377,36 @@ def _change_plan_with_bpm(
         )
     )
     return merged, build_change_plan(merged)
+
+
+def _integrate_key_decision(
+    planning: TrackPlanningResult, result: KeyPlanningResult
+) -> TrackPlanningResult:
+    if (
+        result.outcome != "RESOLVED"
+        or result.observation is None
+        or result.canonical_key is None
+        or any(change.field == "key" for change in planning.change_plan.changes)
+    ):
+        return planning
+    candidate = MetadataCandidate(
+        "key", result.canonical_key, result.observation.backend,
+        result.observation.confidence, "local-analysis",
+    )
+    decision = FieldDecision(
+        "key", result.current_key, candidate, ResolutionAction.PROPOSE,
+        result.reason,
+    )
+    change_plan = compose_change_plans(
+        planning.change_plan, build_change_plan((decision,))
+    )
+    return replace(
+        planning,
+        candidate_count=planning.candidate_count + 1,
+        decisions=tuple(sorted((*planning.decisions, decision), key=lambda d: d.field)),
+        change_plan=change_plan,
+        target_plan=map_change_plan_to_track_info(change_plan),
+    )
 
 
 class IdentityImporterSettingsError(RuntimeError):
@@ -906,6 +943,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         policy = self._resolution_policy()
         bpm_settings = self._bpm_settings()
         local_bpm_settings = self._local_bpm_settings()
+        local_key_settings = self._local_key_settings()
         ordinary_release_can_contribute = self._has_contributing_release_provider(policy) or (
             policy.is_provider_enabled("musicbrainz")
             and any(
@@ -921,9 +959,11 @@ class NoqlenMetaPlugin(BeetsPlugin):
         release_can_contribute = (
             ordinary_release_can_contribute or artwork_enabled or back_enabled
         )
-        track_can_contribute = self._has_contributing_track_provider(policy) or (
-            policy.is_field_enabled("bpm")
+        track_can_contribute = (
+            self._has_contributing_track_provider(policy)
+            or policy.is_field_enabled("bpm")
             and (local_bpm_settings.enabled or write_enabled)
+            or policy.is_field_enabled("key") and local_key_settings.enabled
         )
         if not release_can_contribute and not track_can_contribute:
             ui.print_("Noqlen Meta: no enabled provider can contribute to the configured fields")
@@ -1093,6 +1133,14 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 semantic_outcomes=track_enrichment.outcomes,
             )
             planning = self._integrate_library_bpm(planning, bpm_result)
+            key_result = plan_key(
+                path=item.path,
+                existing_key=item.get("initial_key", None),
+                field_enabled=policy.is_field_enabled("key"),
+                settings=local_key_settings,
+                analyzer=LibrosaKeyAnalyzer() if local_key_settings.enabled else None,
+            )
+            planning = _integrate_key_decision(planning, key_result)
             # A timed .lrc is an associated asset, never a beets TrackInfo
             # field. Separate its approved proposal from the ordinary DB
             # target mapping without changing V2's public mapping contract.
@@ -1744,7 +1792,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         available_fields = set(self.config["fields"].keys())
         for field in (
             "instrumental", "explicitness", "vocal_languages",
-            "alternate_titles", "transliterations", "track_version"
+            "alternate_titles", "transliterations", "track_version", "key"
         ):
             if field in available_fields:
                 field_settings[field] = self.config["fields"][field].get(bool)
@@ -2004,6 +2052,16 @@ class NoqlenMetaPlugin(BeetsPlugin):
             )
         except (confuse.ConfigError, ValueError) as error:
             raise ui.UserError(f"noqlenmeta: invalid local BPM configuration: {error}") from None
+
+    def _local_key_settings(self) -> KeySettings:
+        try:
+            settings = self.config["local_analysis"].get(dict)
+            return (
+                key_settings_from_config(settings["key"])
+                if "key" in settings else KeySettings()
+            )
+        except (confuse.ConfigError, ValueError) as error:
+            raise ui.UserError(f"noqlenmeta: invalid local key configuration: {error}") from None
 
     def _bpm_analyzer(self, settings: LocalBpmSettings) -> TempoAnalyzer | None:
         if not settings.enabled:
