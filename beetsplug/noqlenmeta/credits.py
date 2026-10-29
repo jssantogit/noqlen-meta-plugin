@@ -201,7 +201,7 @@ def canonical_credit_references(
         raise TypeError("credit references must contain CreditReference values")
     unique: dict[tuple[object, ...], CreditReference] = {}
     for reference in sorted(references, key=_credit_sort_key):
-        unique.setdefault(_credit_identity(reference), reference)
+        unique.setdefault(credit_reference_identity(reference), reference)
     return tuple(sorted(unique.values(), key=_credit_sort_key))
 
 
@@ -209,15 +209,28 @@ def _party_identity(party: CreditParty) -> tuple[str, str]:
     return ("mbid", party.mbid) if party.mbid is not None else ("name", party.name)
 
 
-def _credit_identity(reference: CreditReference) -> tuple[object, ...]:
+def credit_reference_identity(reference: CreditReference) -> tuple[object, ...]:
+    """One semantic relation key for canonicalization, resolution and persistence.
+
+    Attributed or directionally distinct relationships must not collapse just
+    because the same musician, role and source entity occur more than once.
+    Credited-as aliases and provider ordering are evidence/display metadata,
+    not structural identity.
+    """
+    relation_type = (
+        ("uuid", reference.relation_type_id)
+        if reference.relation_type_id
+        else ("text", (reference.relation_type or "").casefold())
+    )
     return (
         _party_identity(reference.party),
         reference.role.value,
         reference.scope.value,
         reference.instrument or "",
-        reference.relation_type_id or "",
-        reference.relation_type or "",
+        relation_type,
         reference.source_entity_id or "",
+        tuple(sorted(set(reference.attributes))),
+        reference.direction or "",
     )
 
 
