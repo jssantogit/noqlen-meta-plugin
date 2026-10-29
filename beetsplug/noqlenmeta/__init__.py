@@ -244,17 +244,17 @@ from beetsplug.noqlenmeta.track_mapping import (
     TrackTargetPlan,
     map_change_plan_to_track_info,
 )
-from beetsplug.noqlenmeta.track_version import (
-    TrackVersionPlan,
-    apply_track_version_plan,
-    plan_track_version,
-)
 from beetsplug.noqlenmeta.track_planning import (
     ImportTrackPlanningResult,
     TrackPlanningResult,
     build_import_track_planning_result,
     build_track_planning_result,
     effective_current_values_for_import_track,
+)
+from beetsplug.noqlenmeta.track_version import (
+    TrackVersionPlan,
+    apply_track_version_plan,
+    plan_track_version,
 )
 from beetsplug.noqlenmeta.track_preview import (
     render_import_track_plan,
