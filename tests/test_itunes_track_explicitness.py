@@ -152,3 +152,45 @@ def test_valid_no_match_is_cached_without_fabricating_clean() -> None:
     assert provider.get_evidence(context()) == ()
     assert provider.get_evidence(context()) == ()
     assert len(urls) == 1
+
+
+def test_track_explicitness_opt_in_uses_real_plugin_orchestration() -> None:
+    from beetsplug.noqlenmeta import NoqlenMetaPlugin
+    from beetsplug.noqlenmeta.integration import resolution_policy_from_settings
+
+    urls: list[str] = []
+    adapter = ITunesTrackExplicitnessProvider(
+        request_json=lambda url: urls.append(url) or {"results": [dict(TRACK)]}
+    )
+    plugin = NoqlenMetaPlugin()
+    plugin._itunes_track_explicitness_provider = adapter
+    policy = resolution_policy_from_settings(
+        {"explicitness": True}, {"itunes": True, "musicbrainz": False}
+    )
+
+    assert plugin._has_contributing_track_provider(policy)
+    result = plugin._collect_track_candidates(context(), policy)
+    assert result.candidates == ()
+    assert [(entry.field, entry.value) for entry in result.evidence] == [
+        ("explicitness", "explicit")
+    ]
+    assert len(urls) == 1
+
+
+def test_disabled_explicitness_never_queries_itunes_track_adapter() -> None:
+    from beetsplug.noqlenmeta import NoqlenMetaPlugin
+    from beetsplug.noqlenmeta.integration import resolution_policy_from_settings
+
+    urls: list[str] = []
+    adapter = ITunesTrackExplicitnessProvider(
+        request_json=lambda url: urls.append(url) or {"results": [dict(TRACK)]}
+    )
+    plugin = NoqlenMetaPlugin()
+    plugin._itunes_track_explicitness_provider = adapter
+    policy = resolution_policy_from_settings(
+        {"explicitness": False}, {"itunes": True, "musicbrainz": False}
+    )
+
+    result = plugin._collect_track_candidates(context(), policy)
+    assert all(item.field != "explicitness" for item in result.evidence)
+    assert urls == []
