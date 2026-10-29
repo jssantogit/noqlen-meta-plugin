@@ -179,6 +179,7 @@ from beetsplug.noqlenmeta.providers.specs import (
     LRCLIB_SPEC,
     MUSICBRAINZ_SPEC,
     RELEASE_CATALOG_PROVIDER_CAPABILITIES,
+    RECORDING_SEMANTIC_PROVIDER_CAPABILITIES,
     ProviderScope,
     ProviderSpec,
 )
@@ -1916,6 +1917,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 for capability in (
                     *BUILTIN_PROVIDER_CAPABILITIES,
                     *CREDIT_PROVIDER_CAPABILITIES,
+                    *RECORDING_SEMANTIC_PROVIDER_CAPABILITIES,
                 )
                 if capability.acquisition_scope is ProviderScope.TRACK
                 and capability.field
