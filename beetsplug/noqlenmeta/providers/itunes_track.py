@@ -198,7 +198,11 @@ def _exact_song(
     return True
 
 
-def _reference_ids(identifiers: Sequence[ExternalIdentifier], namespace: str) -> tuple[str, ...]:
+def _reference_ids(
+    identifiers: Sequence[ExternalIdentifier], namespace: str
+) -> tuple[str, ...]:
     return tuple(
-        sorted({identifier.value for identifier in identifiers if identifier.namespace == namespace})
+        sorted(
+            {identifier.value for identifier in identifiers if identifier.namespace == namespace}
+        )
     )
