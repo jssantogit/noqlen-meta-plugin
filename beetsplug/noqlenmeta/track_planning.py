@@ -48,6 +48,7 @@ _TRACK_CURRENT_FIELDS = (
     "genres",
     "moods",
     "lyrics_languages",
+    "vocal_languages",
     "instrumental",
     "explicitness",
     "artist_countries",
