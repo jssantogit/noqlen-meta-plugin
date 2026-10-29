@@ -171,6 +171,23 @@ def test_credit_persistence_failure_rolls_back_native_projection(
     assert read_credit_state(library, "item", item.id) == {}
 
 
+def test_instrumental_true_persists_and_reads_back_as_boolean(
+    loaded_plugin: None, library: Library
+) -> None:
+    from beetsplug.noqlenmeta.track_integration import current_values_from_library_item
+
+    item = add_item(library)
+    assert "instrumental" not in current_values_from_library_item(item)
+    result = apply_library_track_plan(
+        item, target_plan(planned_change("instrumental", True))
+    )
+
+    fresh = library.get_item(item.id)
+    assert result.stored
+    assert fresh["instrumental"] is True
+    assert current_values_from_library_item(fresh)["instrumental"] is True
+
+
 def test_stale_database_state_is_rejected(library: Library) -> None:
     item = add_item(library, lyrics="Before")
     plan = target_plan(planned_change("lyrics", "After", "Before"))
