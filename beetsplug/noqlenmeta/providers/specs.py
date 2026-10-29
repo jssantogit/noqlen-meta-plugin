@@ -222,7 +222,7 @@ ITUNES_SPEC = ProviderSpec(
 LRCLIB_SPEC = ProviderSpec(
     name="lrclib",
     display_name="LRCLIB",
-    supported_fields=frozenset({"lyrics", "synced_lyrics"}),
+    supported_fields=frozenset({"lyrics", "synced_lyrics", "instrumental"}),
     scope=ProviderScope.TRACK,
 )
 
