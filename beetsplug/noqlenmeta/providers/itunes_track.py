@@ -61,16 +61,20 @@ class ITunesTrackExplicitnessProvider:
         self._sleep = sleep or time.sleep
         self._request_lock = Lock()
         self._next_request_at: float | None = None
-        self._cache: dict[
-            tuple[str, str, str, float, int | None, int | None],
-            tuple[MetadataEvidence, ...],
-        ] = {}
+        self._cache: dict[tuple[object, ...], tuple[MetadataEvidence, ...]] = {}
 
     def get_evidence(
         self, context: TrackEnrichmentContext
     ) -> tuple[MetadataEvidence, ...]:
         if context.album_title is None or context.duration is None:
             return ()
+        # Distinct known catalog identities must not share a cached answer,
+        # even if every display field and the duration are identical.
+        track_ids = _reference_ids(context.external_ids, "itunes.track")
+        collection_ids = _reference_ids(
+            context.release.external_ids if context.release is not None else (),
+            "itunes.collection",
+        )
         key = (
             context.artist,
             context.title,
@@ -78,6 +82,8 @@ class ITunesTrackExplicitnessProvider:
             context.duration,
             context.track_number,
             context.disc_number,
+            track_ids,
+            collection_ids,
         )
         if key in self._cache:
             return self._cache[key]
@@ -160,6 +166,17 @@ def _exact_song(
         or abs(duration_ms / 1000 - context.duration) > _MAX_DURATION_DELTA_SECONDS
     ):
         return False
+    track_ids = _reference_ids(context.external_ids, "itunes.track")
+    if track_ids and (len(track_ids) != 1 or str(track_id) != track_ids[0]):
+        return False
+    collection_ids = _reference_ids(
+        context.release.external_ids if context.release is not None else (),
+        "itunes.collection",
+    )
+    if collection_ids and (
+        len(collection_ids) != 1 or str(row.get("collectionId")) != collection_ids[0]
+    ):
+        return False
     for field, requested in (
         ("artistName", context.artist),
         ("trackName", context.title),
@@ -179,3 +196,9 @@ def _exact_song(
         ):
             return False
     return True
+
+
+def _reference_ids(identifiers: Sequence[ExternalIdentifier], namespace: str) -> tuple[str, ...]:
+    return tuple(
+        sorted({identifier.value for identifier in identifiers if identifier.namespace == namespace})
+    )
