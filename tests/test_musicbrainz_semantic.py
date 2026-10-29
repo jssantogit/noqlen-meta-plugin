@@ -638,6 +638,50 @@ def test_work_credit_acquisition_rejects_non_performance_relations() -> None:
     assert not any(item.field in {"composers", "iswcs"} for item in enrichment.evidence)
 
 
+def test_mixed_work_relations_keep_legacy_languages_without_v3_credit_leak() -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [
+                {
+                    "type": "performance",
+                    "type_id": PERFORMANCE_TYPE_ID,
+                    "work": {"id": WORK_ONE},
+                },
+                {
+                    "type": "other",
+                    "type_id": "11111111-2222-4333-8444-555555555555",
+                    "work": {"id": WORK_TWO},
+                },
+            ],
+        },
+        works={
+            WORK_ONE: {"id": WORK_ONE, "iswcs": ["T-123.456.789-0"]},
+            WORK_TWO: {
+                "id": WORK_TWO,
+                "languages": ["eng"],
+                "iswcs": ["T-987.654.321-0"],
+                "artist_relations": [
+                    {
+                        "type": "composer",
+                        "type_id": "d59d99ea-23d4-4a80-b066-edca32ee158f",
+                        "artist": {"id": ARTIST_MBID, "name": "Wrong Composer"},
+                    }
+                ],
+            },
+        },
+    )
+    result = MusicBrainzTrackProvider(
+        semantic_client,
+        enabled_fields={"lyrics_languages", "composers", "iswcs"},
+    ).get_enrichment(track_context())
+
+    assert calls["work"] == [WORK_ONE, WORK_TWO]
+    assert not any(item.field == "composers" for item in result.evidence)
+    assert len([item for item in result.evidence if item.field == "iswcs"]) == 1
+    assert result.semantic.metadata[0].value == ("eng",)
+
+
 def test_only_performance_work_relationship_is_accepted() -> None:
     semantic_client, _ = client(
         recording={
