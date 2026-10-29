@@ -244,6 +244,11 @@ from beetsplug.noqlenmeta.track_mapping import (
     TrackTargetPlan,
     map_change_plan_to_track_info,
 )
+from beetsplug.noqlenmeta.track_version import (
+    TrackVersionPlan,
+    apply_track_version_plan,
+    plan_track_version,
+)
 from beetsplug.noqlenmeta.track_planning import (
     ImportTrackPlanningResult,
     TrackPlanningResult,
@@ -394,6 +399,7 @@ class LibraryItemPlan:
     bpm_result: BpmPlanningResult | None = None
     lyrics_sidecar: LyricsSidecarPlan | None = None
     title_aliases: TitleAliasPlan | None = None
+    track_version: TrackVersionPlan | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1129,6 +1135,12 @@ class NoqlenMetaPlugin(BeetsPlugin):
                         )
                         else None
                     ),
+                    (
+                        plan_track_version(item, track_enrichment.version)
+                        if policy.is_field_enabled("track_version")
+                        and track_enrichment.version is not None
+                        else None
+                    ),
                 )
             )
 
@@ -1274,6 +1286,22 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 or application_result is not None
                 and application_result.stored
             )
+
+        for item_plan in prepared_items:
+            version_plan = item_plan.track_version
+            if version_plan is None:
+                continue
+            ui.print_(
+                "Noqlen Meta / track version PREVIEW: "
+                f"Item {version_plan.item_id}; status={version_plan.status}; "
+                f"type={version_plan.version.kind}"
+            )
+            if apply_enabled and version_plan.status == "PROPOSE":
+                result = apply_track_version_plan(lib, version_plan)
+                ui.print_(
+                    "Noqlen Meta / track version application: "
+                    f"Item {result.item_id}; status={result.status}"
+                )
 
         # Structured aliases have their own lossless SQLite table. They are
         # not a flattened TrackInfo target and never replace the native title.
@@ -1716,7 +1744,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         available_fields = set(self.config["fields"].keys())
         for field in (
             "instrumental", "explicitness", "vocal_languages",
-            "alternate_titles", "transliterations"
+            "alternate_titles", "transliterations", "track_version"
         ):
             if field in available_fields:
                 field_settings[field] = self.config["fields"][field].get(bool)
@@ -2077,7 +2105,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 in {
                     "isrcs", "works", "iswcs", "recording_date",
                     "instrumental", "vocal_languages", "alternate_titles",
-                    "transliterations",
+                    "transliterations", "track_version",
                     *CREDIT_FIELDS
                 }
             )
@@ -2174,6 +2202,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         semantic_outcomes: Mapping[str, SemanticFieldOutcome] = {}
         lrclib_instrumental: tuple[MetadataEvidence, ...] = ()
         title_aliases = ()
+        track_version = None
         lyrics_requested = provider_can_contribute(policy, LRCLIB_SPEC)
         instrumental_requested = (
             policy.is_provider_enabled("lrclib")
@@ -2233,6 +2262,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 "vocal_languages",
                 "alternate_titles",
                 "transliterations",
+                "track_version",
                 *CREDIT_FIELDS,
             )
             if policy.is_field_enabled(field)
@@ -2254,6 +2284,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 ).get_enrichment(context)
                 recording_evidence = (*recording_evidence, *track_enrichment.evidence)
                 title_aliases = track_enrichment.aliases
+                track_version = track_enrichment.version
                 musicbrainz_tracks = (
                     (lambda: track_enrichment.semantic,) if semantic_fields else ()
                 )
@@ -2341,7 +2372,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 semantic_outcomes = semantic.outcomes
         return SemanticEnrichmentResult(
             tuple(candidates), semantic_outcomes, tuple(recording_evidence),
-            title_aliases,
+            title_aliases, track_version,
         )
 
     def _build_change_plan_for_release(
