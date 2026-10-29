@@ -423,7 +423,6 @@ RECORDING_SEMANTIC_PROVIDER_CAPABILITIES = (
         frozenset(
             {
                 AcquisitionCharacteristic.SEARCH,
-                AcquisitionCharacteristic.DIRECT_LOOKUP,
                 AcquisitionCharacteristic.RESPONSE_REUSE,
             }
         ),
