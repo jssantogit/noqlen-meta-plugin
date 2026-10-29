@@ -358,6 +358,12 @@ def _current_track_values(getter: Callable[[str], object]) -> dict[str, Canonica
     if type(instrumental) is bool:
         values["instrumental"] = instrumental
 
+    # Preserve unexpected existing state as a conflict, not a missing field
+    # that could be overwritten by a fresh provider assertion.
+    advisory = _optional_text(getter("explicitness"))
+    if advisory is not None:
+        values["explicitness"] = advisory
+
     bpm = getter("bpm")
     if (
         not isinstance(bpm, bool)
