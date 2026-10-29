@@ -209,6 +209,14 @@ class MusicBrainzTrackProvider:
         wave_unavailable: set[str] = set()
         evidence: list[MetadataEvidence] = []
         work_references = _work_references(payload)
+        # Only a validated Recording→Work performance relationship may assert
+        # instrumental. No attribute means unknown, never vocal/false.
+        if "instrumental" in self.enabled_fields and any(
+            attribute.casefold() == "instrumental"
+            for reference in work_references
+            for attribute in reference.attributes
+        ):
+            evidence.append(_recording_evidence("instrumental", True, recording_id))
         if "isrcs" in self.enabled_fields and (isrcs := _recording_isrcs(payload)):
             evidence.append(_recording_evidence("isrcs", isrcs, recording_id))
         if "works" in self.enabled_fields and work_references:
@@ -532,7 +540,7 @@ def _recording_profile(enabled_fields: Collection[str]) -> EntityFetchProfile:
         includes.update({"genres", "tags"})
     if "isrcs" in fields:
         includes.add("isrcs")
-    if fields & {"works", "iswcs", "lyrics_languages", "artist_languages"}:
+    if fields & {"works", "iswcs", "lyrics_languages", "artist_languages", "instrumental"}:
         includes.add("work-rels")
     if "recording_date" in fields:
         includes.add("place-rels")
