@@ -11,8 +11,8 @@ from beetsplug.noqlenmeta.field_contracts import EntityKind, field_contract
 from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_CAPABILITY_REGISTRY,
     CREDIT_PROVIDER_CAPABILITY_REGISTRY,
-    RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY,
     RECORDING_SEMANTIC_PROVIDER_CAPABILITY_REGISTRY,
+    RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY,
     ProviderScope,
 )
 
