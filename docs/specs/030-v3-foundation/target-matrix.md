@@ -210,3 +210,55 @@ No lyric-language detector or artist-country shortcut is used.
 
 Reference: [MusicBrainz Work language semantics](https://musicbrainz.org/doc/Work)
 and [Recording-to-Work Performance relation](https://musicbrainz.org/relationship/a3005666-a872-32c3-ad06-98af558e99b0).
+
+
+## V3 lossless synchronized lyrics and Back artwork — 2026-10-29
+
+### Exact-track synchronized lyrics
+
+The existing LRCLIB candidate `synced_lyrics` is not treated as a normal
+TrackInfo or media-file field: an approved candidate is now routed to a
+dedicated **`<audio-stem>.lrc` associated sidecar plan** in the library
+`beet nm` command. The V2 TrackInfo mapper, legacy import behavior and
+public field defaults are unchanged. A valid timestamped LRC (minimum one
+`[mm:ss.xx]` or equivalent time tag) is required. The selected text is
+written as UTF-8 without flattening into plain lyrics.
+
+Preview does not write. `--apply` may create the sidecar without
+`--write`; the audio file is never rewritten for LRC. An existing
+byte-identical sidecar is KEEP, an existing different or non-regular
+destination is REVIEW, and invalid/untimed content is BLOCKED.
+Application re-reads the Item path from the library and uses a staged,
+fsynced file and **atomic no-clobber hardlink**; stale, moved or
+concurrently-created destinations are never overwritten. The operation
+is a separately verified asset commit, not an audio-tag change.
+
+### Exact-edition Back artwork
+
+A separate V3 `fields.back_artwork: true` opt-in selects one approved
+`back: true` image from **exact MusicBrainz Release** CAA metadata;
+release-group fallback and multiple approved Back candidates are withheld.
+Only trusted CAA HTTPS URLs are admitted. The selected JPEG is downloaded
+only on `--apply` and saved as `back.jpg` in the release's item
+directories, with no replacement of existing sidecars, no Album.artpath
+mutation, and no implicit embed or Front artwork overwrite. It
+preserves earlier commits if a later disc-directory target changes,
+reporting a partial outcome rather than claiming rollback.
+
+Example user configuration for these **opt-in** development features:
+
+```yaml
+noqlenmeta:
+  fields:
+    synced_lyrics: true
+    back_artwork: true
+  providers:
+    lrclib:
+      enabled: true
+    coverartarchive:
+      enabled: true
+```
+
+`beet nm --all` previews and `beet nm --apply --all` applies.
+All other identity, field, edition and conflict guards remain active;
+this is not yet a V3 release or an authorization to merge.
