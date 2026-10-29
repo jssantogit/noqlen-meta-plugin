@@ -682,6 +682,63 @@ def test_mixed_work_relations_keep_legacy_languages_without_v3_credit_leak() -> 
     assert result.semantic.metadata[0].value == ("eng",)
 
 
+def test_explicit_performance_instrumental_attribute_emits_recording_evidence() -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [
+                {
+                    "type": "performance",
+                    "type_id": PERFORMANCE_TYPE_ID,
+                    "attributes": ["instrumental"],
+                    "work": {"id": WORK_ONE},
+                },
+                {
+                    "type": "other",
+                    "type_id": "11111111-2222-4333-8444-555555555555",
+                    "attributes": ["instrumental"],
+                    "work": {"id": WORK_TWO},
+                },
+            ],
+        },
+    )
+    result = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"instrumental"}
+    ).get_enrichment(track_context())
+
+    assert calls["work"] == []
+    assert len(result.evidence) == 1
+    assert result.evidence[0].field == "instrumental"
+    assert result.evidence[0].value is True
+    assert result.evidence[0].subject.entity is EntityKind.RECORDING
+
+
+def test_absent_or_untrusted_instrumental_attribute_is_unknown() -> None:
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [
+                {
+                    "type": "performance",
+                    "type_id": PERFORMANCE_TYPE_ID,
+                    "work": {"id": WORK_ONE},
+                },
+                {
+                    "type": "performance",
+                    "type_id": "11111111-2222-4333-8444-555555555555",
+                    "attributes": ["instrumental"],
+                    "work": {"id": WORK_TWO},
+                },
+            ],
+        },
+    )
+    result = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"instrumental"}
+    ).get_enrichment(track_context())
+
+    assert result.evidence == ()
+
+
 def test_only_performance_work_relationship_is_accepted() -> None:
     semantic_client, _ = client(
         recording={
