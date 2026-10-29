@@ -171,6 +171,22 @@ def test_credit_persistence_failure_rolls_back_native_projection(
     assert read_credit_state(library, "item", item.id) == {}
 
 
+def test_explicitness_is_database_only_and_preserves_unknown_state(
+    loaded_plugin: None, library: Library
+) -> None:
+    from beetsplug.noqlenmeta.track_integration import current_values_from_library_item
+
+    item = add_item(library)
+    assert "explicitness" not in current_values_from_library_item(item)
+    result = apply_library_track_plan(
+        item, target_plan(planned_change("explicitness", "clean"))
+    )
+    fresh = library.get_item(item.id)
+    assert result.stored
+    assert fresh["explicitness"] == "clean"
+    assert current_values_from_library_item(fresh)["explicitness"] == "clean"
+
+
 def test_instrumental_true_persists_and_reads_back_as_boolean(
     loaded_plugin: None, library: Library
 ) -> None:
