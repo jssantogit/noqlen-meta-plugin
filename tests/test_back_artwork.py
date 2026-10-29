@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from beets import config
 from beets.library import Item, Library
 
 from beetsplug.noqlenmeta.artwork import ArtworkSettings, artwork_context_from_album
@@ -31,6 +32,16 @@ JPEG = base64.b64decode(
 ) + b"\xff\xd9"
 
 RELEASE = "11111111-1111-4111-8111-111111111111"
+
+
+@pytest.fixture(autouse=True)
+def restore_beets_global_configuration() -> object:
+    # beets shares the global config source stack across plugin instances.
+    # Restore its *sources*, not just field values, after this module's tests.
+    config["timeout"].get()
+    sources = list(config.sources)
+    yield
+    config.sources[:] = sources
 
 
 def payload(*, back: bool = True, approved: bool = True) -> dict[str, object]:
