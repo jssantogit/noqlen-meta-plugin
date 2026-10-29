@@ -423,6 +423,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         self._lastfm_track_provider = None
         self._lastfm_artist_provider = None
         self._lrclib_provider = None
+        self._itunes_track_explicitness_provider = None
         self._musicbrainz_provider = None
         self._musicbrainz_semantic_client = None
         self._semantic_cache = CommandEntityCache()
@@ -1907,6 +1908,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
     @staticmethod
     def _has_contributing_track_provider(policy: ResolutionPolicy) -> bool:
+        if policy.is_provider_enabled("itunes") and policy.is_field_enabled("explicitness"):
+            return True
         return any(
             provider_can_contribute(policy, spec)
             or any(
@@ -2034,6 +2037,19 @@ class NoqlenMetaPlugin(BeetsPlugin):
             fetched = self._collect_provider_candidates(LRCLIB_SPEC, collect_lrclib)
             if lyrics_requested:
                 candidates.extend(fetched)
+
+        itunes_explicitness: tuple[MetadataEvidence, ...] = ()
+        if policy.is_provider_enabled("itunes") and policy.is_field_enabled(
+            "explicitness"
+        ):
+            try:
+                itunes_explicitness = self._itunes_track_explicitness(context)
+            except ProviderError:
+                self._log.warning(
+                    "Noqlen Meta: iTunes track advisory unavailable; "
+                    "processing will continue"
+                )
+
         semantic_fields = {
             field
             for field in (
@@ -2058,7 +2074,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
             )
             if policy.is_field_enabled(field)
         }
-        recording_evidence = lrclib_instrumental
+        recording_evidence = (*lrclib_instrumental, *itunes_explicitness)
         if semantic_fields or wave_fields:
             musicbrainz_release = None
             musicbrainz_tracks = ()
@@ -2552,3 +2568,17 @@ class NoqlenMetaPlugin(BeetsPlugin):
         if self._lrclib_provider is None:
             self._lrclib_provider = LRCLIBProvider()
         return tuple(self._lrclib_provider.get_candidates(context))
+
+    def _itunes_track_explicitness(
+        self, context: TrackEnrichmentContext
+    ) -> tuple[MetadataEvidence, ...]:
+        from beetsplug.noqlenmeta.providers.itunes_track import (
+            ITunesTrackExplicitnessProvider,
+        )
+
+        if self._itunes_track_explicitness_provider is None:
+            storefront = self.config["providers"]["itunes"]["storefront"].as_str()
+            self._itunes_track_explicitness_provider = ITunesTrackExplicitnessProvider(
+                storefront
+            )
+        return self._itunes_track_explicitness_provider.get_evidence(context)
