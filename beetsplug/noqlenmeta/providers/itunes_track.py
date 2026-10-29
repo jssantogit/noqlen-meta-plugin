@@ -8,9 +8,11 @@ a distinct clean edit and never becomes an implicit false.
 from __future__ import annotations
 
 import re
+import time
 import unicodedata
 from collections.abc import Callable, Mapping, Sequence
 from http.client import HTTPException
+from threading import Lock
 from urllib.parse import urlencode
 
 from beetsplug.noqlenmeta.domain import (
@@ -31,6 +33,8 @@ from beetsplug.noqlenmeta.providers.specs import ProviderScope
 _SEARCH_ENDPOINT = "https://itunes.apple.com/search"
 _MAX_RESULTS = 25
 _MAX_DURATION_DELTA_SECONDS = 2.0
+# Apple documents approximately 20 calls per minute for the Search API.
+_MIN_REQUEST_INTERVAL_SECONDS = 3.1
 _VALID_FLAGS = {"explicit": "explicit", "cleaned": "clean"}
 _ERROR = "iTunes track advisory lookup failed"
 
@@ -45,12 +49,18 @@ class ITunesTrackExplicitnessProvider:
         storefront: str = "us",
         *,
         request_json: Callable[[str], Mapping[str, object]] | None = None,
+        clock: Callable[[], float] | None = None,
+        sleep: Callable[[float], None] | None = None,
     ) -> None:
         storefront = storefront.strip().lower()
         if re.fullmatch(r"[a-z]{2}", storefront) is None:
             raise ProviderError("iTunes storefront configuration is invalid")
         self._storefront = storefront
         self._request_json = request_json or _request_json
+        self._clock = clock or time.monotonic
+        self._sleep = sleep or time.sleep
+        self._request_lock = Lock()
+        self._next_request_at: float | None = None
         self._cache: dict[
             tuple[str, str, str, float, int | None, int | None],
             tuple[MetadataEvidence, ...],
@@ -82,7 +92,12 @@ class ITunesTrackExplicitnessProvider:
         }
         url = f"{_SEARCH_ENDPOINT}?{urlencode(parameters)}"
         try:
-            payload = self._request_json(url)
+            with self._request_lock:
+                now = self._clock()
+                if self._next_request_at is not None and now < self._next_request_at:
+                    self._sleep(self._next_request_at - now)
+                self._next_request_at = self._clock() + _MIN_REQUEST_INTERVAL_SECONDS
+                payload = self._request_json(url)
             rows = payload["results"]
             if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
                 raise ValueError("invalid iTunes results")
