@@ -57,6 +57,15 @@ def test_equal_true_is_kept_but_conflicting_explicit_false_needs_review() -> Non
     assert contradictory.resolved_value is False
 
 
+def test_musicbrainz_primary_outranks_secondary_lrclib_evidence() -> None:
+    selected = resolve_recording_semantics(
+        {}, (evidence(provider="lrclib"), evidence(provider="musicbrainz"))
+    )[0]
+    assert selected.action is ResolutionAction.PROPOSE
+    assert selected.selected_source.provider == "musicbrainz"
+    assert len(selected.contributing_evidence) == 2
+
+
 def test_ineligible_source_and_false_by_absence_do_not_create_assertions() -> None:
     assert resolve_recording_semantics(
         {}, (evidence(provider="unsupported"),)
