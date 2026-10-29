@@ -53,6 +53,7 @@ from beetsplug.noqlenmeta.providers.specs import (
 from beetsplug.noqlenmeta.release_catalog import parse_partial_date
 from beetsplug.noqlenmeta.semantic_tags import classify_semantic_tag
 from beetsplug.noqlenmeta.title_aliases import TitleAlias, parse_recording_aliases
+from beetsplug.noqlenmeta.track_version import TrackVersion, parse_recording_version
 from beetsplug.noqlenmeta.work_identity import WorkReference, canonical_work_references
 
 EntityFetcher = Callable[..., Mapping[str, object] | None]
@@ -76,6 +77,7 @@ class MusicBrainzTrackEnrichment:
     evidence: tuple[MetadataEvidence, ...] = ()
     unavailable_fields: frozenset[str] = frozenset()
     aliases: tuple[TitleAlias, ...] = ()
+    version: TrackVersion | None = None
 
 
 class MusicBrainzSemanticClient:
@@ -335,8 +337,13 @@ class MusicBrainzTrackProvider:
                 alias for alias in aliases
                 if alias.alias_type.casefold() == "transliteration"
             )
+        version = (
+            parse_recording_version(payload, recording_id)
+            if "track_version" in self.enabled_fields
+            else None
+        )
         return MusicBrainzTrackEnrichment(
-            semantic, tuple(evidence), frozenset(wave_unavailable), aliases
+            semantic, tuple(evidence), frozenset(wave_unavailable), aliases, version
         )
 
 
