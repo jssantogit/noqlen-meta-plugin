@@ -26,6 +26,7 @@ class TrackTargetShape(Enum):
     SCALAR_STRING = "scalar_string"
     STRING_LIST = "string_list"
     SCALAR_FLOAT = "scalar_float"
+    SCALAR_BOOLEAN = "scalar_boolean"
 
 
 def _validate_field_name(value: object, label: str) -> None:
@@ -53,6 +54,7 @@ class TrackFieldTarget:
 _TARGETS = (
     TrackFieldTarget("lyrics", "lyrics", TrackTargetShape.SCALAR_STRING),
     TrackFieldTarget("bpm", "bpm", TrackTargetShape.SCALAR_FLOAT),
+    TrackFieldTarget("instrumental", "instrumental", TrackTargetShape.SCALAR_BOOLEAN),
     TrackFieldTarget("genres", "genres", TrackTargetShape.STRING_LIST),
     TrackFieldTarget("moods", "moods", TrackTargetShape.STRING_LIST),
     TrackFieldTarget(
@@ -258,6 +260,11 @@ def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
             ):
                 raise TrackMappingError(
                     f"{change.field!r} requires a non-empty tuple of canonical strings"
+                )
+        elif target.shape is TrackTargetShape.SCALAR_BOOLEAN:
+            if type(value) is not bool:
+                raise TrackMappingError(
+                    f"{change.field!r} requires an explicit boolean value"
                 )
         elif target.shape is TrackTargetShape.SCALAR_FLOAT:
             if (
