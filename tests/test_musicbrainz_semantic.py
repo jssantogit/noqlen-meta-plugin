@@ -738,6 +738,40 @@ def test_v3_vocal_languages_reject_inapplicable_performances(
     assert calls["work"] == []
 
 
+def test_v3_vocal_languages_reach_real_plugin_collection_without_v2_language_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from beetsplug.noqlenmeta import NoqlenMetaPlugin
+    from beetsplug.noqlenmeta.integration import resolution_policy_from_settings
+    from beetsplug.noqlenmeta.resolver import default_resolution_policy
+
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [{
+                "type": "performance", "type_id": PERFORMANCE_TYPE_ID,
+                "work": {"id": WORK_ONE},
+            }],
+        },
+        works={WORK_ONE: {"id": WORK_ONE, "languages": ["kor"]}},
+    )
+    plugin = NoqlenMetaPlugin()
+    monkeypatch.setattr(plugin, "_musicbrainz_client", lambda: semantic_client)
+    settings = {
+        field: field == "vocal_languages"
+        for field in default_resolution_policy().field_rules
+    }
+    policy = resolution_policy_from_settings(settings, {"musicbrainz": True})
+
+    assert plugin._has_contributing_track_provider(policy)
+    collected = plugin._collect_track_candidates(track_context(), policy)
+    assert collected.candidates == ()
+    assert [(item.field, item.value) for item in collected.evidence] == [
+        ("vocal_languages", ("kor",))
+    ]
+    assert calls["work"] == [WORK_ONE]
+
+
 def test_v3_vocal_languages_exclude_nonperformance_edges_and_multiple_works() -> None:
     semantic_client, calls = client(
         recording={
