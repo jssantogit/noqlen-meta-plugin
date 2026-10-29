@@ -130,7 +130,10 @@ def test_v3_lrclib_instrumental_only_uses_real_plugin_planning() -> None:
     plugin = NoqlenMetaPlugin()
     plugin._lrclib_provider = LRCLIBProvider(fetch_record=fetch)
     policy = resolution_policy_from_settings(
-        {field: field == "instrumental" for field in default_config()["fields"]},
+        {
+            **{field: False for field in default_config()["fields"]},
+            "instrumental": True,
+        },
         {"lrclib": True, "musicbrainz": False},
     )
 
