@@ -173,7 +173,7 @@ def test_legacy_migration_keeps_same_hash_different_owners_separate(
             attributes=("guest",),
         ),
     )
-    for item, reference in zip((first_item, second_item), refs):
+    for item, reference in zip((first_item, second_item), refs, strict=True):
         assert apply_credit_state(
             library, "item", item.id, (change("performers", (reference,)),)
         ) == 1
