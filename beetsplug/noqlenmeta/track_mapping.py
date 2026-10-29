@@ -54,7 +54,6 @@ class TrackFieldTarget:
 _TARGETS = (
     TrackFieldTarget("lyrics", "lyrics", TrackTargetShape.SCALAR_STRING),
     TrackFieldTarget("bpm", "bpm", TrackTargetShape.SCALAR_FLOAT),
-    TrackFieldTarget("instrumental", "instrumental", TrackTargetShape.SCALAR_BOOLEAN),
     TrackFieldTarget("genres", "genres", TrackTargetShape.STRING_LIST),
     TrackFieldTarget("moods", "moods", TrackTargetShape.STRING_LIST),
     TrackFieldTarget(
@@ -82,6 +81,16 @@ _TARGETS = (
 
 TRACK_FIELD_TARGETS: Mapping[str, TrackFieldTarget] = MappingProxyType(
     {target.canonical_field: target for target in _TARGETS}
+)
+
+# V2 registry remains frozen. V3 targets extend mapping without changing its
+# public compatibility snapshot or the media-file writing policy.
+V3_TRACK_FIELD_TARGETS: Mapping[str, TrackFieldTarget] = MappingProxyType(
+    {
+        "instrumental": TrackFieldTarget(
+            "instrumental", "instrumental", TrackTargetShape.SCALAR_BOOLEAN
+        ),
+    }
 )
 
 
@@ -237,7 +246,9 @@ def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
             )
             continue
 
-        target = TRACK_FIELD_TARGETS.get(change.field)
+        target = TRACK_FIELD_TARGETS.get(change.field) or V3_TRACK_FIELD_TARGETS.get(
+            change.field
+        )
         if target is None:
             blocked.append(
                 TrackMappingBlocker(
