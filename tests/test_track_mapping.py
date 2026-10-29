@@ -191,6 +191,24 @@ def test_same_name_distinct_composer_mbids_stay_positionally_aligned() -> None:
     assert targets["composers_ids"] == (first_id, second_id)
 
 
+def test_instrumental_maps_to_boolean_database_target() -> None:
+    plan = map_change_plan_to_track_info(
+        ChangePlan(changes=(planned_change("instrumental", True),))
+    )
+    mapped = plan.mapped_changes[0]
+    assert mapped.target_field == "instrumental"
+    assert mapped.target_shape is TrackTargetShape.SCALAR_BOOLEAN
+    assert mapped.target_value is True
+    assert plan.blocked_changes == ()
+
+
+def test_integer_is_not_accepted_as_boolean_instrumental_state() -> None:
+    with pytest.raises(TrackMappingError, match="boolean"):
+        map_change_plan_to_track_info(
+            ChangePlan(changes=(planned_change("instrumental", 1),))
+        )
+
+
 def test_performer_projection_deduplicates_names_without_flattening_instrument() -> None:
     party = CreditParty("Performer", "12345678-1234-5678-9234-567812345678")
     references = (
