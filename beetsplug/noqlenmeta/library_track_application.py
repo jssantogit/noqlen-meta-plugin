@@ -168,6 +168,10 @@ def _materialize_value(change: TrackTargetChange) -> Any:
                 "string-list target requires canonical strings"
             )
         return list(value)
+    if change.target_shape is TrackTargetShape.SCALAR_BOOLEAN:
+        if type(value) is not bool:
+            raise LibraryTrackApplicationError("scalar-boolean target requires a bool")
+        return value
     if change.target_shape is TrackTargetShape.SCALAR_FLOAT:
         if (
             isinstance(value, bool)
