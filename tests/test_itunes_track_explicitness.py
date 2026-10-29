@@ -1,0 +1,154 @@
+"""Exact iTunes *track* advisory metadata: never infer clean by absence."""
+
+from urllib.parse import parse_qs, urlparse
+
+import pytest
+
+from beetsplug.noqlenmeta.domain import TrackEnrichmentContext
+from beetsplug.noqlenmeta.providers.base import ProviderError
+from beetsplug.noqlenmeta.providers.itunes_track import ITunesTrackExplicitnessProvider
+
+TRACK = {
+    "wrapperType": "track",
+    "kind": "song",
+    "trackId": 1234,
+    "artistName": "Synthetic Artist",
+    "trackName": "Synthetic Song",
+    "collectionName": "Synthetic Album",
+    "trackTimeMillis": 200000,
+    "trackNumber": 2,
+    "discNumber": 1,
+    "trackExplicitness": "explicit",
+    "trackViewUrl": "https://music.apple.com/us/album/synthetic/1234",
+}
+
+
+def context(**kwargs: object) -> TrackEnrichmentContext:
+    data = {
+        "artist": "Synthetic Artist",
+        "title": "Synthetic Song",
+        "album_title": "Synthetic Album",
+        "duration": 200.0,
+        "track_number": 2,
+        "disc_number": 1,
+    }
+    data.update(kwargs)
+    return TrackEnrichmentContext(**data)  # type: ignore[arg-type]
+
+
+def test_exact_explicit_track_creates_recording_scoped_evidence() -> None:
+    urls: list[str] = []
+
+    def request(url: str) -> dict[str, object]:
+        urls.append(url)
+        return {"results": [dict(TRACK)]}
+
+    provider = ITunesTrackExplicitnessProvider(request_json=request)
+    evidence = provider.get_evidence(context())
+
+    assert len(evidence) == 1
+    assert evidence[0].field == "explicitness"
+    assert evidence[0].value == "explicit"
+    assert evidence[0].provider == "itunes"
+    assert evidence[0].source_id == "1234"
+    assert evidence[0].subject.entity.value == "recording"
+    assert evidence[0].source_url == TRACK["trackViewUrl"]
+    assert provider.get_evidence(context()) == evidence
+    assert len(urls) == 1
+    query = parse_qs(urlparse(urls[0]).query)
+    assert query["entity"] == ["song"]
+    assert query["country"] == ["US"]
+    assert query["explicit"] == ["Yes"]
+
+
+@pytest.mark.parametrize(
+    ("advisory", "expected"),
+    [
+        ("explicit", "explicit"),
+        ("cleaned", "clean"),
+        ("notExplicit", None),
+        ("", None),
+        (None, None),
+        ("unknown", None),
+        (False, None),
+    ],
+)
+def test_only_unambiguous_track_explicit_and_cleaned_are_authoritative(
+    advisory: object, expected: str | None
+) -> None:
+    row = dict(TRACK, trackExplicitness=advisory)
+    provider = ITunesTrackExplicitnessProvider(
+        request_json=lambda _: {"results": [row]}
+    )
+    result = provider.get_evidence(context())
+    assert tuple(item.value for item in result) == ((expected,) if expected else ())
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid"),
+    [
+        ("artistName", "Another Artist"),
+        ("trackName", "Different Song"),
+        ("collectionName", "Other Album"),
+        ("kind", "music-video"),
+        ("wrapperType", "collection"),
+        ("trackNumber", 3),
+        ("discNumber", 2),
+        ("trackTimeMillis", 197999),
+        ("trackId", True),
+        ("trackId", -1),
+        ("trackId", None),
+    ],
+)
+def test_inexact_or_invalid_track_metadata_cannot_assert_explicitness(
+    field: str, invalid: object
+) -> None:
+    row = dict(TRACK, **{field: invalid})
+    provider = ITunesTrackExplicitnessProvider(
+        request_json=lambda _: {"results": [row]}
+    )
+    assert provider.get_evidence(context()) == ()
+
+
+def test_missing_album_or_duration_does_not_search() -> None:
+    urls: list[str] = []
+    provider = ITunesTrackExplicitnessProvider(
+        request_json=lambda url: urls.append(url) or {"results": [dict(TRACK)]}
+    )
+    assert provider.get_evidence(context(album_title=None)) == ()
+    assert provider.get_evidence(context(duration=None)) == ()
+    assert urls == []
+
+
+def test_multiple_matching_catalog_tracks_are_ambiguous_even_when_flags_agree() -> None:
+    first = dict(TRACK)
+    second = dict(TRACK, trackId=9876)
+    provider = ITunesTrackExplicitnessProvider(
+        request_json=lambda _: {"results": [first, second]}
+    )
+    assert provider.get_evidence(context()) == ()
+
+
+def test_invalid_api_response_is_a_safe_provider_error_and_not_cached() -> None:
+    urls: list[str] = []
+
+    def request(url: str) -> dict[str, object]:
+        urls.append(url)
+        return {"results": "unexpected"}
+
+    provider = ITunesTrackExplicitnessProvider(request_json=request)
+    with pytest.raises(ProviderError, match="iTunes track advisory lookup failed"):
+        provider.get_evidence(context())
+    with pytest.raises(ProviderError):
+        provider.get_evidence(context())
+    assert len(urls) == 2
+
+
+def test_valid_no_match_is_cached_without_fabricating_clean() -> None:
+    urls: list[str] = []
+    provider = ITunesTrackExplicitnessProvider(
+        request_json=lambda url: urls.append(url) or {"results": []}
+    )
+    assert provider.get_evidence(context()) == ()
+    assert provider.get_evidence(context()) == ()
+    assert len(urls) == 1
