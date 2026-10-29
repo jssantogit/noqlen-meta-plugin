@@ -240,11 +240,32 @@ class MusicBrainzTrackProvider:
             )
         work_credit_fields = {"composers", "lyricists", "arrangers"}
         legacy_language_fields = {"lyrics_languages", "artist_languages"}
-        work_fields = legacy_language_fields | {"iswcs"} | work_credit_fields
+        # Work lyric language does not automatically describe the sung language
+        # of every recording. Limit V3 vocal evidence to a single unambiguous
+        # complete performance with no instrumental/karaoke/partial/medley flag.
+        vocal_reference = (
+            work_references[0]
+            if "vocal_languages" in self.enabled_fields
+            and len(work_references) == 1
+            and not {
+                "instrumental", "karaoke", "partial", "medley", "translated"
+            }.intersection(
+                attribute.casefold() for attribute in work_references[0].attributes
+            )
+            else None
+        )
+        work_fields = (
+            legacy_language_fields | {"iswcs", "vocal_languages"} | work_credit_fields
+        )
         if self.enabled_fields & work_fields:
             # Legacy V2 language lookups retain their established breadth, but
             # V3 identity and credit evidence must only follow performance edges.
-            performance_ids = tuple(reference.mbid for reference in work_references)
+            performance_ids = (
+                tuple(reference.mbid for reference in work_references)
+                if self.enabled_fields
+                & (legacy_language_fields | {"iswcs"} | work_credit_fields)
+                else (vocal_reference.mbid,) if vocal_reference is not None else ()
+            )
             language_ids = (
                 _related_ids(payload, "work")
                 if self.enabled_fields & legacy_language_fields
@@ -267,8 +288,19 @@ class MusicBrainzTrackProvider:
                     continue
                 if work is None:
                     continue
-                for language in _work_languages(work):
+                work_languages = _work_languages(work)
+                for language in work_languages:
                     _append_unique(languages, language)
+                if (
+                    vocal_reference is not None
+                    and work_id == vocal_reference.mbid
+                    and work_languages
+                ):
+                    evidence.append(
+                        _recording_evidence(
+                            "vocal_languages", work_languages, recording_id
+                        )
+                    )
                 if work_id in performance_ids:
                     if "iswcs" in self.enabled_fields and (iswcs := _work_iswcs(work)):
                         evidence.append(_work_evidence("iswcs", iswcs, work_id, recording_id))
@@ -540,7 +572,10 @@ def _recording_profile(enabled_fields: Collection[str]) -> EntityFetchProfile:
         includes.update({"genres", "tags"})
     if "isrcs" in fields:
         includes.add("isrcs")
-    if fields & {"works", "iswcs", "lyrics_languages", "artist_languages", "instrumental"}:
+    if fields & {
+        "works", "iswcs", "lyrics_languages", "artist_languages",
+        "instrumental", "vocal_languages",
+    }:
         includes.add("work-rels")
     if "recording_date" in fields:
         includes.add("place-rels")
