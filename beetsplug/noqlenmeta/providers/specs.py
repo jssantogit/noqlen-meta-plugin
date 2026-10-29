@@ -174,7 +174,6 @@ MUSICBRAINZ_TRACK_SPEC = ProviderSpec(
             "genres",
             "moods",
             "lyrics_languages",
-            "instrumental",
             "isrcs",
             "works",
             "iswcs",
@@ -222,7 +221,7 @@ ITUNES_SPEC = ProviderSpec(
 LRCLIB_SPEC = ProviderSpec(
     name="lrclib",
     display_name="LRCLIB",
-    supported_fields=frozenset({"lyrics", "synced_lyrics", "instrumental"}),
+    supported_fields=frozenset({"lyrics", "synced_lyrics"}),
     scope=ProviderScope.TRACK,
 )
 
