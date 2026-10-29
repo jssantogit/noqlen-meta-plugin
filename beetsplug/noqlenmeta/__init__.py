@@ -68,6 +68,7 @@ from beetsplug.noqlenmeta.domain import (
     SemanticEvidenceBundle,
     TrackEnrichmentContext,
 )
+from beetsplug.noqlenmeta.evidence import MetadataEvidence
 from beetsplug.noqlenmeta.field_types import ALBUM_FIELD_TYPES, ITEM_FIELD_TYPES
 from beetsplug.noqlenmeta.file_sync import (
     FileSyncApplicationError,
@@ -2011,13 +2012,26 @@ class NoqlenMetaPlugin(BeetsPlugin):
     ) -> SemanticEnrichmentResult:
         candidates: list[MetadataCandidate] = []
         semantic_outcomes: Mapping[str, SemanticFieldOutcome] = {}
-        if provider_can_contribute(policy, LRCLIB_SPEC):
-            candidates.extend(
-                self._collect_provider_candidates(
-                    LRCLIB_SPEC,
-                    lambda: self._lrclib_candidates(context),
-                )
-            )
+        lrclib_instrumental: tuple[MetadataEvidence, ...] = ()
+        lyrics_requested = provider_can_contribute(policy, LRCLIB_SPEC)
+        instrumental_requested = (
+            policy.is_provider_enabled("lrclib")
+            and policy.is_field_enabled("instrumental")
+        )
+        if lyrics_requested or instrumental_requested:
+
+            def collect_lrclib() -> tuple[MetadataCandidate, ...]:
+                nonlocal lrclib_instrumental
+                results = self._lrclib_candidates(context)
+                if instrumental_requested:
+                    lrclib_instrumental = self._lrclib_provider.get_instrumental_evidence(
+                        context
+                    )
+                return results
+
+            fetched = self._collect_provider_candidates(LRCLIB_SPEC, collect_lrclib)
+            if lyrics_requested:
+                candidates.extend(fetched)
         semantic_fields = {
             field
             for field in (
@@ -2042,7 +2056,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
             )
             if policy.is_field_enabled(field)
         }
-        recording_evidence = ()
+        recording_evidence = lrclib_instrumental
         if semantic_fields or wave_fields:
             musicbrainz_release = None
             musicbrainz_tracks = ()
@@ -2057,7 +2071,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     self._musicbrainz_client(),
                     enabled_fields=semantic_fields | wave_fields,
                 ).get_enrichment(context)
-                recording_evidence = track_enrichment.evidence
+                recording_evidence = (*recording_evidence, *track_enrichment.evidence)
                 musicbrainz_tracks = (
                     (lambda: track_enrichment.semantic,) if semantic_fields else ()
                 )
