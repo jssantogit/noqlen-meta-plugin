@@ -52,6 +52,7 @@ from beetsplug.noqlenmeta.providers.specs import (
 )
 from beetsplug.noqlenmeta.release_catalog import parse_partial_date
 from beetsplug.noqlenmeta.semantic_tags import classify_semantic_tag
+from beetsplug.noqlenmeta.title_aliases import TitleAlias, parse_recording_aliases
 from beetsplug.noqlenmeta.work_identity import WorkReference, canonical_work_references
 
 EntityFetcher = Callable[..., Mapping[str, object] | None]
@@ -74,6 +75,7 @@ class MusicBrainzTrackEnrichment:
     semantic: SemanticEvidenceBundle = SemanticEvidenceBundle()
     evidence: tuple[MetadataEvidence, ...] = ()
     unavailable_fields: frozenset[str] = frozenset()
+    aliases: tuple[TitleAlias, ...] = ()
 
 
 class MusicBrainzSemanticClient:
@@ -322,7 +324,14 @@ class MusicBrainzTrackProvider:
                 ),
             )
         semantic = SemanticEvidenceBundle(metadata, genres, tags, frozenset(unavailable_fields))
-        return MusicBrainzTrackEnrichment(semantic, tuple(evidence), frozenset(wave_unavailable))
+        aliases = (
+            parse_recording_aliases(payload, recording_id)
+            if "alternate_titles" in self.enabled_fields
+            else ()
+        )
+        return MusicBrainzTrackEnrichment(
+            semantic, tuple(evidence), frozenset(wave_unavailable), aliases
+        )
 
 
 class MusicBrainzArtistProvider:
@@ -600,6 +609,8 @@ def _recording_profile(enabled_fields: Collection[str]) -> EntityFetchProfile:
         includes.update({"genres", "tags"})
     if "isrcs" in fields:
         includes.add("isrcs")
+    if "alternate_titles" in fields:
+        includes.add("aliases")
     if fields & {
         "works", "iswcs", "lyrics_languages", "artist_languages",
         "instrumental", "vocal_languages",
