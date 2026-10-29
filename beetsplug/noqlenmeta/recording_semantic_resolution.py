@@ -90,7 +90,10 @@ def resolve_recording_semantics(
         current = current_values.get(field)
         selected = eligible[0]
         incoming = selected.value
-        if field == "vocal_languages" and current_values.get("instrumental") is True:
+        if field == "vocal_languages" and (
+            current_values.get("instrumental") is True
+            or bool(grouped.get("instrumental"))
+        ):
             action = ResolutionAction.REVIEW
             value = current
             reason = "known instrumental recording conflicts with vocal languages"
