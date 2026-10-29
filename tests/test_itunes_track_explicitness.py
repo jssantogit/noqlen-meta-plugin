@@ -264,11 +264,12 @@ def test_known_itunes_track_id_must_match_search_result() -> None:
 def test_known_itunes_collection_id_restricts_same_named_editions() -> None:
     from beetsplug.noqlenmeta.domain import ExternalIdentifier, ReleaseEnrichmentContext
 
-    album = lambda collection_id: ReleaseEnrichmentContext(
-        "Synthetic Artist",
-        "Synthetic Album",
-        external_ids=(ExternalIdentifier("itunes.collection", str(collection_id)),),
-    )
+    def album(collection_id: int) -> ReleaseEnrichmentContext:
+        return ReleaseEnrichmentContext(
+            "Synthetic Artist",
+            "Synthetic Album",
+            external_ids=(ExternalIdentifier("itunes.collection", str(collection_id)),),
+        )
     row = dict(TRACK, collectionId=777)
     provider = ITunesTrackExplicitnessProvider(
         request_json=lambda _: {"results": [row]}
