@@ -38,6 +38,64 @@ def evidence(
     )
 
 
+def advisory(value: object = "explicit") -> MetadataEvidence:
+    return MetadataEvidence(
+        "explicitness",
+        value,  # type: ignore[arg-type]
+        SubjectRef(
+            EntityKind.RECORDING,
+            (ExternalIdentifier("itunes.track", "123456"),),
+        ),
+        "itunes",
+        ProviderScope.TRACK,
+        "123456",
+        AcquisitionProvenance(AcquisitionMethod.STRUCTURALLY_VALIDATED),
+        confidence=0.95,
+    )
+
+
+@pytest.mark.parametrize("value", ["explicit", "clean"])
+def test_itunes_advisory_populates_missing_and_keeps_agreement(value: str) -> None:
+    missing = resolve_recording_semantics({}, (advisory(value),))[0]
+    assert missing.action is ResolutionAction.PROPOSE
+    assert build_change_plan((missing,)).changes[0].after == value
+    agreeing = resolve_recording_semantics(
+        {"explicitness": value}, (advisory(value),)
+    )[0]
+    assert agreeing.action is ResolutionAction.KEEP
+
+
+def test_explicitness_never_replaces_existing_conflicting_advisory() -> None:
+    decision = resolve_recording_semantics(
+        {"explicitness": "clean"}, (advisory("explicit"),)
+    )[0]
+    assert decision.action is ResolutionAction.REVIEW
+    assert decision.resolved_value == "clean"
+
+
+def test_materially_disagreeing_itunes_track_evidence_requires_review() -> None:
+    decision = resolve_recording_semantics(
+        {}, (advisory("clean"), advisory("explicit"))
+    )[0]
+    assert decision.action is ResolutionAction.REVIEW
+    assert decision.resolved_value is None
+
+
+@pytest.mark.parametrize("value", ["notExplicit", "unknown", False, True, ""])
+def test_invalid_explicitness_state_is_rejected(value: object) -> None:
+    with pytest.raises(ValueError, match="explicit or clean"):
+        resolve_recording_semantics({}, (advisory(value),))
+
+
+def test_untrusted_provider_cannot_assert_clean_or_explicit() -> None:
+    original = advisory("clean")
+    from dataclasses import replace
+
+    assert resolve_recording_semantics(
+        {}, (replace(original, provider="not-itunes"),)
+    ) == ()
+
+
 def test_explicit_instrumental_true_is_proposed_and_preserves_unknown() -> None:
     decision = resolve_recording_semantics({}, (evidence(),))[0]
     assert decision.action is ResolutionAction.PROPOSE
