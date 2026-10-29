@@ -111,7 +111,7 @@ def test_symlink_target_is_not_followed_or_replaced(
     "Plain lyrics with no timestamps",
     "[title:Song]\nNo timed lines",
     "[00:99.00]Invalid seconds",
-    "[00:01.00]bad\\x00nul",
+    "[00:01.00]bad" + chr(0) + "nul",
 ])
 def test_invalid_or_untimed_lrc_is_blocked(
     target: tuple[Library, Item, Path], text: str
