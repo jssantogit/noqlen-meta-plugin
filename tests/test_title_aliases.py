@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from beets import config
 from beets.library import Item, Library
 
 from beetsplug.noqlenmeta.title_aliases import (
@@ -14,6 +15,14 @@ from beetsplug.noqlenmeta.title_aliases import (
 )
 
 RECORDING = "11111111-1111-4111-8111-111111111111"
+
+
+@pytest.fixture(autouse=True)
+def restore_beets_configuration() -> object:
+    config["timeout"].get()
+    sources = list(config.sources)
+    yield
+    config.sources[:] = sources
 
 
 @pytest.fixture
@@ -128,3 +137,33 @@ def test_duplicate_text_with_distinct_locale_remains_distinct(
     )
     apply_title_alias_plan(library, plan_title_aliases(library, item, records))
     assert set(read_title_aliases(library, item.id)) == set(records)
+
+
+def test_typed_aliases_preview_and_apply_through_real_library_command(
+    target: tuple[Library, Item],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from beetsplug.noqlenmeta import NoqlenMetaPlugin
+    from beetsplug.noqlenmeta.semantic_enrichment import SemanticEnrichmentResult
+
+    library, item = target
+    plugin = NoqlenMetaPlugin()
+    plugin.config["fields"].set({
+        **{field: False for field in plugin.config["fields"].keys()},
+        "alternate_titles": True,
+    })
+    plugin.config["providers"]["musicbrainz"]["enabled"].set(True)
+    monkeypatch.setattr(
+        plugin,
+        "_collect_track_candidates",
+        lambda *_: SemanticEnrichmentResult((), {}, aliases=aliases()),
+    )
+    command = plugin.commands()[0]
+    opts, args = command.parse_args(["--all"])
+    command.func(library, opts, args)
+    assert read_title_aliases(library, item.id) == ()
+
+    opts, args = command.parse_args(["--apply", "--all"])
+    command.func(library, opts, args)
+    assert read_title_aliases(library, item.id) == aliases()
+    assert library.get_item(item.id).title == "Original Title"
