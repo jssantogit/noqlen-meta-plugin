@@ -1570,6 +1570,12 @@ class NoqlenMetaPlugin(BeetsPlugin):
         field_settings = {
             field: self.config["fields"][field].get(bool) for field in _FIELD_DEFAULTS
         }
+        # The V2 defaults remain frozen. Read only known V3 opt-in keys
+        # explicitly supplied by the caller; never turn them on by default.
+        available_fields = set(self.config["fields"].keys())
+        for field in ("instrumental", "explicitness"):
+            if field in available_fields:
+                field_settings[field] = self.config["fields"][field].get(bool)
         provider_settings = {
             provider: self.config["providers"][provider]["enabled"].get(bool)
             for provider in BUILTIN_PROVIDER_NAMES
