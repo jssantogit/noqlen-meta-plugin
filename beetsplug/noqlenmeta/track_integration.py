@@ -345,6 +345,7 @@ def _current_track_values(getter: Callable[[str], object]) -> dict[str, Canonica
         "genres",
         "moods",
         "lyrics_languages",
+        "vocal_languages",
         "artist_countries",
         "artist_areas",
         "artist_languages",
