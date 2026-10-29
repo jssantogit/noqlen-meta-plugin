@@ -262,3 +262,29 @@ noqlenmeta:
 `beet nm --all` previews and `beet nm --apply --all` applies.
 All other identity, field, edition and conflict guards remain active;
 this is not yet a V3 release or an authorization to merge.
+
+
+## V3 structured Recording titles — 2026-10-29
+
+The V3 `fields.alternate_titles: true` opt-in collects **actual
+MusicBrainz Recording aliases**, when an exact MBID is already known.
+It requests `aliases` from the Recording resource, not by searching for
+matching titles or following Work/Release relationships. Alias rows retain
+the original text, source Recording MBID, provider, locale, explicit
+alias type, optional sort name, primary flag and script subtag when
+explicitly encoded in a locale such as `ja-Latn`.
+
+The implementation deliberately excludes aliases identical to the main
+Recording title and MusicBrainz `Search hint` aliases. It never changes
+Item.title, auto-repairs identity, writes freeform native tags, or flattens
+the locale/type metadata into a delimiter-separated string.
+
+Approved rows are persisted in the plugin-owned, append-only
+`noqlenmeta_title_alias` table, scoped by Item ID and canonical Recording
+MBID. Duplicate rows are idempotent, existing aliases are preserved,
+and application verifies a fresh Item path, recording identity, native
+title and prior alias snapshot. Preview and read do not create the table;
+`--apply` commits only genuinely new rows. Existing V2 public defaults
+and exposed generic field/target registries stay frozen. This scope
+covers the library `beet nm` command; importer completion, non-Recording
+aliases and typed track-version semantics remain separate work.
