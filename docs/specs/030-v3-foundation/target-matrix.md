@@ -173,3 +173,40 @@ The separate V3 recording capability and target registries support this
 feature as an explicit development opt-in via `fields.explicitness: true`
 plus `providers.itunes.enabled: true`. The current CLI remains preview-first,
 with explicit database application and unchanged file-write restrictions.
+
+
+## Vocal languages V3 implementation — 2026-10-29
+
+The opt-in `fields.vocal_languages: true` field is a **Recording-level,
+ISO-639-3 multivalue assertion**, distinct from V2 `lyrics_languages`
+(Work lyric languages), `artist_languages` and release-title language.
+The field is stored as a typed multivalue beets Item field, and no speculative
+embedded LANGUAGE tag is written. V2 public config defaults, provider specs,
+target registry and legacy Work-language lookup breadth remain frozen.
+
+MusicBrainz Work lyric languages can provide **structurally derived evidence**
+for a recording only when the Recording has exactly one validated
+`performance` relationship, the Work lookup identity is verified, and that
+Work supplies one or more concrete 3-letter language codes. Ambiguous
+non-performance or multiple-Work links yield no vocal assertion. Relationship
+attributes `instrumental`, `karaoke`, `partial`, `medley`, and `translated`
+suppress derivation because the Work's lyrics may not match that audio.
+Work attributes `instrumental` or `no lyrics` and generic `zxx`, `mul`,
+`und` language values cannot create vocal languages. Duplicate Work links
+must retain the union of flags rather than losing a disqualifying attribute.
+The exact supporting Work MBID, provenance and source URL are retained.
+
+The resolver preserves existing codes: identical or subset source evidence
+KEEPS the local value; an unambiguous superset may PROPOSE; incomparable
+sets require REVIEW instead of deleting local languages. An explicit
+instrumental assertion from another authoritative provider (or an existing
+instrumental=true Item) blocks automatic vocal-language application and
+routes the candidate to REVIEW.
+
+This is **not audio-derived language identification**. Even a unique Work
+language describes the composition's lyrical language, not guaranteed audio
+content, so the feature deliberately has narrow coverage and remains opt-in.
+No lyric-language detector or artist-country shortcut is used.
+
+Reference: [MusicBrainz Work language semantics](https://musicbrainz.org/doc/Work)
+and [Recording-to-Work Performance relation](https://musicbrainz.org/relationship/a3005666-a872-32c3-ad06-98af558e99b0).
