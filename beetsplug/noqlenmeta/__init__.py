@@ -2032,7 +2032,14 @@ class NoqlenMetaPlugin(BeetsPlugin):
         }
         wave_fields = {
             field
-            for field in ("isrcs", "works", "iswcs", "recording_date", "instrumental", *CREDIT_FIELDS)
+            for field in (
+                "isrcs",
+                "works",
+                "iswcs",
+                "recording_date",
+                "instrumental",
+                *CREDIT_FIELDS,
+            )
             if policy.is_field_enabled(field)
         }
         recording_evidence = ()
