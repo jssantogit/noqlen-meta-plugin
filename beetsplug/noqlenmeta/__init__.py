@@ -1918,7 +1918,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 )
                 if capability.acquisition_scope is ProviderScope.TRACK
                 and capability.field
-                in {"isrcs", "works", "iswcs", "recording_date", *CREDIT_FIELDS}
+                in {"isrcs", "works", "iswcs", "recording_date", "instrumental", *CREDIT_FIELDS}
             )
             for spec in BUILTIN_TRACK_PROVIDER_SPECS.values()
         )
@@ -2032,7 +2032,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         }
         wave_fields = {
             field
-            for field in ("isrcs", "works", "iswcs", "recording_date", *CREDIT_FIELDS)
+            for field in ("isrcs", "works", "iswcs", "recording_date", "instrumental", *CREDIT_FIELDS)
             if policy.is_field_enabled(field)
         }
         recording_evidence = ()
