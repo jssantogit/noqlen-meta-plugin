@@ -170,7 +170,16 @@ MUSICBRAINZ_TRACK_SPEC = ProviderSpec(
     name="musicbrainz",
     display_name="MusicBrainz",
     supported_fields=frozenset(
-        {"genres", "moods", "lyrics_languages", "instrumental", "isrcs", "works", "iswcs", "recording_date"}
+        {
+            "genres",
+            "moods",
+            "lyrics_languages",
+            "instrumental",
+            "isrcs",
+            "works",
+            "iswcs",
+            "recording_date",
+        }
     ),
     scope=ProviderScope.TRACK,
 )
