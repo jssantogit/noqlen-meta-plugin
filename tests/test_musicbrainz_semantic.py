@@ -682,6 +682,112 @@ def test_mixed_work_relations_keep_legacy_languages_without_v3_credit_leak() -> 
     assert result.semantic.metadata[0].value == ("eng",)
 
 
+@pytest.mark.parametrize("languages", [("eng",), ("kor", "eng")])
+def test_v3_vocal_languages_require_one_unambiguous_sung_performance(
+    languages: tuple[str, ...],
+) -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [{
+                "type": "performance",
+                "type_id": PERFORMANCE_TYPE_ID,
+                "work": {"id": WORK_ONE},
+            }],
+        },
+        works={WORK_ONE: {"id": WORK_ONE, "languages": list(languages)}},
+    )
+    result = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"vocal_languages"}
+    ).get_enrichment(track_context())
+    assert calls["work"] == [WORK_ONE]
+    assert [(item.field, item.value) for item in result.evidence] == [
+        ("vocal_languages", languages)
+    ]
+    assert result.semantic.metadata == ()
+
+
+@pytest.mark.parametrize("attribute", [
+    "instrumental", "karaoke", "partial", "medley", "translated",
+])
+def test_v3_vocal_languages_reject_inapplicable_performances(
+    attribute: str,
+) -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [{
+                "type": "performance",
+                "type_id": PERFORMANCE_TYPE_ID,
+                "attributes": [attribute],
+                "work": {"id": WORK_ONE},
+            }],
+        },
+        works={WORK_ONE: {"id": WORK_ONE, "languages": ["eng"]}},
+    )
+    result = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"vocal_languages"}
+    ).get_enrichment(track_context())
+    assert not any(item.field == "vocal_languages" for item in result.evidence)
+    assert calls["work"] == []
+
+
+def test_v3_vocal_languages_exclude_nonperformance_edges_and_multiple_works() -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [
+                {"type": "performance", "type_id": PERFORMANCE_TYPE_ID,
+                 "work": {"id": WORK_ONE}},
+                {"type": "performance", "type_id": PERFORMANCE_TYPE_ID,
+                 "work": {"id": WORK_TWO}},
+            ],
+        },
+        works={
+            WORK_ONE: {"id": WORK_ONE, "languages": ["kor"]},
+            WORK_TWO: {"id": WORK_TWO, "languages": ["eng"]},
+        },
+    )
+    result = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"vocal_languages"}
+    ).get_enrichment(track_context())
+    assert calls["work"] == []
+    assert result.evidence == ()
+
+
+def test_v3_vocal_languages_do_not_follow_other_relation_or_unusable_work() -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [{
+                "type": "other",
+                "type_id": "11111111-2222-4333-8444-555555555555",
+                "work": {"id": WORK_ONE},
+            }],
+        },
+        works={WORK_ONE: {"id": WORK_ONE, "languages": ["eng"]}},
+    )
+    assert MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"vocal_languages"}
+    ).get_enrichment(track_context()).evidence == ()
+    assert calls["work"] == []
+
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [{
+                "type": "performance",
+                "type_id": PERFORMANCE_TYPE_ID,
+                "work": {"id": WORK_ONE},
+            }],
+        },
+        works={WORK_ONE: {"id": WORK_ONE, "languages": ["zxx", "mul", "und"]}},
+    )
+    assert MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"vocal_languages"}
+    ).get_enrichment(track_context()).evidence == ()
+
+
 def test_explicit_performance_instrumental_attribute_emits_recording_evidence() -> None:
     semantic_client, calls = client(
         recording={
