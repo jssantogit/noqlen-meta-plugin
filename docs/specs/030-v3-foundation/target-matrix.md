@@ -268,6 +268,10 @@ this is not yet a V3 release or an authorization to merge.
 
 The V3 `fields.alternate_titles: true` opt-in collects **actual
 MusicBrainz Recording aliases**, when an exact MBID is already known.
+Alternatively, `fields.transliterations: true` alone selects only aliases
+explicitly typed `Transliteration` by MusicBrainz, retaining their
+recorded locale/script. It does not infer romanization from names or
+script similarity, and uses the same non-lossy storage table.
 It requests `aliases` from the Recording resource, not by searching for
 matching titles or following Work/Release relationships. Alias rows retain
 the original text, source Recording MBID, provider, locale, explicit
