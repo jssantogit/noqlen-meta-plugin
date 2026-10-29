@@ -415,6 +415,18 @@ CREDIT_PROVIDER_CAPABILITY_REGISTRY = capability_registry(CREDIT_PROVIDER_CAPABI
 # ProviderSpec supported_fields and built-in provider registry remain unchanged.
 RECORDING_SEMANTIC_PROVIDER_CAPABILITIES = (
     ProviderCapability(
+        "musicbrainz",
+        "vocal_languages",
+        EntityKind.RECORDING,
+        ProviderScope.TRACK,
+        frozenset({IdentityPrerequisite.EXACT_CANONICAL_ID}),
+        frozenset({
+            AcquisitionCharacteristic.DIRECT_LOOKUP,
+            AcquisitionCharacteristic.SUPPORTING_TRAVERSAL,
+            AcquisitionCharacteristic.RESPONSE_REUSE,
+        }),
+    ),
+    ProviderCapability(
         "itunes",
         "explicitness",
         EntityKind.RECORDING,
