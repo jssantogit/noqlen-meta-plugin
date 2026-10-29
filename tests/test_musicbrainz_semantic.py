@@ -755,6 +755,26 @@ def test_v3_vocal_languages_exclude_nonperformance_edges_and_multiple_works() ->
     assert result.evidence == ()
 
 
+def test_duplicate_work_links_with_instrumental_attribute_block_vocal_languages() -> None:
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [
+                {"type": "performance", "type_id": PERFORMANCE_TYPE_ID,
+                 "work": {"id": WORK_ONE}},
+                {"type": "performance", "type_id": PERFORMANCE_TYPE_ID,
+                 "attributes": ["instrumental"],
+                 "work": {"id": WORK_ONE}},
+            ],
+        },
+        works={WORK_ONE: {"id": WORK_ONE, "languages": ["eng"]}},
+    )
+    result = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"vocal_languages"}
+    ).get_enrichment(track_context())
+    assert not any(item.field == "vocal_languages" for item in result.evidence)
+
+
 def test_v3_vocal_languages_do_not_follow_other_relation_or_unusable_work() -> None:
     semantic_client, calls = client(
         recording={
