@@ -1123,7 +1123,10 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     lyrics_plan,
                     (
                         plan_title_aliases(lib, item, track_enrichment.aliases)
-                        if policy.is_field_enabled("alternate_titles")
+                        if any(
+                            policy.is_field_enabled(field)
+                            for field in ("alternate_titles", "transliterations")
+                        )
                         else None
                     ),
                 )
@@ -1712,7 +1715,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
         # explicitly supplied by the caller; never turn them on by default.
         available_fields = set(self.config["fields"].keys())
         for field in (
-            "instrumental", "explicitness", "vocal_languages", "alternate_titles"
+            "instrumental", "explicitness", "vocal_languages",
+            "alternate_titles", "transliterations"
         ):
             if field in available_fields:
                 field_settings[field] = self.config["fields"][field].get(bool)
@@ -2073,6 +2077,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 in {
                     "isrcs", "works", "iswcs", "recording_date",
                     "instrumental", "vocal_languages", "alternate_titles",
+                    "transliterations",
                     *CREDIT_FIELDS
                 }
             )
@@ -2227,6 +2232,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 "instrumental",
                 "vocal_languages",
                 "alternate_titles",
+                "transliterations",
                 *CREDIT_FIELDS,
             )
             if policy.is_field_enabled(field)
