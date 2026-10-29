@@ -2181,7 +2181,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         from_scratch: bool,
         policy: ResolutionPolicy,
         local_bpm_settings: LocalBpmSettings,
-        local_key_settings: KeySettings = KeySettings(),
+        local_key_settings: KeySettings | None = None,
     ) -> ImportTrackPlanningResult:
         enrichment = self._collect_track_candidates(context, policy)
         current_values = effective_current_values_for_import_track(
@@ -2205,12 +2205,13 @@ class NoqlenMetaPlugin(BeetsPlugin):
             semantic_outcomes=enrichment.outcomes,
         )
         planning = self._integrate_import_bpm(planning, bpm_result)
+        key_settings = local_key_settings if local_key_settings is not None else KeySettings()
         key_result = plan_key(
             path=selected.item.path,
             existing_key=current_values.get("key"),
             field_enabled=policy.is_field_enabled("key"),
-            settings=local_key_settings,
-            analyzer=LibrosaKeyAnalyzer() if local_key_settings.enabled else None,
+            settings=key_settings,
+            analyzer=LibrosaKeyAnalyzer() if key_settings.enabled else None,
         )
         return _integrate_key_decision(planning, key_result)
 
