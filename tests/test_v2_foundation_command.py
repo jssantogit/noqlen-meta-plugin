@@ -605,3 +605,77 @@ def test_file_precommit_failure_reports_zero_fields(
     )
 
     assert "status=failed; fields=0" in output[0]
+
+
+def test_v3_synced_lyrics_preview_and_apply_use_sidecar_without_audio_tag_write(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    audio = tmp_path / "track.flac"
+    audio.write_bytes(b"audio kept byte-identical")
+    library = Library(str(tmp_path / "library.db"), set_music_dir=False)
+    item = Item(
+        path=str(audio).encode(),
+        artist="Synthetic Artist",
+        title="Synthetic Track",
+        album="Synthetic Album",
+        length=240.0,
+    )
+    library.add(item)
+    plugin = NoqlenMetaPlugin()
+    plugin.config["fields"].set({
+        field: field == "synced_lyrics"
+        for field in plugin.config["fields"].keys()
+    })
+    plugin.config["providers"]["musicbrainz"]["enabled"].set(False)
+    plugin.config["providers"]["lrclib"]["enabled"].set(True)
+    lyrics = "[00:01.00]Alpha\n[00:02.00]Beta"
+    monkeypatch.setattr(
+        plugin,
+        "_collect_track_candidates",
+        lambda *_: SemanticEnrichmentResult(
+            (MetadataCandidate("synced_lyrics", lyrics, "lrclib", 0.95, "123"),),
+            {},
+        ),
+    )
+
+    invoke(plugin, library, ["--all"])
+    assert not audio.with_suffix(".lrc").exists()
+    invoke(plugin, library, ["--apply", "--all"])
+    assert audio.with_suffix(".lrc").read_text(encoding="utf-8") == lyrics
+    assert audio.read_bytes() == b"audio kept byte-identical"
+
+
+def test_v3_synced_lyrics_preserves_unrelated_existing_sidecar(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    audio = tmp_path / "track.flac"
+    audio.write_bytes(b"audio unchanged")
+    sidecar = audio.with_suffix(".lrc")
+    sidecar.write_text("[00:01.00]Local", encoding="utf-8")
+    library = Library(str(tmp_path / "library.db"), set_music_dir=False)
+    item = Item(
+        path=str(audio).encode(),
+        artist="Synthetic Artist",
+        title="Synthetic Track",
+        album="Synthetic Album",
+        length=240.0,
+    )
+    library.add(item)
+    plugin = NoqlenMetaPlugin()
+    plugin.config["fields"].set({
+        field: field == "synced_lyrics"
+        for field in plugin.config["fields"].keys()
+    })
+    plugin.config["providers"]["musicbrainz"]["enabled"].set(False)
+    plugin.config["providers"]["lrclib"]["enabled"].set(True)
+    monkeypatch.setattr(
+        plugin,
+        "_collect_track_candidates",
+        lambda *_: SemanticEnrichmentResult(
+            (MetadataCandidate("synced_lyrics", "[00:02.00]Remote", "lrclib", 0.95, "123"),),
+            {},
+        ),
+    )
+
+    invoke(plugin, library, ["--apply", "--all"])
+    assert sidecar.read_text(encoding="utf-8") == "[00:01.00]Local"
