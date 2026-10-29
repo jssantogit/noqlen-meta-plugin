@@ -61,3 +61,12 @@ def test_distinct_relations_to_same_work_are_preserved() -> None:
     medley = work(relation_type="medley", attributes=())
 
     assert canonical_work_references((performance, medley)) == (medley, performance)
+
+
+def test_duplicate_relation_attributes_are_merged_without_losing_instrumental() -> None:
+    ordinary = work(attributes=())
+    instrumental = work(attributes=("instrumental",))
+    expected = work(attributes=("instrumental",))
+
+    for variants in permutations((ordinary, instrumental)):
+        assert canonical_work_references(variants) == (expected,)
