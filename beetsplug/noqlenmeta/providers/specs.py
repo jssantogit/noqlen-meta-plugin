@@ -416,6 +416,17 @@ CREDIT_PROVIDER_CAPABILITY_REGISTRY = capability_registry(CREDIT_PROVIDER_CAPABI
 RECORDING_SEMANTIC_PROVIDER_CAPABILITIES = (
     ProviderCapability(
         "musicbrainz",
+        "alternate_titles",
+        EntityKind.RECORDING,
+        ProviderScope.TRACK,
+        frozenset({IdentityPrerequisite.EXACT_CANONICAL_ID}),
+        frozenset({
+            AcquisitionCharacteristic.DIRECT_LOOKUP,
+            AcquisitionCharacteristic.RESPONSE_REUSE,
+        }),
+    ),
+    ProviderCapability(
+        "musicbrainz",
         "vocal_languages",
         EntityKind.RECORDING,
         ProviderScope.TRACK,
