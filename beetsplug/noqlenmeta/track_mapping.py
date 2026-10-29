@@ -146,15 +146,22 @@ def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
                 isinstance(value, CreditReference) for value in change.after
             ):
                 raise TrackMappingError(f"{change.field!r} requires CreditReference values")
-            names = tuple(dict.fromkeys(value.party.name for value in change.after))
-            mapped.append(
-                _target_change(change, change.field, TrackTargetShape.STRING_LIST, names)
-            )
             id_target = {
                 "composers": "composers_ids",
                 "lyricists": "lyricists_ids",
                 "arrangers": "arrangers_ids",
             }.get(change.field)
+            # Parallel native credit projections must retain the same ordering
+            # and cardinality, including same-name/different-MBID identities.
+            names = (
+                tuple(value.party.name for value in change.after)
+                if id_target is not None
+                else tuple(dict.fromkeys(value.party.name for value in change.after))
+            )
+            mapped.append(
+                _target_change(change, change.field, TrackTargetShape.STRING_LIST, names)
+            )
+            # Keep the native ID sequence aligned with its name sequence.
             ids = tuple(value.party.mbid for value in change.after)
             if id_target is not None and all(ids):
                 mapped.append(
@@ -162,7 +169,7 @@ def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
                         change,
                         id_target,
                         TrackTargetShape.STRING_LIST,
-                        tuple(dict.fromkeys(ids)),  # type: ignore[arg-type]
+                        tuple(ids),  # type: ignore[arg-type]
                     )
                 )
             continue
