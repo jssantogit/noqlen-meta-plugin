@@ -50,7 +50,13 @@ def test_current_target_mappings_reference_field_registry() -> None:
 
 def test_current_flexible_fields_reference_typed_db_contracts() -> None:
     for field in ITEM_FIELD_TYPES.keys() | ALBUM_FIELD_TYPES.keys():
-        canonical = "works" if field == "mb_workids" else field
+        canonical = (
+            "works" if field == "mb_workids"
+            else "track_version" if field in {
+                "track_version_type", "track_version_description"
+            }
+            else field
+        )
         assert TargetClass.TYPED_DB in FIELD_CONTRACTS[canonical].target_classes
 
 
