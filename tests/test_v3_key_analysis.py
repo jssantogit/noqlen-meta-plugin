@@ -116,3 +116,46 @@ def test_key_analysis_is_opt_in_twice():
     )
     assert result.outcome == "NO_EVIDENCE"
     assert analyzer.calls == 0
+
+
+def test_key_full_cli_preview_and_apply_is_opt_in(tmp_path, monkeypatch):
+    from beets import config
+    from beets.library import Item, Library
+
+    from beetsplug.noqlenmeta import NoqlenMetaPlugin
+    from beetsplug.noqlenmeta.key_analysis import LibrosaKeyAnalyzer
+
+    config["timeout"].get()
+    initial_sources = list(config.sources)
+    try:
+        library = Library(str(tmp_path / "library.db"), set_music_dir=False)
+        item = Item(
+            path=str(tmp_path / "track.flac").encode(),
+            artist="Synthetic Artist", albumartist="Synthetic Artist",
+            album="Synthetic Album", title="Synthetic Track",
+        )
+        library.add(item)
+        plugin = NoqlenMetaPlugin()
+        plugin.config["fields"].set({
+            **{field: False for field in plugin.config["fields"].keys()},
+            "key": True,
+        })
+        analysis = plugin.config["local_analysis"].get(dict)
+        analysis["key"] = {
+            "enabled": True, "analysis_mode": "window", "window_seconds": 90
+        }
+        plugin.config["local_analysis"].set(analysis)
+        monkeypatch.setattr(
+            LibrosaKeyAnalyzer, "analyze",
+            lambda _self, _path, _settings: KeyObservation("C major", 0.96, "librosa"),
+        )
+        command = plugin.commands()[0]
+        preview, args = command.parse_args(["--all"])
+        command.func(library, preview, args)
+        assert not library.get_item(item.id).get("initial_key")
+
+        apply, args = command.parse_args(["--apply", "--all"])
+        command.func(library, apply, args)
+        assert library.get_item(item.id).get("initial_key") == "C major"
+    finally:
+        config.sources[:] = initial_sources
