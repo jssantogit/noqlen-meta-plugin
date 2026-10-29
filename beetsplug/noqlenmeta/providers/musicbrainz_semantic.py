@@ -308,7 +308,9 @@ class MusicBrainzTrackProvider:
                         if field in self.enabled_fields:
                             evidence.append(_work_evidence(field, value, work_id, recording_id))
         metadata = ()
-        if languages:
+        # The legacy V2 language output is a *different* canonical concept.
+        # A V3-only vocal lookup must not silently emit lyrics_languages.
+        if languages and self.enabled_fields & legacy_language_fields:
             metadata = (
                 MetadataCandidate(
                     "lyrics_languages",
