@@ -76,6 +76,24 @@ def review() -> FieldDecision:
     )
 
 
+def test_album_native_and_credit_writes_share_rollback_boundary(
+    monkeypatch: pytest.MonkeyPatch, library: Library
+) -> None:
+    album = add_album(library, tracks=2)
+    plan = target_plan(planned_change("genres", ("Ambient",)))
+
+    def fail_credit_write(*args: object, **kwargs: object) -> int:
+        raise RuntimeError("simulated credit persistence failure")
+
+    monkeypatch.setattr(application_module, "apply_credit_state", fail_credit_write)
+    with pytest.raises(RuntimeError, match="simulated credit persistence failure"):
+        apply_library_target_plan(album, plan)
+
+    assert not library.get_album(album.id).genres
+    assert all(not item.genres for item in library.get_album(album.id).items())
+    assert not album.genres
+
+
 def test_genres_persist_and_inherit_as_a_fresh_list(
     monkeypatch: pytest.MonkeyPatch, library: Library
 ) -> None:
