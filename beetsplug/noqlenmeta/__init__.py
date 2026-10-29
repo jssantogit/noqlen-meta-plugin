@@ -178,8 +178,8 @@ from beetsplug.noqlenmeta.providers.specs import (
     ITUNES_SPEC,
     LRCLIB_SPEC,
     MUSICBRAINZ_SPEC,
-    RELEASE_CATALOG_PROVIDER_CAPABILITIES,
     RECORDING_SEMANTIC_PROVIDER_CAPABILITIES,
+    RELEASE_CATALOG_PROVIDER_CAPABILITIES,
     ProviderScope,
     ProviderSpec,
 )
