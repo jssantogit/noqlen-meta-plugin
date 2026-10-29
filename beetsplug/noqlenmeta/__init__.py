@@ -1573,7 +1573,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         # The V2 defaults remain frozen. Read only known V3 opt-in keys
         # explicitly supplied by the caller; never turn them on by default.
         available_fields = set(self.config["fields"].keys())
-        for field in ("instrumental", "explicitness"):
+        for field in ("instrumental", "explicitness", "vocal_languages"):
             if field in available_fields:
                 field_settings[field] = self.config["fields"][field].get(bool)
         provider_settings = {
@@ -1930,7 +1930,10 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 )
                 if capability.acquisition_scope is ProviderScope.TRACK
                 and capability.field
-                in {"isrcs", "works", "iswcs", "recording_date", "instrumental", *CREDIT_FIELDS}
+                in {
+                    "isrcs", "works", "iswcs", "recording_date",
+                    "instrumental", "vocal_languages", *CREDIT_FIELDS
+                }
             )
             for spec in BUILTIN_TRACK_PROVIDER_SPECS.values()
         )
@@ -2080,6 +2083,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 "iswcs",
                 "recording_date",
                 "instrumental",
+                "vocal_languages",
                 *CREDIT_FIELDS,
             )
             if policy.is_field_enabled(field)
