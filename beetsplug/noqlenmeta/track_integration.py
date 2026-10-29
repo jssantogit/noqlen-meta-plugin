@@ -353,6 +353,11 @@ def _current_track_values(getter: Callable[[str], object]) -> dict[str, Canonica
         if multi_value:
             values[field] = multi_value
 
+    # A missing nullable boolean remains unknown, not false.
+    instrumental = getter("instrumental")
+    if type(instrumental) is bool:
+        values["instrumental"] = instrumental
+
     bpm = getter("bpm")
     if (
         not isinstance(bpm, bool)
