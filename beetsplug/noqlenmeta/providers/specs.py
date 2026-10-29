@@ -410,6 +410,40 @@ CREDIT_PROVIDER_CAPABILITIES = (
     ),
 )
 CREDIT_PROVIDER_CAPABILITY_REGISTRY = capability_registry(CREDIT_PROVIDER_CAPABILITIES)
+
+# V3 recording semantics have a separate capability surface. The frozen V2
+# ProviderSpec supported_fields and built-in provider registry remain unchanged.
+RECORDING_SEMANTIC_PROVIDER_CAPABILITIES = (
+    ProviderCapability(
+        "musicbrainz",
+        "instrumental",
+        EntityKind.RECORDING,
+        ProviderScope.TRACK,
+        frozenset({IdentityPrerequisite.EXACT_CANONICAL_ID}),
+        frozenset(
+            {
+                AcquisitionCharacteristic.DIRECT_LOOKUP,
+                AcquisitionCharacteristic.RESPONSE_REUSE,
+            }
+        ),
+    ),
+    ProviderCapability(
+        "lrclib",
+        "instrumental",
+        EntityKind.RECORDING,
+        ProviderScope.TRACK,
+        frozenset({IdentityPrerequisite.STRUCTURALLY_VALIDATED_CONTEXT}),
+        frozenset(
+            {
+                AcquisitionCharacteristic.DIRECT_LOOKUP,
+                AcquisitionCharacteristic.RESPONSE_REUSE,
+            }
+        ),
+    ),
+)
+RECORDING_SEMANTIC_PROVIDER_CAPABILITY_REGISTRY = capability_registry(
+    RECORDING_SEMANTIC_PROVIDER_CAPABILITIES
+)
 BUILTIN_PROVIDER_SPECS: Mapping[ProviderKey, ProviderSpec] = MappingProxyType(
     {(spec.name, spec.scope): spec for spec in _BUILTIN_PROVIDER_CAPABILITIES}
 )
