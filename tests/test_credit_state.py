@@ -85,6 +85,36 @@ def test_structured_reference_round_trips_without_flat_encoding(library_item) ->
     assert apply_credit_state(library, "item", item.id, (change("performers", (reference,)),)) == 0
 
 
+def test_distinct_relationship_attributes_are_not_collapsed_on_persistence(
+    library_item,
+) -> None:
+    library, item = library_item
+    first = CreditReference(
+        CreditParty("Canonical", ARTIST_ID),
+        CreditRole.PERFORMER,
+        EntityKind.RECORDING,
+        instrument="guitar",
+        relation_type="instrument",
+        relation_type_id="59054b12-01ac-43ee-a618-285fd397e461",
+        source_entity_id=RECORDING_ID,
+        attributes=("solo",),
+    )
+    second = CreditReference(
+        CreditParty("Canonical", ARTIST_ID),
+        CreditRole.PERFORMER,
+        EntityKind.RECORDING,
+        instrument="guitar",
+        relation_type="instrument",
+        relation_type_id="59054b12-01ac-43ee-a618-285fd397e461",
+        source_entity_id=RECORDING_ID,
+        attributes=("guest",),
+    )
+    assert apply_credit_state(
+        library, "item", item.id, (change("performers", (first, second)),)
+    ) == 2
+    assert len(read_credit_state(library, "item", item.id)["performers"]) == 2
+
+
 def test_artist_credit_nodes_round_trip_with_exact_join_phrase(library_item) -> None:
     library, item = library_item
     artist_credit = ArtistCredit(
