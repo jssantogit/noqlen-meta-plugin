@@ -226,6 +226,7 @@ _RULES = (
     _rule("moods", "lastfm", AuthorityRole.SECONDARY, ProviderScope.ARTIST, EntityKind.ARTIST),
     _rule("moods", "lastfm", AuthorityRole.SECONDARY, ProviderScope.RELEASE, EntityKind.RELEASE),
     _rule("lyrics_languages", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.TRACK),
+    _rule("vocal_languages", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.TRACK),
     _rule("instrumental", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.TRACK),
     _rule("instrumental", "lrclib", AuthorityRole.SECONDARY, ProviderScope.TRACK),
     _rule("explicitness", "itunes", AuthorityRole.PRIMARY, ProviderScope.TRACK),
