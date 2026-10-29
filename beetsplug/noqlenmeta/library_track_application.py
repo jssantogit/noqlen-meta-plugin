@@ -10,6 +10,7 @@ from beets.dbcore.db import NotFoundError
 from beets.library import Item
 
 from beetsplug.noqlenmeta.credit_state import apply_credit_state
+from beetsplug.noqlenmeta.database_transaction import atomic_credit_application
 from beetsplug.noqlenmeta.track_application import TrackApplicationMode
 from beetsplug.noqlenmeta.track_integration import current_values_from_library_item
 from beetsplug.noqlenmeta.track_mapping import (
@@ -130,9 +131,9 @@ def apply_library_track_plan(
         return result
 
     try:
-        # Nested beets stores join the outer transaction. Roll back both native
-        # projections and the structured credit tables on any write failure.
-        with item._db.transaction():
+        # Model.store() uses beets transactions that can commit on exception.
+        # Explicit SQLite SAVEPOINT rollback keeps projections and credits atomic.
+        with atomic_credit_application(item._db):
             if materialized:
                 item.store()
             if not isinstance(item.id, int):
