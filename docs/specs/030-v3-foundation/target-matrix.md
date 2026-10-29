@@ -148,9 +148,16 @@ are preserved and require REVIEW before any application.
 iTunes supplies track-level evidence only from an unambiguous song in a
 bounded storefront search using exact normalized artist, title, album,
 track/disc numbers when available, and duration within two seconds.
-A matching collection/album cannot assert track explicitness. Search results
-with two distinct plausible tracks are deliberately withheld. Provider/network
+Existing iTunes track/collection identifiers, when present, must also agree;
+different known identities never share a cached verdict. A matching
+collection/album cannot assert track explicitness. Search results with two
+distinct plausible tracks are deliberately withheld. Provider/network
 failure cannot fabricate metadata or block unrelated provider evidence.
+
+The iTunes Search API documents approximately 20 calls/minute. The adapter
+serializes searches and spaces request starts by at least 3.1 seconds,
+including after failures, while reusing successful/no-data cache entries
+for identical exact contexts. This rate-limit cost is opt-in.
 
 The Apple Music/iTunes API documents `trackExplicitness` as
 `explicit`, `cleaned`, or `notExplicit`
