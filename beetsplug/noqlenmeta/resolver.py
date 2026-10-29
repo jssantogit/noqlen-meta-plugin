@@ -164,6 +164,8 @@ _DEFAULT_AUTHORITY: dict[str, tuple[str, ...]] = {
     "moods": ("lastfm", "musicbrainz"),
     "bpm": (),
     "lyrics_languages": ("musicbrainz",),
+    # V3 structural semantics resolve through AuthorityMatrix, not V2 ranks.
+    "instrumental": (),
     "artist_countries": ("musicbrainz",),
     "artist_areas": ("musicbrainz",),
     "artist_languages": ("musicbrainz",),
