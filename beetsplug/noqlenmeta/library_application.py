@@ -128,11 +128,18 @@ def apply_library_target_plan(
     if not materialized and not plan.state_changes:
         return result
 
-    if materialized:
-        album.store(inherit=True)
-    if not isinstance(album.id, int):
-        raise LibraryApplicationError("credit state requires a persisted Album")
-    apply_credit_state(album._db, "album", album.id, plan.state_changes)
+    try:
+        # Album.store(inherit=True) may also write multiple Items. All native
+        # and plugin-owned records must share one SQLite rollback boundary.
+        with album._db.transaction():
+            if materialized:
+                album.store(inherit=True)
+            if not isinstance(album.id, int):
+                raise LibraryApplicationError("credit state requires a persisted Album")
+            apply_credit_state(album._db, "album", album.id, plan.state_changes)
+    except Exception:
+        album.__dict__.update(album.get_fresh_from_db().__dict__)
+        raise
     return LibraryApplicationResult(
         mode=mode,
         applied_changes=plan.mapped_changes,
