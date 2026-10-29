@@ -160,6 +160,12 @@ from beetsplug.noqlenmeta.library_track_application import (
     apply_library_track_plan,
 )
 from beetsplug.noqlenmeta.library_track_preview import render_library_track_plan
+from beetsplug.noqlenmeta.lyrics_sidecar import (
+    LyricsSidecarError,
+    LyricsSidecarPlan,
+    apply_lyrics_sidecar_plan,
+    plan_lyrics_sidecar,
+)
 from beetsplug.noqlenmeta.orchestration import (
     provider_can_contribute,
     validate_provider_candidates,
@@ -374,6 +380,7 @@ class LibraryItemPlan:
     total: int
     semantic_outcomes: Mapping[str, SemanticFieldOutcome]
     bpm_result: BpmPlanningResult | None = None
+    lyrics_sidecar: LyricsSidecarPlan | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1030,14 +1037,40 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 semantic_outcomes=track_enrichment.outcomes,
             )
             planning = self._integrate_library_bpm(planning, bpm_result)
+            # A timed .lrc is an associated asset, never a beets TrackInfo
+            # field. Separate its approved proposal from the ordinary DB
+            # target mapping without changing V2's public mapping contract.
+            synced = next(
+                (
+                    change for change in planning.change_plan.changes
+                    if change.field == "synced_lyrics"
+                ),
+                None,
+            )
+            lyrics_plan = plan_lyrics_sidecar(item, synced) if synced is not None else None
+            if synced is not None:
+                canonical = planning.change_plan
+                database_plan = ChangePlan(
+                    changes=tuple(
+                        change for change in canonical.changes
+                        if change.field != "synced_lyrics"
+                    ),
+                    reviews=canonical.reviews,
+                    kept=canonical.kept,
+                    skipped=canonical.skipped,
+                )
+                database_target = map_change_plan_to_track_info(database_plan)
+            else:
+                database_target = planning.target_plan
             prepared_items.append(
                 LibraryItemPlan(
                     item,
-                    planning.target_plan,
+                    database_target,
                     position,
                     item_total,
                     planning.semantic_outcomes,
                     bpm_result,
+                    lyrics_plan,
                 )
             )
 
@@ -1183,6 +1216,30 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 or application_result is not None
                 and application_result.stored
             )
+
+        # Preview was prepared before any mutation and the sidecar commit
+        # rechecks the live Item and target path with atomic no-clobber create.
+        for item_plan in prepared_items:
+            lyrics_plan = item_plan.lyrics_sidecar
+            if lyrics_plan is None:
+                continue
+            ui.print_(
+                "Noqlen Meta / synced lyrics sidecar: "
+                f"Item {lyrics_plan.item_id}; status={lyrics_plan.status}; "
+                f"reason={lyrics_plan.reason}"
+            )
+            if apply_enabled and lyrics_plan.status == "PROPOSE":
+                try:
+                    result = apply_lyrics_sidecar_plan(lib, lyrics_plan)
+                except LyricsSidecarError as error:
+                    raise ui.UserError(
+                        "noqlenmeta: synced lyrics sidecar was not created: "
+                        f"{error}"
+                    ) from error
+                ui.print_(
+                    f"Noqlen Meta / .lrc application: Item {result.item_id}; "
+                    f"status={result.status}"
+                )
 
         if apply_enabled:
             for artwork_album, artwork_plan in prepared_artwork:
