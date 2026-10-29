@@ -2034,10 +2034,14 @@ class NoqlenMetaPlugin(BeetsPlugin):
             def collect_lrclib() -> tuple[MetadataCandidate, ...]:
                 nonlocal lrclib_instrumental
                 results = self._lrclib_candidates(context)
-                if instrumental_requested:
-                    lrclib_instrumental = self._lrclib_provider.get_instrumental_evidence(
-                        context
-                    )
+                # V2 adapters/tests may supply candidates without constructing
+                # the concrete provider. Only actual LRCLIB instances can
+                # provide the separate V3 instrumental assertion.
+                provider = self._lrclib_provider
+                if instrumental_requested and provider is not None:
+                    get_evidence = getattr(provider, "get_instrumental_evidence", None)
+                    if callable(get_evidence):
+                        lrclib_instrumental = get_evidence(context)
                 return results
 
             fetched = self._collect_provider_candidates(LRCLIB_SPEC, collect_lrclib)
