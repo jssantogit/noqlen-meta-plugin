@@ -96,6 +96,56 @@ def test_untrusted_provider_cannot_assert_clean_or_explicit() -> None:
     ) == ()
 
 
+def vocal_evidence(*languages: str) -> MetadataEvidence:
+    from dataclasses import replace
+
+    return replace(
+        evidence(),
+        field="vocal_languages",
+        value=tuple(languages),
+        provenance=AcquisitionProvenance(
+            AcquisitionMethod.SUPPORTING_TRAVERSAL,
+            supporting_entity=EntityKind.WORK,
+        ),
+    )
+
+
+def test_vocal_languages_propose_missing_and_preserve_identical() -> None:
+    incoming = vocal_evidence("eng", "kor")
+    proposed = resolve_recording_semantics({}, (incoming,))[0]
+    assert proposed.action is ResolutionAction.PROPOSE
+    assert proposed.value == ("eng", "kor")
+    assert build_change_plan((proposed,)).changes[0].after == ("eng", "kor")
+    assert resolve_recording_semantics(
+        {"vocal_languages": ("eng", "kor")}, (incoming,)
+    )[0].action is ResolutionAction.KEEP
+
+
+def test_vocal_language_changes_do_not_delete_local_codes() -> None:
+    incoming = vocal_evidence("eng", "kor")
+    superset = resolve_recording_semantics(
+        {"vocal_languages": ("eng",)}, (incoming,)
+    )[0]
+    assert superset.action is ResolutionAction.PROPOSE
+    subset = resolve_recording_semantics(
+        {"vocal_languages": ("eng", "kor", "jpn")}, (incoming,)
+    )[0]
+    assert subset.action is ResolutionAction.KEEP
+    conflict = resolve_recording_semantics(
+        {"vocal_languages": ("jpn",)}, (incoming,)
+    )[0]
+    assert conflict.action is ResolutionAction.REVIEW
+
+
+def test_vocal_language_evidence_does_not_override_known_instrumental() -> None:
+    resolved = resolve_recording_semantics(
+        {"instrumental": True}, (vocal_evidence("kor"),)
+    )
+    assert len(resolved) == 1
+    assert resolved[0].action is ResolutionAction.REVIEW
+    assert resolved[0].value is None
+
+
 def test_explicit_instrumental_true_is_proposed_and_preserves_unknown() -> None:
     decision = resolve_recording_semantics({}, (evidence(),))[0]
     assert decision.action is ResolutionAction.PROPOSE
