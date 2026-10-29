@@ -30,6 +30,7 @@ from beetsplug.noqlenmeta.semantic_resolution import (
     resolve_styles,
 )
 from beetsplug.noqlenmeta.title_aliases import TitleAlias
+from beetsplug.noqlenmeta.track_version import TrackVersion
 
 BundleCollector = Callable[[], SemanticEvidenceBundle]
 _FIELDS = (
@@ -66,6 +67,7 @@ class SemanticEnrichmentResult:
     outcomes: Mapping[str, SemanticFieldOutcome]
     evidence: tuple[MetadataEvidence, ...] = ()
     aliases: tuple[TitleAlias, ...] = ()
+    version: TrackVersion | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "candidates", tuple(self.candidates))
