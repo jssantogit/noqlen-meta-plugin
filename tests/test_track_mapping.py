@@ -167,6 +167,30 @@ def test_composer_credit_maps_native_names_and_aligned_ids_plus_state() -> None:
     assert result.blocked_changes == ()
 
 
+def test_same_name_distinct_composer_mbids_stay_positionally_aligned() -> None:
+    first_id = "12345678-1234-5678-9234-567812345678"
+    second_id = "22345678-1234-5678-9234-567812345678"
+    references = (
+        CreditReference(
+            CreditParty("Same Name", first_id),
+            CreditRole.COMPOSER,
+            EntityKind.WORK,
+        ),
+        CreditReference(
+            CreditParty("Same Name", second_id),
+            CreditRole.COMPOSER,
+            EntityKind.WORK,
+        ),
+    )
+    plan = map_change_plan_to_track_info(
+        ChangePlan(changes=(credit_change("composers", references),))
+    )
+    targets = {change.target_field: change.target_value for change in plan.mapped_changes}
+
+    assert targets["composers"] == ("Same Name", "Same Name")
+    assert targets["composers_ids"] == (first_id, second_id)
+
+
 def test_performer_projection_deduplicates_names_without_flattening_instrument() -> None:
     party = CreditParty("Performer", "12345678-1234-5678-9234-567812345678")
     references = (
