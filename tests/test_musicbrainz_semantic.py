@@ -12,6 +12,7 @@ from beetsplug.noqlenmeta.domain import (
     SemanticCategory,
     TrackEnrichmentContext,
 )
+from beetsplug.noqlenmeta.evidence import AcquisitionMethod
 from beetsplug.noqlenmeta.field_contracts import EntityKind, PartialDate
 from beetsplug.noqlenmeta.genre_evidence import GenreEvidenceKind
 from beetsplug.noqlenmeta.provider_cache import CommandEntityCache
