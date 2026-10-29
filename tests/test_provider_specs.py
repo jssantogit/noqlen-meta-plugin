@@ -81,7 +81,7 @@ def test_lastfm_spec_describes_exact_current_adapter_capabilities() -> None:
 def test_lrclib_spec_describes_exact_track_adapter_capabilities() -> None:
     assert LRCLIB_SPEC.name == "lrclib"
     assert LRCLIB_SPEC.display_name == "LRCLIB"
-    assert LRCLIB_SPEC.supported_fields == frozenset({"lyrics", "synced_lyrics"})
+    assert LRCLIB_SPEC.supported_fields == frozenset({"lyrics", "synced_lyrics", "instrumental"})
     assert LRCLIB_SPEC.scope is ProviderScope.TRACK
 
 
