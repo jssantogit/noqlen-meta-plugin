@@ -672,7 +672,11 @@ def test_v3_synced_lyrics_preserves_unrelated_existing_sidecar(
         plugin,
         "_collect_track_candidates",
         lambda *_: SemanticEnrichmentResult(
-            (MetadataCandidate("synced_lyrics", "[00:02.00]Remote", "lrclib", 0.95, "123"),),
+            (
+                MetadataCandidate(
+                    "synced_lyrics", "[00:02.00]Remote", "lrclib", 0.95, "123"
+                ),
+            ),
             {},
         ),
     )
