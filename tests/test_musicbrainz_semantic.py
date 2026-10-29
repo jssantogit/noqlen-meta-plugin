@@ -684,6 +684,28 @@ def test_mixed_work_relations_keep_legacy_languages_without_v3_credit_leak() -> 
 
 
 @pytest.mark.parametrize("languages", [("eng",), ("kor", "eng")])
+def test_v3_recording_aliases_are_structured_and_do_not_replace_title() -> None:
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "title": "Primary Recording Title",
+            "aliases": [
+                {"name": "Other Recording Title", "locale": "en",
+                 "type": "Recording name"},
+                {"name": "Search this", "type": "Search hint"},
+            ],
+        },
+    )
+    output = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"alternate_titles"}
+    ).get_enrichment(track_context())
+    assert [(row.text, row.locale, row.alias_type) for row in output.aliases] == [
+        ("Other Recording Title", "en", "Recording name")
+    ]
+    assert output.evidence == ()
+    assert output.semantic.metadata == ()
+
+
 def test_v3_vocal_languages_require_one_unambiguous_sung_performance(
     languages: tuple[str, ...],
 ) -> None:
