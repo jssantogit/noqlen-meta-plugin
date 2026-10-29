@@ -137,6 +137,16 @@ def test_vocal_language_changes_do_not_delete_local_codes() -> None:
     assert conflict.action is ResolutionAction.REVIEW
 
 
+def test_vocal_languages_require_review_if_source_asserts_instrumental() -> None:
+    result = resolve_recording_semantics(
+        {}, (vocal_evidence("eng"), evidence(True))
+    )
+    assert {decision.field: decision.action for decision in result} == {
+        "instrumental": ResolutionAction.PROPOSE,
+        "vocal_languages": ResolutionAction.REVIEW,
+    }
+
+
 def test_vocal_language_evidence_does_not_override_known_instrumental() -> None:
     resolved = resolve_recording_semantics(
         {"instrumental": True}, (vocal_evidence("kor"),)
