@@ -19,7 +19,7 @@ from beetsplug.noqlenmeta.evidence import CanonicalValue, MetadataEvidence
 from beetsplug.noqlenmeta.field_contracts import EntityKind
 from beetsplug.noqlenmeta.resolver import ResolutionAction
 
-RECORDING_SEMANTIC_FIELDS = frozenset({"instrumental"})
+RECORDING_SEMANTIC_FIELDS = frozenset({"instrumental", "explicitness"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +61,10 @@ def resolve_recording_semantics(
             raise ValueError(f"unsupported recording semantic field: {item.field}")
         if item.field == "instrumental" and item.value is not True:
             raise ValueError("instrumental evidence must be explicit true")
+        if item.field == "explicitness" and (
+            type(item.value) is not str or item.value not in {"explicit", "clean"}
+        ):
+            raise ValueError("explicitness evidence must be explicit or clean")
         if item.subject.entity is not EntityKind.RECORDING:
             continue
         role = AUTHORITY_MATRIX.role_for(
@@ -79,18 +83,23 @@ def resolve_recording_semantics(
         )
         current = current_values.get(field)
         selected = eligible[0]
-        if current is None:
+        incoming = selected.value
+        if any(item.value != incoming for item in eligible[1:]):
+            action = ResolutionAction.REVIEW
+            value = current
+            reason = "eligible recording-level assertions materially disagree"
+        elif current is None:
             action = ResolutionAction.PROPOSE
-            value = True
-            reason = "explicit performance relationship asserts instrumental recording"
-        elif type(current) is bool and current is True:
+            value = incoming
+            reason = "explicit recording-level evidence supplies a missing state"
+        elif type(current) is type(incoming) and current == incoming:
             action = ResolutionAction.KEEP
             value = current
-            reason = "existing instrumental state agrees"
+            reason = "existing recording-level state agrees"
         else:
             action = ResolutionAction.REVIEW
             value = current
-            reason = "existing instrumental state conflicts or is incompatible"
+            reason = "existing recording-level state conflicts or is incompatible"
         decisions.append(
             RecordingSemanticDecision(
                 field, current, value, selected, action, reason, eligible
