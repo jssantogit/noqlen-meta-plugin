@@ -119,6 +119,26 @@ def test_same_name_different_mbids_are_not_merged() -> None:
     assert len(decision.value) == 2
 
 
+def test_same_party_different_relationship_types_remain_distinct() -> None:
+    original = credit("Producer", CreditRole.PRODUCER)
+    first = CreditReference(
+        original.party, original.role, original.scope,
+        relation_type="producer",
+        relation_type_id="5c0ceac3-feb4-41f0-868d-dc06f6e27fc0",
+        source_entity_id=original.source_entity_id,
+    )
+    second = CreditReference(
+        original.party, original.role, original.scope,
+        relation_type="other producer",
+        relation_type_id="8bf377ba-8d71-4ecc-97f2-7bb2d8a2a75f",
+        source_entity_id=original.source_entity_id,
+    )
+
+    decision = resolve_credits({}, (evidence("producers", (first, second)),))[0]
+
+    assert len(decision.value) == 2
+
+
 def test_same_mbid_credited_as_variants_corroborate_one_identity() -> None:
     canonical = credit("Canonical", CreditRole.PRODUCER, credited_as="Alias One")
     variant = credit("Canonical", CreditRole.PRODUCER, credited_as="Alias Two")
