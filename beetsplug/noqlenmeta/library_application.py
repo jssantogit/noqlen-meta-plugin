@@ -11,6 +11,7 @@ from beets.library import Album
 
 from beetsplug.noqlenmeta.beets_mapping import BeetsTargetShape
 from beetsplug.noqlenmeta.credit_state import apply_credit_state
+from beetsplug.noqlenmeta.database_transaction import atomic_credit_application
 from beetsplug.noqlenmeta.library_integration import current_values_from_library_album
 from beetsplug.noqlenmeta.library_mapping import (
     LibraryMappingError,
@@ -129,9 +130,9 @@ def apply_library_target_plan(
         return result
 
     try:
-        # Album.store(inherit=True) may also write multiple Items. All native
-        # and plugin-owned records must share one SQLite rollback boundary.
-        with album._db.transaction():
+        # Album.store(inherit=True) may also write multiple Items. Explicit
+        # SAVEPOINT rollback covers both native projections and credit state.
+        with atomic_credit_application(album._db):
             if materialized:
                 album.store(inherit=True)
             if not isinstance(album.id, int):
