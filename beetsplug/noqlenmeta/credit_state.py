@@ -265,7 +265,9 @@ def _upgrade_legacy_relation_keys(tx: object) -> None:
     )
     # Include ownership in migration keys: identical relation hashes may exist
     # on different Items or Albums with different attributed evidence.
-    def grouped_children(rows: Sequence[Mapping[str, object]]) -> dict[tuple[object, ...], tuple[str, ...]]:
+    def grouped_children(
+        rows: Sequence[Mapping[str, object]],
+    ) -> dict[tuple[object, ...], tuple[str, ...]]:
         grouped: dict[tuple[object, ...], list[str]] = {}
         for child in rows:
             key = (
