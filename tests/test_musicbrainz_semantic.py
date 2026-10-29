@@ -683,6 +683,24 @@ def test_mixed_work_relations_keep_legacy_languages_without_v3_credit_leak() -> 
     assert result.semantic.metadata[0].value == ("eng",)
 
 
+def test_explicit_recording_disambiguation_supplies_track_version_only() -> None:
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "title": "Song (Radio Edit)",
+            "disambiguation": "radio edit",
+        },
+    )
+    result = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"track_version"}
+    ).get_enrichment(track_context())
+    assert result.version is not None
+    assert result.version.kind == "radio_edit"
+    assert result.version.description == "radio edit"
+    assert result.evidence == ()
+    assert result.semantic.metadata == ()
+
+
 def test_explicit_transliteration_only_mode_excludes_other_alias_types() -> None:
     semantic_client, _ = client(
         recording={
