@@ -683,6 +683,25 @@ def test_mixed_work_relations_keep_legacy_languages_without_v3_credit_leak() -> 
     assert result.semantic.metadata[0].value == ("eng",)
 
 
+def test_explicit_transliteration_only_mode_excludes_other_alias_types() -> None:
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "title": "Original",
+            "aliases": [
+                {"name": "Romanized", "type": "Transliteration", "locale": "ja-Latn"},
+                {"name": "Localized", "type": "Recording name", "locale": "ja"},
+            ],
+        },
+    )
+    output = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"transliterations"}
+    ).get_enrichment(track_context())
+    assert [(record.text, record.alias_type, record.script) for record in output.aliases] == [
+        ("Romanized", "Transliteration", "Latn")
+    ]
+
+
 def test_v3_recording_aliases_are_structured_and_do_not_replace_title() -> None:
     semantic_client, _ = client(
         recording={
