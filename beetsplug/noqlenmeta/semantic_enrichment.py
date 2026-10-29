@@ -24,12 +24,12 @@ from beetsplug.noqlenmeta.genre_taxonomy import (
 from beetsplug.noqlenmeta.providers import ProviderError
 from beetsplug.noqlenmeta.providers.specs import ProviderScope
 from beetsplug.noqlenmeta.resolver import ResolutionPolicy
-from beetsplug.noqlenmeta.title_aliases import TitleAlias
 from beetsplug.noqlenmeta.semantic_resolution import (
     collect_scoped_semantic_fallback,
     resolve_moods,
     resolve_styles,
 )
+from beetsplug.noqlenmeta.title_aliases import TitleAlias
 
 BundleCollector = Callable[[], SemanticEvidenceBundle]
 _FIELDS = (
