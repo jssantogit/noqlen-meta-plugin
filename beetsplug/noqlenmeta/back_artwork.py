@@ -169,7 +169,10 @@ def apply_back_artwork_plan(
     except ArtworkApplicationError:
         return BackArtworkResult(plan.album_id, "BLOCKED", reason="Back JPEG unavailable")
 
-    committed: list[bytes] = []
+    # Track the inode identity of every newly created asset. If writing a
+    # subsequent disc fails, remove only our own files; never remove preexisting
+    # or replaced user data. A failed safe rollback is explicitly PARTIAL.
+    committed: list[tuple[bytes, int, int]] = []
     for destination in plan.destinations:
         temporary: bytes | None = None
         try:
@@ -180,14 +183,31 @@ def apply_back_artwork_plan(
                 handle.write(payload)
                 handle.flush()
                 os.fsync(handle.fileno())
+            identity = os.stat(temporary, follow_symlinks=False)
             os.link(temporary, destination)
-            committed.append(destination)
+            committed.append((destination, identity.st_dev, identity.st_ino))
         except OSError:
+            leftover: list[bytes] = []
+            for created, device, inode in reversed(committed):
+                try:
+                    current = os.lstat(created)
+                    if current.st_dev != device or current.st_ino != inode:
+                        leftover.append(created)
+                        continue
+                    os.unlink(created)
+                except OSError:
+                    leftover.append(created)
             return BackArtworkResult(
                 plan.album_id,
-                "PARTIAL" if committed else "BLOCKED",
-                tuple(committed),
-                "back.jpg target changed or storage operation failed",
+                "PARTIAL" if leftover else "BLOCKED",
+                tuple(reversed(leftover)),
+                (
+                    "back.jpg target changed or storage operation failed; "
+                    "rollback incomplete"
+                    if leftover
+                    else "back.jpg target changed or storage operation failed; "
+                    "newly created siblings rolled back"
+                ),
             )
         finally:
             if temporary is not None:
@@ -195,4 +215,6 @@ def apply_back_artwork_plan(
                     os.unlink(temporary)
                 except FileNotFoundError:
                     pass
-    return BackArtworkResult(plan.album_id, "COMMITTED", tuple(committed))
+    return BackArtworkResult(
+        plan.album_id, "COMMITTED", tuple(path for path, _, _ in committed)
+    )
