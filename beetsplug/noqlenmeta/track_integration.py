@@ -365,6 +365,12 @@ def _current_track_values(getter: Callable[[str], object]) -> dict[str, Canonica
     if advisory is not None:
         values["explicitness"] = advisory
 
+    # V3 canonical key uses native beets Item.initial_key, not an
+    # additional string field or a renamed private media tag.
+    existing_key = _optional_text(getter("initial_key"))
+    if existing_key is not None:
+        values["key"] = existing_key
+
     bpm = getter("bpm")
     if (
         not isinstance(bpm, bool)
