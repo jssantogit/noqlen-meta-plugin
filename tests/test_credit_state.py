@@ -149,6 +149,49 @@ def test_v1_credit_keys_migrate_without_duplicate_rows(library_item) -> None:
     assert version == 2
 
 
+def test_legacy_migration_keeps_same_hash_different_owners_separate(
+    library_item,
+) -> None:
+    library, first_item = library_item
+    second_item = Item(path=b"other.flac", artist="Artist", title="Other Track")
+    library.add(second_item)
+    refs = (
+        CreditReference(
+            CreditParty("Musician", ARTIST_ID),
+            CreditRole.PERFORMER,
+            EntityKind.RECORDING,
+            instrument="piano",
+            source_entity_id=RECORDING_ID,
+            attributes=("solo",),
+        ),
+        CreditReference(
+            CreditParty("Musician", ARTIST_ID),
+            CreditRole.PERFORMER,
+            EntityKind.RECORDING,
+            instrument="piano",
+            source_entity_id=RECORDING_ID,
+            attributes=("guest",),
+        ),
+    )
+    for item, reference in zip((first_item, second_item), refs):
+        assert apply_credit_state(
+            library, "item", item.id, (change("performers", (reference,)),)
+        ) == 1
+    with library.transaction() as tx:
+        for table in ("noqlenmeta_credit", "noqlenmeta_credit_attribute"):
+            tx.mutate(f"UPDATE {table} SET relation_key='legacy-key'")
+        tx.mutate("UPDATE noqlenmeta_credit_schema SET version=1")
+
+    assert apply_credit_state(
+        library, "item", first_item.id, (change("performers", (refs[0],)),)
+    ) == 0
+    assert apply_credit_state(
+        library, "item", second_item.id, (change("performers", (refs[1],)),)
+    ) == 0
+    assert read_credit_state(library, "item", first_item.id)["performers"] == (refs[0],)
+    assert read_credit_state(library, "item", second_item.id)["performers"] == (refs[1],)
+
+
 def test_artist_credit_nodes_round_trip_with_exact_join_phrase(library_item) -> None:
     library, item = library_item
     artist_credit = ArtistCredit(
