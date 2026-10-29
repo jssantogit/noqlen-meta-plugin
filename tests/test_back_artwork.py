@@ -161,8 +161,8 @@ def test_back_path_created_after_preview_blocks_apply(album, tmp_path: Path) -> 
 def test_back_artwork_full_cli_preview_and_apply_is_opt_in(
     album, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from beetsplug.noqlenmeta import NoqlenMetaPlugin
     import beetsplug.noqlenmeta.back_artwork as back_module
+    from beetsplug.noqlenmeta import NoqlenMetaPlugin
 
     lib, selected, _ = album
     plugin = NoqlenMetaPlugin()
