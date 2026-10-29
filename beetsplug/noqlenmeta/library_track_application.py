@@ -129,11 +129,20 @@ def apply_library_track_plan(
     if not materialized and not plan.state_changes:
         return result
 
-    if materialized:
-        item.store()
-    if not isinstance(item.id, int):
-        raise LibraryTrackApplicationError("credit state requires a persisted Item")
-    apply_credit_state(item._db, "item", item.id, plan.state_changes)
+    try:
+        # Nested beets stores join the outer transaction. Roll back both native
+        # projections and the structured credit tables on any write failure.
+        with item._db.transaction():
+            if materialized:
+                item.store()
+            if not isinstance(item.id, int):
+                raise LibraryTrackApplicationError("credit state requires a persisted Item")
+            apply_credit_state(item._db, "item", item.id, plan.state_changes)
+    except Exception:
+        # Model.store() clears dirty flags before the outer transaction commits.
+        # Restore the caller's object after a rolled-back write.
+        item.__dict__.update(item.get_fresh_from_db().__dict__)
+        raise
     return LibraryTrackApplicationResult(
         mode=mode,
         applied_changes=plan.mapped_changes,
