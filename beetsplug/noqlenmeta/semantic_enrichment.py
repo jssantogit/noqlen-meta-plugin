@@ -24,6 +24,7 @@ from beetsplug.noqlenmeta.genre_taxonomy import (
 from beetsplug.noqlenmeta.providers import ProviderError
 from beetsplug.noqlenmeta.providers.specs import ProviderScope
 from beetsplug.noqlenmeta.resolver import ResolutionPolicy
+from beetsplug.noqlenmeta.title_aliases import TitleAlias
 from beetsplug.noqlenmeta.semantic_resolution import (
     collect_scoped_semantic_fallback,
     resolve_moods,
@@ -64,11 +65,13 @@ class SemanticEnrichmentResult:
     candidates: tuple[MetadataCandidate, ...]
     outcomes: Mapping[str, SemanticFieldOutcome]
     evidence: tuple[MetadataEvidence, ...] = ()
+    aliases: tuple[TitleAlias, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "candidates", tuple(self.candidates))
         object.__setattr__(self, "outcomes", MappingProxyType(dict(self.outcomes)))
         object.__setattr__(self, "evidence", tuple(self.evidence))
+        object.__setattr__(self, "aliases", tuple(self.aliases))
 
 
 def derive_artist_languages(
