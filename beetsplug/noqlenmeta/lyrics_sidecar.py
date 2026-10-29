@@ -11,7 +11,6 @@ import os
 import re
 import tempfile
 from dataclasses import dataclass
-from pathlib import Path
 
 from beets.library import Item, Library
 
