@@ -5,6 +5,7 @@ from beets import plugins
 from beets.library import Item, Library
 from beets.util import cached_classproperty
 
+import beetsplug.noqlenmeta.library_track_application as application_module
 from beetsplug.noqlenmeta import NoqlenMetaPlugin
 from beetsplug.noqlenmeta.changeplan import ChangePlan, PlannedChange
 from beetsplug.noqlenmeta.credit_state import read_credit_state
@@ -129,6 +130,41 @@ def test_credit_apply_persists_query_projection_and_structured_state(
     assert result.stored
     assert library.get_item(item.id)["performers"] == ["Performer"]
     assert read_credit_state(library, "item", item.id) == {"performers": (reference,)}
+
+
+def test_credit_persistence_failure_rolls_back_native_projection(
+    loaded_plugin: None, library: Library, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    item = add_item(library)
+    artist_id = "11111111-1111-4111-8111-111111111111"
+    reference = CreditReference(
+        CreditParty("Performer", artist_id),
+        CreditRole.PERFORMER,
+        EntityKind.RECORDING,
+    )
+    evidence = MetadataEvidence(
+        "performers",
+        (reference,),
+        SubjectRef(
+            EntityKind.RECORDING,
+            (ExternalIdentifier("musicbrainz.recording", artist_id),),
+        ),
+        "musicbrainz",
+        ProviderScope.TRACK,
+        artist_id,
+        AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+    )
+    change = PlannedChange("performers", None, (reference,), evidence, "resolved")
+
+    def fail_credit_write(*args: object, **kwargs: object) -> int:
+        raise RuntimeError("simulated credit persistence failure")
+
+    monkeypatch.setattr(application_module, "apply_credit_state", fail_credit_write)
+    with pytest.raises(RuntimeError, match="simulated credit persistence failure"):
+        apply_library_track_plan(item, target_plan(change))
+
+    assert library.get_item(item.id).get("performers") is None
+    assert item.get("performers") is None
 
 
 def test_stale_database_state_is_rejected(library: Library) -> None:
