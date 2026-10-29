@@ -297,8 +297,8 @@ class MusicBrainzTrackProvider:
                     and work_languages
                 ):
                     evidence.append(
-                        _recording_evidence(
-                            "vocal_languages", work_languages, recording_id
+                        _work_derived_recording_evidence(
+                            "vocal_languages", work_languages, recording_id, work_id
                         )
                     )
                 if work_id in performance_ids:
@@ -428,6 +428,32 @@ def _recording_evidence(field: str, value: object, recording_id: str) -> Metadat
         source_id=recording_id,
         source_url=_PUBLIC_URL.format("recording", recording_id),
         provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+        confidence=_DIRECT_CONFIDENCE,
+    )
+
+
+def _work_derived_recording_evidence(
+    field: str,
+    value: object,
+    recording_id: str,
+    work_id: str,
+) -> MetadataEvidence:
+    """Work languages assert a linked Recording, with Work as the traceable source."""
+    return MetadataEvidence(
+        field=field,
+        value=value,  # type: ignore[arg-type]
+        subject=SubjectRef(
+            EntityKind.RECORDING,
+            (ExternalIdentifier("musicbrainz.recording", recording_id),),
+        ),
+        provider="musicbrainz",
+        acquisition_scope=ProviderScope.TRACK,
+        source_id=work_id,
+        source_url=_PUBLIC_URL.format("work", work_id),
+        provenance=AcquisitionProvenance(
+            AcquisitionMethod.SUPPORTING_TRAVERSAL,
+            supporting_entity=EntityKind.WORK,
+        ),
         confidence=_DIRECT_CONFIDENCE,
     )
 
