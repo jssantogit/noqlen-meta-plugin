@@ -167,6 +167,7 @@ _DEFAULT_AUTHORITY: dict[str, tuple[str, ...]] = {
     # V3 structural semantics resolve through AuthorityMatrix, not V2 ranks.
     "alternate_titles": (),
     "transliterations": (),
+    "track_version": (),
     "vocal_languages": (),
     "instrumental": (),
     "explicitness": (),
