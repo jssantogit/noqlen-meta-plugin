@@ -115,6 +115,40 @@ def test_distinct_relationship_attributes_are_not_collapsed_on_persistence(
     assert len(read_credit_state(library, "item", item.id)["performers"]) == 2
 
 
+def test_v1_credit_keys_migrate_without_duplicate_rows(library_item) -> None:
+    library, item = library_item
+    reference = CreditReference(
+        CreditParty("Producer", ARTIST_ID),
+        CreditRole.PRODUCER,
+        EntityKind.RECORDING,
+        relation_type="producer",
+        relation_type_id="5c0ceac3-feb4-41f0-868d-dc06f6e27fc0",
+        source_entity_id=RECORDING_ID,
+    )
+    incoming = change("producers", (reference,))
+    assert apply_credit_state(library, "item", item.id, (incoming,)) == 1
+    with library.transaction() as tx:
+        tx.mutate(
+            "UPDATE noqlenmeta_credit SET relation_key='legacy-key' "
+            "WHERE owner_kind='item' AND owner_id=?",
+            (item.id,),
+        )
+        tx.mutate("UPDATE noqlenmeta_credit_schema SET version=1")
+
+    assert read_credit_state(library, "item", item.id) == {"producers": (reference,)}
+    assert apply_credit_state(library, "item", item.id, (incoming,)) == 0
+    with library.transaction() as tx:
+        rows = tx.query(
+            "SELECT relation_key FROM noqlenmeta_credit "
+            "WHERE owner_kind='item' AND owner_id=?",
+            (item.id,),
+        )
+        version = tx.query("SELECT version FROM noqlenmeta_credit_schema")[0]["version"]
+    assert len(rows) == 1
+    assert rows[0]["relation_key"] != "legacy-key"
+    assert version == 2
+
+
 def test_artist_credit_nodes_round_trip_with_exact_join_phrase(library_item) -> None:
     library, item = library_item
     artist_credit = ArtistCredit(
