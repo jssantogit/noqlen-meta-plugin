@@ -251,14 +251,14 @@ from beetsplug.noqlenmeta.track_planning import (
     build_track_planning_result,
     effective_current_values_for_import_track,
 )
+from beetsplug.noqlenmeta.track_preview import (
+    render_import_track_plan,
+    render_incomplete_track_note,
+)
 from beetsplug.noqlenmeta.track_version import (
     TrackVersionPlan,
     apply_track_version_plan,
     plan_track_version,
-)
-from beetsplug.noqlenmeta.track_preview import (
-    render_import_track_plan,
-    render_incomplete_track_note,
 )
 
 _FIELD_DEFAULTS = default_config()["fields"]
