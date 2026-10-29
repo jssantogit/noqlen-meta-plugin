@@ -191,6 +191,22 @@ def test_same_name_distinct_composer_mbids_stay_positionally_aligned() -> None:
     assert targets["composers_ids"] == (first_id, second_id)
 
 
+def test_explicitness_maps_only_known_canonical_values_to_v3_db_target() -> None:
+    for advisory in ("explicit", "clean"):
+        plan = map_change_plan_to_track_info(
+            ChangePlan(changes=(planned_change("explicitness", advisory),))
+        )
+        assert len(plan.mapped_changes) == 1
+        assert plan.mapped_changes[0].target_field == "explicitness"
+        assert plan.mapped_changes[0].target_shape is TrackTargetShape.SCALAR_STRING
+        assert plan.blocked_changes == ()
+
+    with pytest.raises(TrackMappingError, match="explicitness"):
+        map_change_plan_to_track_info(
+            ChangePlan(changes=(planned_change("explicitness", "notExplicit"),))
+        )
+
+
 def test_instrumental_maps_to_boolean_database_target() -> None:
     plan = map_change_plan_to_track_info(
         ChangePlan(changes=(planned_change("instrumental", True),))
