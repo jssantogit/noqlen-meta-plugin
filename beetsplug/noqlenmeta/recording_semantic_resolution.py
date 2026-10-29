@@ -19,7 +19,9 @@ from beetsplug.noqlenmeta.evidence import CanonicalValue, MetadataEvidence
 from beetsplug.noqlenmeta.field_contracts import EntityKind
 from beetsplug.noqlenmeta.resolver import ResolutionAction
 
-RECORDING_SEMANTIC_FIELDS = frozenset({"instrumental", "explicitness"})
+RECORDING_SEMANTIC_FIELDS = frozenset({
+    "instrumental", "explicitness", "vocal_languages",
+})
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +67,10 @@ def resolve_recording_semantics(
             type(item.value) is not str or item.value not in {"explicit", "clean"}
         ):
             raise ValueError("explicitness evidence must be explicit or clean")
+        if item.field == "vocal_languages" and not _valid_vocal_languages(
+            item.value
+        ):
+            raise ValueError("vocal_languages require specific ISO-639-3 codes")
         if item.subject.entity is not EntityKind.RECORDING:
             continue
         role = AUTHORITY_MATRIX.role_for(
@@ -84,7 +90,17 @@ def resolve_recording_semantics(
         current = current_values.get(field)
         selected = eligible[0]
         incoming = selected.value
-        if any(item.value != incoming for item in eligible[1:]):
+        if field == "vocal_languages" and current_values.get("instrumental") is True:
+            action = ResolutionAction.REVIEW
+            value = current
+            reason = "known instrumental recording conflicts with vocal languages"
+        elif field == "vocal_languages" and any(
+            item.value != incoming for item in eligible[1:]
+        ):
+            action = ResolutionAction.REVIEW
+            value = current
+            reason = "different plausible Work languages require review"
+        elif any(item.value != incoming for item in eligible[1:]):
             action = ResolutionAction.REVIEW
             value = current
             reason = "eligible recording-level assertions materially disagree"
@@ -92,6 +108,21 @@ def resolve_recording_semantics(
             action = ResolutionAction.PROPOSE
             value = incoming
             reason = "explicit recording-level evidence supplies a missing state"
+        elif field == "vocal_languages" and _valid_vocal_languages(current):
+            current_languages = set(current)
+            new_languages = set(incoming)
+            if new_languages <= current_languages:
+                action = ResolutionAction.KEEP
+                value = current
+                reason = "existing vocal languages already contain Work evidence"
+            elif current_languages < new_languages:
+                action = ResolutionAction.PROPOSE
+                value = incoming
+                reason = "Work-derived languages safely extend the existing set"
+            else:
+                action = ResolutionAction.REVIEW
+                value = current
+                reason = "Work-derived languages conflict with existing language set"
         elif type(current) is type(incoming) and current == incoming:
             action = ResolutionAction.KEEP
             value = current
@@ -106,3 +137,21 @@ def resolve_recording_semantics(
             )
         )
     return tuple(decisions)
+
+
+def _valid_vocal_languages(value: object) -> bool:
+    """No release/artist language, empty list, generic code or scalar is valid."""
+    return (
+        isinstance(value, tuple)
+        and bool(value)
+        and all(
+            isinstance(language, str)
+            and len(language) == 3
+            and language.isascii()
+            and language.isalpha()
+            and language.islower()
+            and language not in {"und", "mul", "zxx"}
+            for language in value
+        )
+        and len(value) == len(set(value))
+    )
