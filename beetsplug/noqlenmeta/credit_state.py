@@ -263,11 +263,25 @@ def _upgrade_legacy_relation_keys(tx: object) -> None:
     variant_rows = tx.query(
         "SELECT * FROM noqlenmeta_credit_name_variant ORDER BY ordinal"
     )
-    attributes = _child_values(attribute_rows)
-    variants = _child_values(variant_rows)
+    # Include ownership in migration keys: identical relation hashes may exist
+    # on different Items or Albums with different attributed evidence.
+    def grouped_children(rows: Sequence[Mapping[str, object]]) -> dict[tuple[object, ...], tuple[str, ...]]:
+        grouped: dict[tuple[object, ...], list[str]] = {}
+        for child in rows:
+            key = (
+                child["owner_kind"],
+                child["owner_id"],
+                child["field"],
+                child["relation_key"],
+            )
+            grouped.setdefault(key, []).append(child["value"])
+        return {key: tuple(values) for key, values in grouped.items()}
+
+    attributes = grouped_children(attribute_rows)
+    variants = grouped_children(variant_rows)
     for row in credit_rows:
         old_key = row["relation_key"]
-        group_key = (row["field"], old_key)
+        group_key = (row["owner_kind"], row["owner_id"], row["field"], old_key)
         reference = CreditReference(
             CreditParty(
                 row["party_name"],
