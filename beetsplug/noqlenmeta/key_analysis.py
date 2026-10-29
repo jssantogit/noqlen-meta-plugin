@@ -99,7 +99,7 @@ def _correlation(left: Sequence[float], right: Sequence[float]) -> float:
     )
     if denominator == 0:
         return 0.0
-    return sum(a * b for a, b in zip(x, y)) / denominator
+    return sum(a * b for a, b in zip(x, y, strict=True)) / denominator
 
 
 def estimate_key(chroma: Sequence[float]) -> KeyObservation | None:
