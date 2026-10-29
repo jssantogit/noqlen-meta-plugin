@@ -214,15 +214,17 @@ def test_real_plugin_reads_opt_in_v3_fields_without_changing_v2_defaults() -> No
 
     assert "instrumental" not in default_config()["fields"]
     assert "explicitness" not in default_config()["fields"]
+    assert "vocal_languages" not in default_config()["fields"]
     plugin = NoqlenMetaPlugin()
-    plugin.config.set({"fields": {"instrumental": True, "explicitness": True}})
+    plugin.config.set({"fields": {"instrumental": True, "explicitness": True, "vocal_languages": True}})
     try:
         policy = plugin._resolution_policy()
         assert policy.is_field_enabled("instrumental")
         assert policy.is_field_enabled("explicitness")
+        assert policy.is_field_enabled("vocal_languages")
     finally:
         # beets plugin configuration is shared across instances in this suite.
-        plugin.config.set({"fields": {"instrumental": False, "explicitness": False}})
+        plugin.config.set({"fields": {"instrumental": False, "explicitness": False, "vocal_languages": False}})
 
 
 def test_real_plugin_leaves_v3_fields_disabled_without_opt_in() -> None:
@@ -231,3 +233,4 @@ def test_real_plugin_leaves_v3_fields_disabled_without_opt_in() -> None:
     policy = NoqlenMetaPlugin()._resolution_policy()
     assert not policy.is_field_enabled("instrumental")
     assert not policy.is_field_enabled("explicitness")
+    assert not policy.is_field_enabled("vocal_languages")
