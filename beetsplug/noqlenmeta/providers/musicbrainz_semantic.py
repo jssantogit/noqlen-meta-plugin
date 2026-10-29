@@ -324,11 +324,17 @@ class MusicBrainzTrackProvider:
                 ),
             )
         semantic = SemanticEvidenceBundle(metadata, genres, tags, frozenset(unavailable_fields))
+        title_fields = {"alternate_titles", "transliterations"}
         aliases = (
             parse_recording_aliases(payload, recording_id)
-            if "alternate_titles" in self.enabled_fields
+            if self.enabled_fields & title_fields
             else ()
         )
+        if "alternate_titles" not in self.enabled_fields:
+            aliases = tuple(
+                alias for alias in aliases
+                if alias.alias_type.casefold() == "transliteration"
+            )
         return MusicBrainzTrackEnrichment(
             semantic, tuple(evidence), frozenset(wave_unavailable), aliases
         )
@@ -609,7 +615,7 @@ def _recording_profile(enabled_fields: Collection[str]) -> EntityFetchProfile:
         includes.update({"genres", "tags"})
     if "isrcs" in fields:
         includes.add("isrcs")
-    if "alternate_titles" in fields:
+    if fields & {"alternate_titles", "transliterations"}:
         includes.add("aliases")
     if fields & {
         "works", "iswcs", "lyrics_languages", "artist_languages",
