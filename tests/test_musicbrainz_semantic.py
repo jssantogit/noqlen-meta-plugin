@@ -705,6 +705,11 @@ def test_v3_vocal_languages_require_one_unambiguous_sung_performance(
         ("vocal_languages", languages)
     ]
     assert result.semantic.metadata == ()
+    evidence = result.evidence[0]
+    assert evidence.source_id == WORK_ONE
+    assert evidence.subject.entity is EntityKind.RECORDING
+    assert evidence.provenance.method is AcquisitionMethod.SUPPORTING_TRAVERSAL
+    assert evidence.provenance.supporting_entity is EntityKind.WORK
 
 
 @pytest.mark.parametrize("attribute", [
