@@ -17,6 +17,7 @@ ITEM_FIELD_TYPES = MappingProxyType(
         "mb_workids": types.MULTI_VALUE_DSV,
         "recording_date": types.STRING,
         # Nullable: absence is unknown, not an implied False.
+        "vocal_languages": types.MULTI_VALUE_DSV,
         "instrumental": types.BOOLEAN,
         "explicitness": types.STRING,
         "producers": types.MULTI_VALUE_DSV,
