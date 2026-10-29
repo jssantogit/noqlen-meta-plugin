@@ -156,3 +156,29 @@ def test_back_path_created_after_preview_blocks_apply(album, tmp_path: Path) -> 
     result = apply_back_artwork_plan(lib, selected, plan)
     assert result.status == "BLOCKED"
     assert (tmp_path / "back.jpg").read_text(encoding="utf-8") == "local"
+
+
+def test_back_artwork_full_cli_preview_and_apply_is_opt_in(
+    album, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from beetsplug.noqlenmeta import NoqlenMetaPlugin
+    import beetsplug.noqlenmeta.back_artwork as back_module
+
+    lib, selected, _ = album
+    plugin = NoqlenMetaPlugin()
+    plugin.config["fields"].set({
+        **{field: False for field in plugin.config["fields"].keys()},
+        "back_artwork": True,
+    })
+    plugin._coverartarchive_client = Client(payload())
+    monkeypatch.setattr(back_module, "download_artwork", lambda *_: JPEG)
+    command = plugin.commands()[0]
+    preview, args = command.parse_args(["--all"])
+    command.func(lib, preview, args)
+    destination = tmp_path / "back.jpg"
+    assert not destination.exists()
+
+    apply, args = command.parse_args(["--apply", "--all"])
+    command.func(lib, apply, args)
+    assert destination.read_bytes() == JPEG
+    assert selected.artpath != bytes(destination)
