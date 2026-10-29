@@ -12,6 +12,7 @@ from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_CAPABILITY_REGISTRY,
     CREDIT_PROVIDER_CAPABILITY_REGISTRY,
     RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY,
+    RECORDING_SEMANTIC_PROVIDER_CAPABILITY_REGISTRY,
     ProviderScope,
 )
 
@@ -350,7 +351,9 @@ def _validate_capabilities(rules: tuple[AuthorityRule, ...]) -> None:
         )
         if key not in BUILTIN_PROVIDER_CAPABILITY_REGISTRY and (
             key not in RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY
-        ) and key not in CREDIT_PROVIDER_CAPABILITY_REGISTRY:
+        ) and key not in CREDIT_PROVIDER_CAPABILITY_REGISTRY and (
+            key not in RECORDING_SEMANTIC_PROVIDER_CAPABILITY_REGISTRY
+        ):
             raise ValueError(f"authority has no registered provider capability: {key!r}")
 
 
