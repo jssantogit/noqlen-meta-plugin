@@ -90,6 +90,9 @@ V3_TRACK_FIELD_TARGETS: Mapping[str, TrackFieldTarget] = MappingProxyType(
         "instrumental": TrackFieldTarget(
             "instrumental", "instrumental", TrackTargetShape.SCALAR_BOOLEAN
         ),
+        "explicitness": TrackFieldTarget(
+            "explicitness", "explicitness", TrackTargetShape.SCALAR_STRING
+        ),
     }
 )
 
@@ -260,6 +263,12 @@ def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
             continue
 
         value = change.after
+        if change.field == "explicitness" and (
+            type(value) is not str or value not in {"explicit", "clean"}
+        ):
+            raise TrackMappingError(
+                "explicitness must be canonical 'explicit' or 'clean'"
+            )
         if target.shape is TrackTargetShape.STRING_LIST:
             if (
                 not isinstance(value, tuple)
