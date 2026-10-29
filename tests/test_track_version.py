@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from beets import config
 from beets.library import Item, Library
 
 from beetsplug.noqlenmeta.track_version import (
@@ -13,6 +14,14 @@ from beetsplug.noqlenmeta.track_version import (
 )
 
 RECORDING = "11111111-1111-4111-8111-111111111111"
+
+
+@pytest.fixture(autouse=True)
+def restore_beets_configuration() -> object:
+    config["timeout"].get()
+    sources = list(config.sources)
+    yield
+    config.sources[:] = sources
 
 
 @pytest.fixture
@@ -99,3 +108,31 @@ def test_identity_changes_after_preview_block_version_application(
 
     assert apply_track_version_plan(library, plan).status == "BLOCKED"
     assert library.get_item(item.id).get("track_version_type") is None
+
+
+def test_track_version_only_cli_preview_and_apply(
+    target: tuple[Library, Item], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from beetsplug.noqlenmeta import NoqlenMetaPlugin
+    from beetsplug.noqlenmeta.semantic_enrichment import SemanticEnrichmentResult
+
+    library, item = target
+    plugin = NoqlenMetaPlugin()
+    plugin.config["fields"].set({
+        **{field: False for field in plugin.config["fields"].keys()},
+        "track_version": True,
+    })
+    version = TrackVersion("radio_edit", "radio edit", RECORDING)
+    monkeypatch.setattr(
+        plugin, "_collect_track_candidates",
+        lambda *_: SemanticEnrichmentResult((), {}, version=version),
+    )
+    command = plugin.commands()[0]
+    opts, args = command.parse_args(["--all"])
+    command.func(library, opts, args)
+    assert library.get_item(item.id).get("track_version_type") is None
+
+    opts, args = command.parse_args(["--apply", "--all"])
+    command.func(library, opts, args)
+    assert library.get_item(item.id)["track_version_type"] == "radio_edit"
+    assert library.get_item(item.id)["track_version_description"] == "radio edit"
