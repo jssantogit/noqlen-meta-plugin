@@ -120,6 +120,27 @@ def test_v3_instrumental_assertion_is_separate_from_legacy_lyrics_candidates() -
     assert len(fetch.calls) == 1
 
 
+def test_v3_lrclib_instrumental_only_uses_real_plugin_planning() -> None:
+    from beetsplug.noqlenmeta import NoqlenMetaPlugin
+    from beetsplug.noqlenmeta.configuration import default_config
+
+    payload = fixture()
+    payload["instrumental"] = True
+    fetch = FetchRecord(payload)
+    plugin = NoqlenMetaPlugin()
+    plugin._lrclib_provider = LRCLIBProvider(fetch_record=fetch)
+    policy = resolution_policy_from_settings(
+        {field: field == "instrumental" for field in default_config()["fields"]},
+        {"lrclib": True, "musicbrainz": False},
+    )
+
+    collected = plugin._collect_track_candidates(context(), policy)
+    assert collected.candidates == ()
+    assert len(collected.evidence) == 1
+    assert collected.evidence[0].value is True
+    assert len(fetch.calls) == 1
+
+
 def test_v3_lrclib_false_does_not_claim_vocal_state() -> None:
     fetch = FetchRecord(fixture())
     provider = LRCLIBProvider(fetch_record=fetch)
