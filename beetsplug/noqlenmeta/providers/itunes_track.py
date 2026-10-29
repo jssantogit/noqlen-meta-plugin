@@ -72,14 +72,15 @@ class ITunesTrackExplicitnessProvider:
         if key in self._cache:
             return self._cache[key]
 
-        url = f"{_SEARCH_ENDPOINT}?{urlencode({
-            'term': f'{context.artist} {context.title} {context.album_title}',
-            'media': 'music',
-            'entity': 'song',
-            'limit': _MAX_RESULTS,
-            'country': self._storefront.upper(),
-            'explicit': 'Yes',
-        })}"
+        parameters = {
+            "term": f"{context.artist} {context.title} {context.album_title}",
+            "media": "music",
+            "entity": "song",
+            "limit": _MAX_RESULTS,
+            "country": self._storefront.upper(),
+            "explicit": "Yes",
+        }
+        url = f"{_SEARCH_ENDPOINT}?{urlencode(parameters)}"
         try:
             payload = self._request_json(url)
             rows = payload["results"]
@@ -96,7 +97,8 @@ class ITunesTrackExplicitnessProvider:
         result: tuple[MetadataEvidence, ...] = ()
         if len(matches) == 1:
             row = matches[0]
-            explicitness = _VALID_FLAGS.get(row.get("trackExplicitness"))
+            flag = row.get("trackExplicitness")
+            explicitness = _VALID_FLAGS.get(flag) if isinstance(flag, str) else None
             if explicitness is not None:
                 song_id = str(row["trackId"])
                 result = (
