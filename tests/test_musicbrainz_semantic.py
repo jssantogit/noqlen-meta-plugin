@@ -683,7 +683,6 @@ def test_mixed_work_relations_keep_legacy_languages_without_v3_credit_leak() -> 
     assert result.semantic.metadata[0].value == ("eng",)
 
 
-@pytest.mark.parametrize("languages", [("eng",), ("kor", "eng")])
 def test_v3_recording_aliases_are_structured_and_do_not_replace_title() -> None:
     semantic_client, _ = client(
         recording={
@@ -706,6 +705,7 @@ def test_v3_recording_aliases_are_structured_and_do_not_replace_title() -> None:
     assert output.semantic.metadata == ()
 
 
+@pytest.mark.parametrize("languages", [("eng",), ("kor", "eng")])
 def test_v3_vocal_languages_require_one_unambiguous_sung_performance(
     languages: tuple[str, ...],
 ) -> None:
