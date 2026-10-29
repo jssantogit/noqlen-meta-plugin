@@ -87,6 +87,9 @@ TRACK_FIELD_TARGETS: Mapping[str, TrackFieldTarget] = MappingProxyType(
 # public compatibility snapshot or the media-file writing policy.
 V3_TRACK_FIELD_TARGETS: Mapping[str, TrackFieldTarget] = MappingProxyType(
     {
+        "vocal_languages": TrackFieldTarget(
+            "vocal_languages", "vocal_languages", TrackTargetShape.STRING_LIST
+        ),
         "instrumental": TrackFieldTarget(
             "instrumental", "instrumental", TrackTargetShape.SCALAR_BOOLEAN
         ),
