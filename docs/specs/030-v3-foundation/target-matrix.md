@@ -135,3 +135,34 @@ registry and track mapper support `fields.instrumental: true` as an explicit
 opt-in in development configuration. Application is database-only through the
 normal ChangePlan/preview/review/SQLite rollback pipeline. No media-file tag is
 advertised or written for instrumental state.
+
+
+## Explicitness V3 implementation — 2026-10-29
+
+The V3 recording-level `explicitness` field uses **three states**:
+`explicit`, `clean`, or **unknown** (no known canonical value).
+The executable value is a typed nullable string in the beets Item database;
+no universal media-file advisory tag is written. Conflicting existing values
+are preserved and require REVIEW before any application.
+
+iTunes supplies track-level evidence only from an unambiguous song in a
+bounded storefront search using exact normalized artist, title, album,
+track/disc numbers when available, and duration within two seconds.
+A matching collection/album cannot assert track explicitness. Search results
+with two distinct plausible tracks are deliberately withheld. Provider/network
+failure cannot fabricate metadata or block unrelated provider evidence.
+
+The Apple Music/iTunes API documents `trackExplicitness` as
+`explicit`, `cleaned`, or `notExplicit`
+(https://performance-partners.apple.com/search-api).
+V3 maps only **`explicit` → `explicit`** and
+**`cleaned` → `clean`**. It treats `notExplicit`, missing,
+malformed, and unknown flags as **unknown** rather than proof of a
+specifically clean/censored edition. Album-level `collectionExplicitness`
+is intentionally ignored.
+
+The V2 iTunes release provider and its public `ProviderSpec` are unchanged.
+The separate V3 recording capability and target registries support this
+feature as an explicit development opt-in via `fields.explicitness: true`
+plus `providers.itunes.enabled: true`. The current CLI remains preview-first,
+with explicit database application and unchanged file-write restrictions.
