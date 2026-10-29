@@ -292,3 +292,28 @@ title and prior alias snapshot. Preview and read do not create the table;
 and exposed generic field/target registries stay frozen. This scope
 covers the library `beet nm` command; importer completion, non-Recording
 aliases and typed track-version semantics remain separate work.
+
+
+## Explicit track-version V3 implementation — 2026-10-29
+
+The opt-in `fields.track_version: true` does **not** parse keywords
+from the track title or assume a remix/remaster based on title punctuation.
+It may propose a version only when the **exact MusicBrainz Recording**
+supplies a dedicated `disambiguation` string matching one of a small,
+explicitly enumerated whole-string descriptions, e.g. `radio edit`,
+`extended mix`, `instrumental version`, `live version`,
+`demo version`, `acoustic version`, `album version`,
+`single version`, or `remix`. Other comments, including arbitrary
+mixed prose, remain unknown. This intentionally underfills rather than
+misclassifies.
+
+The proposed version has a normalized type and the original description.
+It uses two separately typed beets Item DB fields,
+`track_version_type` and `track_version_description`; no speculative
+audio-file `VERSION` tag or lossy `subtitle` projection is written.
+Existing agreeing state is KEEP; contradicting or partially present
+values require REVIEW. Application rechecks exact Recording MBID, Item path,
+display title and both previous values, using the same explicit SQLite
+SAVEPOINT-backed database mutation pattern as other V3 fields.
+Importer-side version projection and richer relationship-typed mix/version
+semantics remain open.
