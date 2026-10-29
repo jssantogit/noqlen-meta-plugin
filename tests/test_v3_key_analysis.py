@@ -21,10 +21,10 @@ def rotate(values: tuple[float, ...], semitones: int) -> tuple[float, ...]:
 
 
 @pytest.mark.parametrize("chroma,expected", [
-    (MAJOR, "C major"),
-    (rotate(MAJOR, 9), "A major"),
-    (MINOR, "C minor"),
-    (rotate(MINOR, 9), "A minor"),
+    (MAJOR, "C"),
+    (rotate(MAJOR, 9), "A"),
+    (MINOR, "Cm"),
+    (rotate(MINOR, 9), "Am"),
 ])
 def test_full_pitch_class_profile_recognizes_major_and_minor(chroma, expected):
     observation = estimate_key(chroma)
@@ -78,7 +78,7 @@ class Analyzer:
     (True, None, "RESOLVED", 1),
 ])
 def test_opt_in_planning_never_overwrites_existing_key(enabled, existing, outcome, calls):
-    analyzer = Analyzer(KeyObservation("C major", 0.95, "librosa"))
+    analyzer = Analyzer(KeyObservation("C", 0.95, "librosa"))
     result = plan_key(
         path=b"track.flac",
         existing_key=existing,
@@ -89,7 +89,7 @@ def test_opt_in_planning_never_overwrites_existing_key(enabled, existing, outcom
     assert result.outcome == outcome
     assert analyzer.calls == calls
     if outcome == "RESOLVED":
-        assert result.canonical_key == "C major"
+        assert result.canonical_key == "C"
 
 
 def test_unreliable_analyzer_does_not_create_metadata():
@@ -106,7 +106,7 @@ def test_unreliable_analyzer_does_not_create_metadata():
 
 
 def test_key_analysis_is_opt_in_twice():
-    analyzer = Analyzer(KeyObservation("C major", 0.95, "librosa"))
+    analyzer = Analyzer(KeyObservation("C", 0.95, "librosa"))
     result = plan_key(
         path=b"track.flac",
         existing_key=None,
@@ -147,7 +147,7 @@ def test_key_full_cli_preview_and_apply_is_opt_in(tmp_path, monkeypatch):
         plugin.config["local_analysis"].set(analysis)
         monkeypatch.setattr(
             LibrosaKeyAnalyzer, "analyze",
-            lambda _self, _path, _settings: KeyObservation("C major", 0.96, "librosa"),
+            lambda _self, _path, _settings: KeyObservation("C", 0.96, "librosa"),
         )
         command = plugin.commands()[0]
         preview, args = command.parse_args(["--all"])
@@ -156,6 +156,6 @@ def test_key_full_cli_preview_and_apply_is_opt_in(tmp_path, monkeypatch):
 
         apply, args = command.parse_args(["--apply", "--all"])
         command.func(library, apply, args)
-        assert library.get_item(item.id).get("initial_key") == "C major"
+        assert library.get_item(item.id).get("initial_key") == "C"
     finally:
         config.sources[:] = initial_sources
