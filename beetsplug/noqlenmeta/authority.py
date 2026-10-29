@@ -228,6 +228,7 @@ _RULES = (
     _rule("lyrics_languages", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.TRACK),
     _rule("instrumental", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.TRACK),
     _rule("instrumental", "lrclib", AuthorityRole.SECONDARY, ProviderScope.TRACK),
+    _rule("explicitness", "itunes", AuthorityRole.PRIMARY, ProviderScope.TRACK),
     _rule("artist_countries", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.ARTIST),
     _rule("artist_areas", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.ARTIST),
     # LRCLIB is the current lyrics source; artwork/AcoustID are separate domains.
