@@ -380,8 +380,8 @@ def _change_plan_with_bpm(
 
 
 def _integrate_key_decision(
-    planning: TrackPlanningResult, result: KeyPlanningResult
-) -> TrackPlanningResult:
+    planning: TrackPlanningResult | ImportTrackPlanningResult, result: KeyPlanningResult
+) -> TrackPlanningResult | ImportTrackPlanningResult:
     if (
         result.outcome != "RESOLVED"
         or result.observation is None
@@ -592,6 +592,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
         policy = self._resolution_policy()
         local_bpm_settings = self._local_bpm_settings()
+        local_key_settings = self._local_key_settings()
         import_artwork = self._prepare_import_artwork(session, task, album_info)
         if import_artwork is not None and apply_enabled:
             self._pending_import_artwork.setdefault(import_artwork.key, []).append(
@@ -611,6 +612,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
             and (
                 self._has_contributing_track_provider(policy)
                 or policy.is_field_enabled("bpm") and local_bpm_settings.enabled
+                or policy.is_field_enabled("key") and local_key_settings.enabled
             )
             and (preview_enabled or apply_enabled)
         )
@@ -740,6 +742,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     from_scratch=from_scratch,
                     policy=policy,
                     local_bpm_settings=local_bpm_settings,
+                    local_key_settings=local_key_settings,
                 )
                 track_application_result = None
                 if apply_enabled:
@@ -2178,6 +2181,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         from_scratch: bool,
         policy: ResolutionPolicy,
         local_bpm_settings: LocalBpmSettings,
+        local_key_settings: KeySettings = KeySettings(),
     ) -> ImportTrackPlanningResult:
         enrichment = self._collect_track_candidates(context, policy)
         current_values = effective_current_values_for_import_track(
@@ -2200,7 +2204,15 @@ class NoqlenMetaPlugin(BeetsPlugin):
             policy=policy,
             semantic_outcomes=enrichment.outcomes,
         )
-        return self._integrate_import_bpm(planning, bpm_result)
+        planning = self._integrate_import_bpm(planning, bpm_result)
+        key_result = plan_key(
+            path=selected.item.path,
+            existing_key=current_values.get("key"),
+            field_enabled=policy.is_field_enabled("key"),
+            settings=local_key_settings,
+            analyzer=LibrosaKeyAnalyzer() if local_key_settings.enabled else None,
+        )
+        return _integrate_key_decision(planning, key_result)
 
     @staticmethod
     def _integrate_library_bpm(
