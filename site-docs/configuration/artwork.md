@@ -4,14 +4,15 @@ Noqlen can select an approved main-front image from Cover Art Archive for an
 identified album.
 
 ```yaml
-fields:
-  cover: true
-providers:
-  coverartarchive:
-    enabled: true
-artwork:
-  size: original
-  replace_existing: false
+noqlenmeta:
+  fields:
+    cover: true
+  providers:
+    coverartarchive:
+      enabled: true
+  artwork:
+    size: original
+    replace_existing: false
 ```
 
 The default preserves an existing `cover.jpg` or embedded image. Set
