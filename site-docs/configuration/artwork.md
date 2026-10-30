@@ -1,7 +1,8 @@
 # Artwork
 
-Noqlen can select an approved main-front image from Cover Art Archive for an
-identified album.
+Noqlen can select an approved main-front image and, when opted in, a
+verified exact-release Back image from Cover Art Archive for an identified
+album.
 
 ```yaml
 noqlenmeta:
@@ -31,6 +32,18 @@ Ordinary `--apply` may write and verify sidecars without mutating audio files.
 
 ## Back artwork (V3, opt-in)
 
+To request verified Back artwork, add this field to your existing
+`noqlenmeta:` configuration:
+
+```yaml
+noqlenmeta:
+  fields:
+    back_artwork: true
+  providers:
+    coverartarchive:
+      enabled: true
+```
+
 Set `noqlenmeta.fields.back_artwork: true` to request an approved Cover Art
 Archive `Back` image for the **exact selected release**. On an existing-library
 album, `--apply` can create a guarded `back.jpg` in the verified disc
@@ -40,5 +53,5 @@ Competing images require REVIEW; a failure while writing multiple disc
 directories triggers conservative rollback of newly created sidecars.
 
 **Not included in V3.0:** artwork printed on the disc surface (Disc/Medium art)
-and mapping different Medium images to specific disc numbers. This is planned
-for evaluation in a later version, and must never be confused with `back.jpg`.
+and mapping different Medium images to specific disc numbers. It could be evaluated in a later version, but is not a committed V3.0
+feature and must never be confused with `back.jpg`.
