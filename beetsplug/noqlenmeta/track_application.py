@@ -6,7 +6,6 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-from math import isfinite
 from typing import Any
 
 from beets.autotag.hooks import AlbumInfo, TrackInfo
