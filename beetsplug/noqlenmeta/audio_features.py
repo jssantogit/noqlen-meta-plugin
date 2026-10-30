@@ -153,8 +153,6 @@ def estimate_danceability(
     ):
         return None
     intervals = tuple(
-        b - a for a, b in zip(beat_times, beat_times[1:], strict=True)
-    ) if False else tuple(
         beat_times[i] - beat_times[i - 1] for i in range(1, len(beat_times))
     )
     if any(interval <= 0 for interval in intervals):
