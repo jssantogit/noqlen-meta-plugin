@@ -84,6 +84,7 @@ def test_recipes_replace_legacy_guides() -> None:
         "import-enrichment.md",
         "artwork.md",
         "local-bpm.md",
+        "v3-enrichment.md",
         "lyrics-languages.md",
         "repair-musicbrainz-ids.md",
         "whole-library.md",
@@ -233,32 +234,37 @@ def test_public_release_state_is_consistent() -> None:
     ).casefold()
 
     assert len(readme.splitlines()) < 500
-    assert "MIT licensed" in home
-    assert "canonical license text" in home
-    assert "GitHub repository is public" in home
+    assert "MIT License" in home
+    assert "canonical MIT License text" in release
+    assert "GitHub repository" in home
     assert "MIT License" in release
     assert "canonical public documentation is live" in release_words
     assert "https://pypi.org/project/beets-noqlenmeta/" in home
     assert (
-        "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.1"
+        "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v3.0.0"
         in release
     )
     assert "## Unreleased" in changelog
+    assert "## 3.0.0 - 2026-10-30" in changelog
     assert "## 2.0.1 - 2026-08-12" in changelog
     assert "## 2.0.0 - 2026-08-11" in changelog
     assert (
         changelog.index("## Unreleased")
+        < changelog.index("## 3.0.0 - 2026-10-30")
         < changelog.index("## 2.0.1 - 2026-08-12")
         < changelog.index("## 2.0.0 - 2026-08-11")
         < changelog.index("## 1.0.0 - 2026-08-02")
     )
-    assert "Current stable release: `2.0.1` (2026-08-12)" in release
-    assert "Noqlen Meta 2.0.1 is published on" in release
-    assert "Version 2.0.1 is the current stable release." in project_changelog
+    assert "Current published package release: `3.0.0` (2026-10-30)" in release
+    assert "v3.0.0" in release and "Trusted Publishing" in release
+    assert "current published release is **3.0.0" in project_changelog.lower()
     assert "The Read the Docs project slug is `noqlen-meta`." in release
     assert "verified `cover.jpg` sidecars may be written" in combined
     assert "audio files remain unchanged unless `--write`" in combined
     assert "adding `--write` never triggers another provider call" in combined
+    assert "[x] Create `v3.0.0` tag pointing to the vetted `main` commit." in checklist
+    assert "[x] Confirm tag workflow succeeds and publishes wheel/sdist" in checklist
+    assert "[ ] Confirm Read the Docs `v3.0.0` is active" in checklist
     assert "[x] MIT License selected and added" in checklist
     assert "[x] Repository visibility changed to public" in checklist
     assert "[x] PyPI project ownership established" in checklist

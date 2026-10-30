@@ -1,90 +1,82 @@
-# Release Status
+# Release status
 
-## 3.0.0 release candidate (source only, not published yet)
+**Current published package release: `3.0.0` (2026-10-30).**
 
-The repository's V3 release branch declares package version `3.0.0` for
-validation, but **this is not evidence that 3.0.0 is publicly released**.
-The last confirmed published distribution remains `2.0.1` until the tagged
-main-branch release workflow and external PyPI/GitHub/Read the Docs checks pass.
-The source release-candidate scope includes structured Recording metadata,
-conservative native Key, guarded `.lrc` and `back.jpg` assets, and opt-in
-RMS/rhythm proxy features (not perceptual Spotify-equivalent scores).
-Conservative MusicBrainz Work-derived vocal languages are included; disc-surface
-artwork and audio language recognition are not part of 3.0.0.
+[Noqlen Meta v3.0.0](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v3.0.0)
+is a published GitHub Release. The `v3.0.0` tag points to the exact approved
+`main` commit `3ae7fb6da812a5ba1a27d7525571293d7be225e1`.
+The tagged [Publish Release workflow](https://github.com/jssantogit/noqlen-meta-plugin/actions/runs/41045690976)
+completed with successful build and PyPI Trusted Publishing jobs.
 
-Current stable release: `2.0.1` (2026-08-12).
+Install the current published distribution from
+[PyPI](https://pypi.org/project/beets-noqlenmeta/):
 
-Noqlen Meta 2.0.1 is published on
-[PyPI](https://pypi.org/project/beets-noqlenmeta/), and the corresponding
-[GitHub Release](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.1)
-uses the `v2.0.1` tag.
+```bash
+pip install --upgrade beets-noqlenmeta
+```
 
-Package support is bounded to Python 3.10 through 3.14. Distribution checks
-require wheel `Requires-Python` to match `>=3.10,<3.15`; Python 3.15 is not
-claimed.
+## What's new in 3.0.0?
 
-The final `main` CI passed across Python 3.10 through 3.14, the supported beets
-compatibility boundaries, documentation, package validation, and the optional
-audio-analysis lane. The tagged release workflow then built and validated the
-release artifacts and published them through PyPI Trusted Publishing.
+- Typed MusicBrainz Recording/Work identity references, scoped structured
+  composer/lyricist/producer/performer credits and provenance.
+- Additional recording metadata: instrumental state, explicit/clean advisory,
+  alternative titles/transliterations, typed version/mix, and opt-in
+  conservative `vocal_languages`.
+- Synchronized lyrics through guarded `.lrc` sidecars, plus exact-release
+  Back artwork through guarded `back.jpg` sidecars.
+- Optional local Key and versioned 0–1 Energy and Danceability **signal/rhythm
+  proxies**; not validated perceptual or Spotify-equivalent scores.
+- Existing V2 defaults remain unchanged. Preview/apply/write safety boundaries,
+  DB-only fields, no-clobber behavior and conservative unknown handling remain.
 
-## Version 2.0.1
+**Outside 3.0.0:** direct spoken/sung-language recognition from audio and
+individual disc-surface (CD/Medium) artwork.
 
-Version 2.0.1 is a documentation-only patch release. It ships the redesigned
-beginner-first Documentation v2 as a stable release, reduces the repository and
-PyPI README to a concise project landing page, and carries forward documentation
-and release-metadata corrections made after 2.0.0. Runtime behavior is unchanged.
+For full details, see the [Changelog](changelog.md),
+[V3 enrichment recipe](../recipes/v3-enrichment.md), and
+[Field Reference](../technical-reference/fields.md).
 
-## Version 2.0.0
+## Compatibility
 
-Version 2.0.0 expands Noqlen Meta with semantic release, track, and artist
-enrichment; verified artwork handling; optional local BPM analysis; and
-existing-library AcoustID workflows. The preview-first safety model and
-separate mutation authorities remain intact.
+Python **3.10 through 3.14** and `beets>=2.12,<3` are supported by the
+CI matrix. Python 3.15 is not claimed; package metadata declares
+`Requires-Python >=3.10,<3.15`. Package build, strict metadata validation,
+clean-install smoke, documentation, optional audio analysis and both beets
+compatibility boundaries passed before release.
 
-Highlights include:
-
-- lossless multivalued styles and moods;
-- lyrics language plus artist language and geography metadata;
-- genre taxonomy and style promotion;
-- verified ordinary metadata synchronization behind `--apply --write`;
-- Cover Art Archive selection, deterministic `cover.jpg` sidecars, multidisc
-  reuse, and optional embedding;
-- optional local BPM analysis through the `[audio]` extra with lazy Librosa;
-- standalone existing-library AcoustID preview and application workflows;
-- stored fingerprint reuse and explicit missing-fingerprint calculation through
-  `fpcalc` when requested;
-- bounded AcoustID lookup using the environment-only
-  `NOQLENMETA_ACOUSTID_API_KEY`;
-- optional AcoustID compatibility evidence for MusicBrainz identity workflows.
-
-## Publication
-
-The release workflow:
-
-- verifies that the tag version matches `pyproject.toml`;
-- proves that the tagged commit is contained in remote `main`;
-- checks out complete history without persisting credentials;
-- builds wheel and sdist once;
-- validates metadata and archive contents;
-- publishes the checked artifacts through PyPI Trusted Publishing and OIDC;
-- uses no API token or long-lived publishing credential.
-
-## Documentation
+## Documentation versions and deployment
 
 The canonical public documentation is live at
 [https://noqlen-meta.readthedocs.io/en/stable/](https://noqlen-meta.readthedocs.io/en/stable/).
 The Read the Docs project slug is `noqlen-meta`.
 
-The explicit `v2.0.1` Read the Docs version remains a separate post-release
-verification item; the `stable` URL above is the canonical public entry point.
+Read the Docs builds `latest` from the default `main` branch. Its `stable`
+alias resolves to the newest **active** stable semver Git tag; by design, a
+versioned build remains a snapshot of that tag. A documentation change merged
+to `main` updates `latest`, **not the previously released `v3.0.0` source
+snapshot**. If the new tag is not active, activate it in the project's
+**Versions** dashboard and verify its build. Changes merged after `v3.0.0`
+will reach `stable` in a subsequent tagged documentation or patch release.
 
-The repository root `RELEASE_CHECKLIST.md` remains the operational source for
-post-release verification items.
+Repository `RELEASE_CHECKLIST.md` records the external Read the Docs version
+and public installation checks separately; GitHub Actions success alone does
+not verify the live Read the Docs alias.
 
-## License
+## Previous releases
 
-Noqlen Meta is distributed under the MIT License. The canonical license text is
-available in the repository root [`LICENSE`](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE).
-MIT licensing does not imply endorsement by beets, MusicBrainz, Discogs,
-Navidrome, Last.fm, Apple, LRCLIB, AcoustID, or any provider.
+- [2.0.1 (2026-08-12)](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.1):
+  documentation-focused patch, no runtime behavior changes.
+- [2.0.0 (2026-08-11)](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.0):
+  semantic metadata, Cover Art Archive front covers, local BPM, and AcoustID.
+- [1.0.0 (2026-08-02)](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v1.0.0):
+  initial public release.
+
+## Licensing and publication integrity
+
+The canonical MIT License text is [MIT](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE).
+MIT licensing does not imply endorsement by any provider or beets itself.
+
+The tagged release workflow verifies `main` ancestry and tag/package
+version, builds wheel and sdist, checks package contents, and publishes via
+PyPI Trusted Publishing (OIDC) without a long-lived PyPI token. Public wheel
+installation and Read the Docs build status are independent verification steps.

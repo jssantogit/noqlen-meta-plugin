@@ -23,7 +23,7 @@ can be represented safely.
 | `artist_areas` | off | MusicBrainz | Typed track/album list | Typed Item/Album list | Uses trustworthy main artist areas; never inferred from text. |
 | `artist_languages` | on | MusicBrainz-derived Work evidence | Typed track/album list | Typed Item/Album list | Derived only from Work languages reached by tracks in the current target, not a direct artist-provider field. |
 | `lyrics` | off | LRCLIB | Selected `TrackInfo.lyrics` | Item lyrics | Importer and existing-library Items share LRCLIB resolution. |
-| `synced_lyrics` | off | LRCLIB | No lossless target | No lossless target | Existing library CLI creates an atomic no-clobber `.lrc` sidecar on `--apply`; importer/file SYLT remains unsupported. |
+| `synced_lyrics` | off | LRCLIB | No embedded SYLT target | Verified `.lrc` sidecar | Existing-library CLI creates a guarded no-clobber `.lrc` sidecar on `--apply`; importer/file SYLT remains unsupported. |
 | `cover` | on | Cover Art Archive | Album sidecar/embed | Album sidecar/embed | Exact approved main front; fixed `cover.jpg`; no singleton artwork. |
 | `composers` | on | MusicBrainz Work relations | Native names/IDs plus structured state | Native names/IDs plus structured state | Exact Work scope; generic writer is not promoted. |
 | `lyricists` | on | MusicBrainz Work relations | Native names/IDs plus structured state | Native names/IDs plus structured state | Exact Work scope; generic writer is not promoted. |

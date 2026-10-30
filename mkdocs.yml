@@ -79,6 +79,7 @@ nav:
       - Sync Identity Tags: commands/identity-tags.md
   - Recipes:
       - Recipes: recipes/index.md
+      - Upgrade to V3 and Optional Features: recipes/v3-enrichment.md
       - Enrich an Existing Library: recipes/existing-library.md
       - Enrich During Import: recipes/import-enrichment.md
       - Add or Replace Album Covers: recipes/artwork.md

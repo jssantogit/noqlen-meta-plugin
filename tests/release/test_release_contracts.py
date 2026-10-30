@@ -307,7 +307,7 @@ def test_v3_release_candidate_version_is_exact() -> None:
     assert project["version"] == "3.0.0"
 
 
-def test_v3_release_scope_is_documented_without_claiming_publication() -> None:
+def test_v3_release_scope_and_verified_publication_are_documented() -> None:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     release = (ROOT / "site-docs" / "project" / "release.md").read_text(
         encoding="utf-8"
@@ -316,12 +316,13 @@ def test_v3_release_scope_is_documented_without_claiming_publication() -> None:
     assert changelog.index("## Unreleased") < changelog.index(
         "## 3.0.0 - 2026-10-30"
     ) < changelog.index("## 2.0.1 - 2026-08-12")
-    assert "3.0.0 release candidate" in release
-    assert "not published yet" in release
-    assert "Current stable release: `2.0.1`" in release
+    assert "Current published package release: `3.0.0`" in release
+    assert "Publish Release workflow" in release
+    assert "v3.0.0" in release
     assert "disc-surface" in release
     assert "V3.0" not in checklist  # release numbering has one canonical form
-    assert "[ ] Create `v3.0.0` tag" in checklist
+    assert "[x] Create `v3.0.0` tag" in checklist
+    assert "[ ] Confirm Read the Docs `v3.0.0` is active" in checklist
 
 
 def test_changelog_orders_unreleased_v2_and_v1() -> None:

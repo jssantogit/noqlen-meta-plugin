@@ -104,7 +104,7 @@
 - [ ] Public `beets-noqlenmeta==2.0.1` clean install discovers `noqlenmeta` and `beet nm --help` works.
 
 
-## Version 3.0.0 release candidate (2026-10-30)
+## Version 3.0.0 release (2026-10-30)
 
 ### Accepted product boundaries
 
@@ -122,17 +122,28 @@
 
 ### Repository and distribution gates
 
-- [ ] Release candidate `3.0.0` metadata, user documentation and changelog
+- [x] Release candidate `3.0.0` metadata, user documentation and changelog
       pass strict validation together.
-- [ ] Full CI green at the final prepared release-branch HEAD.
-- [ ] The V3 PR is reviewed/approved and merged into `main`.
-- [ ] Full CI green on the resulting `main` commit.
+- [x] Full CI green at the final prepared release-branch HEAD.
+- [x] The V3 PR is reviewed/approved and merged into `main`.
+- [x] Full CI green on the resulting `main` commit.
 
 ### External publishing gates (not implied by repository tests)
 
-- [ ] Confirm the release commit is contained in remote `main`.
-- [ ] Create `v3.0.0` tag pointing to the vetted `main` commit.
-- [ ] Confirm tag workflow succeeds and publishes wheel/sdist through PyPI OIDC.
-- [ ] Create and verify the GitHub Release and public PyPI 3.0.0 artifacts.
-- [ ] Confirm clean installation of **published** package and Read the Docs
-      `stable`/versioned 3.0.0 documentation. Do not mark complete prematurely.
+- [x] Confirm the release commit is contained in remote `main`.
+- [x] Create `v3.0.0` tag pointing to the vetted `main` commit.
+- [x] Confirm tag workflow succeeds and publishes wheel/sdist through PyPI OIDC.
+- [x] Create and verify the GitHub Release and public PyPI 3.0.0 artifacts.
+- [ ] Confirm public clean installation of the **published** 3.0.0 package.
+- [ ] Confirm Read the Docs `v3.0.0` is active and its build succeeds.
+- [ ] Confirm `/en/stable/` resolves to the intended current published
+      documentation. This may require activating `v3.0.0` under Versions;
+      a later documentation-only update to `main` affects `latest`, not
+      the immutable tagged 3.0.0 snapshot.
+
+### Verified provenance
+
+- Main/tag SHA: `3ae7fb6da812a5ba1a27d7525571293d7be225e1`.
+- Main CI: https://github.com/jssantogit/noqlen-meta-plugin/actions/runs/41043455769
+- Publish Release: https://github.com/jssantogit/noqlen-meta-plugin/actions/runs/41045690976
+- GitHub Release: https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v3.0.0
