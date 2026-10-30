@@ -3,7 +3,9 @@
 The repository root [`CHANGELOG.md`](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/CHANGELOG.md)
 is the canonical release history.
 
-The current published release is **3.0.0 (2026-10-30)**. It introduces
+Version **3.0.1 (2026-10-30)** is a documentation-only maintenance patch,
+with no plugin runtime changes compared to 3.0.0. The original
+**3.0.0 (2026-10-30)** release introduces
 structured Recording/Work metadata, opt-in conservative vocal languages,
 verified `.lrc` and `back.jpg` sidecars, native Key, and methodology-versioned
 Energy and Danceability proxies.

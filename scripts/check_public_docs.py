@@ -157,12 +157,14 @@ def check() -> list[str]:
         "project"
     ]
     # Source metadata and documented public release must agree.
-    if project["version"] != "3.0.0":
-        failures.append("source package version is not the published V3 release")
-    if "## 3.0.0 - 2026-10-30" not in changelog_text:
-        failures.append("published V3 release lacks its dated changelog section")
-    if "current published package release: `3.0.0` (2026-10-30)" not in public_words:
-        failures.append("published V3 release is not identified accurately")
+    if project["version"] != "3.0.1":
+        failures.append("source package version is not the 3.0.1 docs maintenance patch")
+    if "## 3.0.1 - 2026-10-30" not in changelog_text:
+        failures.append("V3 documentation patch lacks its dated changelog section")
+    if "initial v3 package release: `3.0.0` (published 2026-10-30)" not in public_words:
+        failures.append("published V3 original release is not identified accurately")
+    if "documentation refresh: 3.0.1" not in public_words:
+        failures.append("V3 documentation maintenance patch is not described")
     if "vocal_languages" not in public_words or "danceability" not in public_words:
         failures.append("public documentation omits V3 optional features")
     if "recipes/v3-enrichment.md" not in {
@@ -330,7 +332,7 @@ def check() -> list[str]:
         failures.append("CHANGELOG.md must order Unreleased, 2.0.1, 2.0.0, then 1.0.0")
 
     required_release_state = (
-        "current published package release: `3.0.0` (2026-10-30)",
+        "initial v3 package release: `3.0.0` (published 2026-10-30)",
         "the read the docs project slug is `noqlen-meta`",
     )
     for phrase in required_release_state:

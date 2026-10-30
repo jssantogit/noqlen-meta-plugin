@@ -245,19 +245,21 @@ def test_public_release_state_is_consistent() -> None:
         in release
     )
     assert "## Unreleased" in changelog
+    assert "## 3.0.1 - 2026-10-30" in changelog
     assert "## 3.0.0 - 2026-10-30" in changelog
     assert "## 2.0.1 - 2026-08-12" in changelog
     assert "## 2.0.0 - 2026-08-11" in changelog
     assert (
         changelog.index("## Unreleased")
+        < changelog.index("## 3.0.1 - 2026-10-30")
         < changelog.index("## 3.0.0 - 2026-10-30")
         < changelog.index("## 2.0.1 - 2026-08-12")
         < changelog.index("## 2.0.0 - 2026-08-11")
         < changelog.index("## 1.0.0 - 2026-08-02")
     )
-    assert "Current published package release: `3.0.0` (2026-10-30)" in release
+    assert "Initial V3 package release: `3.0.0` (published 2026-10-30)" in release
     assert "v3.0.0" in release and "Trusted Publishing" in release
-    assert "current published release is **3.0.0" in project_changelog.lower()
+    assert "version **3.0.1" in project_changelog.lower()
     assert "The Read the Docs project slug is `noqlen-meta`." in release
     assert "verified `cover.jpg` sidecars may be written" in combined
     assert "audio files remain unchanged unless `--write`" in combined
