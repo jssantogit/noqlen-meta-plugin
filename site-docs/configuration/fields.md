@@ -47,8 +47,9 @@ write anything by themselves and do not enable providers.
 | `featured_artists` | on | Explicit featured or guest participation; vocals alone never qualify. |
 | `structured_artist_credits` | on | Ordered MusicBrainz artist-credit nodes, credited names, MBIDs, and join phrases. |
 
-Most fields default on. The deliberate opt-ins are `lyrics`, `synced_lyrics`,
-and `artist_areas`.
+The established V2 fields retain their original defaults; the older opt-ins
+include `lyrics`, `synced_lyrics`, and `artist_areas`. All newly introduced V3
+fields listed below are also **off unless explicitly configured**.
 
 ## Fields and feature settings are different
 
@@ -75,7 +76,7 @@ Use the topic pages for practical setup and the
 provider details, and mapping limitations.
 
 
-## V3 optional Recording and audio fields (not enabled by V2 defaults)
+## V3 optional Recording and audio fields (disabled until explicitly enabled)
 
 The major-version enrichment fields are intentionally opt-in. Add only the
 capabilities you want to the `noqlenmeta.fields` block:
@@ -99,3 +100,6 @@ capabilities you want to the `noqlenmeta.fields` block:
 These fields remain off unless explicitly supplied. Existing values and
 unresolvable ambiguities are preserved, not guessed. Individual disc-surface
 artwork is **not** a V3.0 feature.
+
+For a tested, ready-to-adapt `noqlenmeta:` configuration and a safe preview
+workflow, follow [Upgrade to V3](../recipes/v3-enrichment.md).
