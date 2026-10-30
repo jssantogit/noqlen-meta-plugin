@@ -84,6 +84,7 @@ def test_recipes_replace_legacy_guides() -> None:
         "import-enrichment.md",
         "artwork.md",
         "local-bpm.md",
+        "v3-enrichment.md",
         "lyrics-languages.md",
         "repair-musicbrainz-ids.md",
         "whole-library.md",
