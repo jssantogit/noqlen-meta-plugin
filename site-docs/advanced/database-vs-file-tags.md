@@ -29,3 +29,20 @@ four-MBID replacement workflow.
 External scanners such as Navidrome normally observe audio files and sidecars,
 not the private beets database. They may need their own rescan after changes.
 Noqlen does not call their APIs or control their caches.
+
+
+## V3-specific storage
+
+`back.jpg` and synchronized `.lrc` files are **verified sidecars**, not
+ordinary audio tags. They use separate no-clobber plans and do not replace the
+front `cover.jpg` or main native title. Disc-surface/Medium artwork is not yet
+implemented. Structured Recording title aliases and credit relationships are
+persisted in plugin-owned database tables.
+
+Recording `vocal_languages`, `instrumental`, `explicitness`, and version/mix
+descriptors have typed database targets without general-purpose audio-file
+writers. `energy` and `danceability` are nullable 0..1 **proxy** scores with
+method identifiers stored in the Item database only. A measured zero is not
+missing evidence. The optional native `initial_key` can be written through
+supported beets mappings. A checked `--write` flag never converts database-only
+V3 values into private or speculative media tags.
