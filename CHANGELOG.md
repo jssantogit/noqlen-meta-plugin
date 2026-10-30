@@ -4,6 +4,34 @@ All notable user-facing changes are recorded here.
 
 ## Unreleased
 
+### Added (V3, unreleased)
+
+- Structured and lossless Recording/Work relationship metadata, including
+  typed identities, contributor credits, roles, and original source scope.
+- Conservative recording instrumental state, explicit/clean advisory, vocal
+  languages, structured MusicBrainz title aliases and transliterations, and
+  typed Recording version/mix classification behind explicit opt-ins.
+- Verified `.lrc` synchronized-lyrics sidecars and exact-release Back artwork
+  sidecars, with no-clobber creation and conservative rollback across discs.
+- Optional, preview-first local Key analysis with native `initial_key`
+  preservation for both existing-library and selected importer tracks.
+- Optional local `energy` and `danceability` numeric proxy scores with
+  independently persisted `energy_method` and `danceability_method`.
+  These are documented RMS-signal and beat/onset-regularity measurements, **not**
+  calibrated human-perceptual or Spotify-equivalent scores. Unknown stays null.
+- Deterministic, unpersisted classification helpers for score and BPM buckets.
+
+### Safety (V3, unreleased)
+
+- Stable V2 configuration defaults and provider capability contracts remain
+  unchanged; new audio/recording functionality requires explicit opt-in.
+- Existing conflicting DB values are preserved; structured evidence requires
+  supported exact identities and does not modify the beets match.
+- DB-only Energy/Danceability and their method IDs never create media tags or
+  cause audio-file synchronization, even with `--write`.
+- Regression coverage across the supported Python/beets matrix, plus real
+  optional Librosa adapter smoke tests.
+
 ## 2.0.1 - 2026-08-12
 
 ### Changed
