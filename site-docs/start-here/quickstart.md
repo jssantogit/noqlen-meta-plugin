@@ -61,20 +61,29 @@ beets database, audio files or sidecars.
 
 ## 4. Interpret the result
 
-| Status | Plain-language meaning | Your action |
-| --- | --- | --- |
-| `KEEP` | Existing information should remain as it is | None |
-| `PROPOSE` | A supported change has been prepared | Check whether it looks right |
-| `REVIEW` | Evidence exists but is insufficient for a safe automatic decision | Investigate; don't force it |
-| `BLOCKED` | A safety or compatibility rule prevents the operation | Read the explanation; fix the cause if possible |
+Noqlen uses four field-level statuses:
+
+- **KEEP** — an existing value is retained.
+- **PROPOSE** — a candidate is eligible for consideration; check it.
+- **REVIEW** — the evidence needs investigation; don't force it.
+- **BLOCKED** — a safety or storage rule prevents a change.
+
+**Important:** `PROPOSE` does **not** guarantee application. In the default
+**strict** mode, one `REVIEW` or mapping `BLOCKED` for the same target
+can withhold **all** ordinary changes, including unrelated proposed fields.
+
+Read the `application`, `mapping blockers` and `resolution review`
+lines, not just field-level statuses. For a worked terminal example,
+follow [Read your first preview](reading-preview.md).
 
 A run may legitimately have **no proposals**. Noqlen needs recognized IDs,
-a suitable provider, and usable evidence. A status is not a guarantee that a
-specific field will change. See [Nothing was changed](../troubleshooting/nothing-changed.md).
+a suitable provider, and usable evidence. This is not automatically an error.
+See [Nothing was changed](../troubleshooting/nothing-changed.md).
 
 ## 5. Apply only after reviewing
 
-If the preview contains changes you want, authorize database application:
+If the preview contains changes you want **and no unresolved blocker or
+review that would withhold the target**, authorize database application:
 
 ```bash
 beet nm --apply album:"Discovery"

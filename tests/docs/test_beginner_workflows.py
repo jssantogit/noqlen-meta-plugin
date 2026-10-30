@@ -217,3 +217,64 @@ def test_v3_provider_and_artwork_pages_do_not_conflict_with_sidecars() -> None:
     assert "back_artwork: true" in artwork
     assert "`back.jpg`" in artwork
     assert "not" in artwork.lower() and "disc" in artwork.lower()
+
+
+def test_preview_walkthrough_explains_real_cli_application_gates() -> None:
+    page = (DOCS / "start-here" / "reading-preview.md").read_text(
+        encoding="utf-8"
+    )
+    quickstart = (DOCS / "start-here" / "quickstart.md").read_text(
+        encoding="utf-8"
+    )
+    renderer = (
+        DOCS.parent / "beetsplug" / "noqlenmeta" / "library_integration.py"
+    ).read_text(encoding="utf-8")
+    for signal in (
+        "Noqlen Meta / library target preview:",
+        "planned changes:",
+        "mapping blockers:",
+        "resolution review:",
+        "file tags: unchanged",
+    ):
+        assert signal in page, signal
+        assert signal in renderer, signal
+    # The actual renderer composes the application label from a status value.
+    assert "application: disabled (preview only)" in page
+    assert "disabled (preview only)" in renderer
+    assert "application: {application_status}" in renderer
+    assert "strict" in page.lower()
+    assert "all" in page.lower() and "withheld" in page.lower()
+    assert "--apply --partial" in page
+    assert "not a force" in page.lower()
+    assert "REVIEW" in quickstart and "BLOCKED" in quickstart
+    assert "strict" in quickstart.lower()
+
+
+def test_beginner_yaml_rejects_duplicate_keys_and_preserves_other_plugins() -> None:
+    """No beginner example should silently erase a previously pasted mapping."""
+    class RejectDuplicates(yaml.SafeLoader):
+        pass
+
+    def unique_mapping(loader: yaml.SafeLoader, node: yaml.MappingNode):
+        seen = set()
+        for key_node, _ in node.value:
+            key = loader.construct_object(key_node, deep=True)
+            assert key not in seen, f"duplicate YAML key: {key!r}"
+            seen.add(key)
+        return yaml.SafeLoader.construct_mapping(loader, node, deep=True)
+
+    RejectDuplicates.add_constructor(
+        yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, unique_mapping
+    )
+    for page in (*BEGINNER_PAGES, "start-here/installation.md"):
+        body = (DOCS / page).read_text(encoding="utf-8")
+        blocks = re.findall(
+            r"^\x60\x60\x60yaml\n(.*?)^\x60\x60\x60\s*$",
+            body,
+            flags=re.M | re.S,
+        )
+        for block in blocks:
+            candidate = yaml.load(block, Loader=RejectDuplicates)
+            assert isinstance(candidate, dict), page
+    for sample in sorted((DOCS / "examples").glob("*config.yaml")):
+        yaml.load(sample.read_text(encoding="utf-8"), Loader=RejectDuplicates)
