@@ -154,8 +154,17 @@ def check() -> list[str]:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
         "project"
     ]
-    if project["version"] != "2.0.1":
-        failures.append("active package version is not 2.0.1")
+    # The public stable release is 2.0.1 until the V3 tag is published.
+    # Source 3.0.0 is a release candidate, not proof of PyPI publication.
+    if project["version"] not in {"2.0.1", "3.0.0"}:
+        failures.append("source package version is not a known prepared release")
+    if project["version"] == "3.0.0":
+        if "## 3.0.0 - 2026-10-30" not in changelog_text:
+            failures.append("V3 release candidate lacks its dated changelog section")
+        if "3.0.0 release candidate" not in public_words:
+            failures.append("V3 release candidate state is missing from public docs")
+        if "vocal_languages" not in public_words or "danceability" not in public_words:
+            failures.append("public documentation omits V3 optional features")
 
     command = NoqlenMetaPlugin().commands()[0]
     long_options = sorted(
