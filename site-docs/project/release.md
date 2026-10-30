@@ -30,7 +30,7 @@ pip install --upgrade beets-noqlenmeta
   DB-only fields, no-clobber behavior and conservative unknown handling remain.
 
 **Outside 3.0.0:** direct spoken/sung-language recognition from audio and
-individual CD/Medium surface artwork.
+individual disc-surface (CD/Medium) artwork.
 
 For full details, see the [Changelog](changelog.md),
 [V3 enrichment recipe](../recipes/v3-enrichment.md), and
