@@ -40,19 +40,19 @@ from beetsplug.noqlenmeta.artwork_application import (
     ArtworkApplicationResult,
     apply_artwork_plan,
 )
-from beetsplug.noqlenmeta.back_artwork import (
-    BackArtworkPlan,
-    apply_back_artwork_plan,
-    back_artwork_requires_lookup,
-    plan_back_artwork,
-    resolve_caa_back_artwork,
-)
 from beetsplug.noqlenmeta.audio_features import (
     AudioFeaturePlanningResult,
     AudioFeatureSettings,
     LibrosaAudioFeatureAnalyzer,
     audio_feature_settings_from_config,
     plan_audio_features,
+)
+from beetsplug.noqlenmeta.back_artwork import (
+    BackArtworkPlan,
+    apply_back_artwork_plan,
+    back_artwork_requires_lookup,
+    plan_back_artwork,
+    resolve_caa_back_artwork,
 )
 from beetsplug.noqlenmeta.beets_application import (
     BeetsApplicationMode,
