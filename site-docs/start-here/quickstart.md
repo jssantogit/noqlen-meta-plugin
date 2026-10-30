@@ -11,10 +11,18 @@ first. Noqlen doesn't select albums on behalf of beets.
 
 ## 1. Install the plugin
 
+For a regular pip/virtualenv beets setup, use the **same Python environment**:
+
 ```bash
-pip install beets-noqlenmeta
+python -m pip install beets-noqlenmeta
 beet config -p
 ```
+
+!!! tip "Do you use uv tool or pipx?"
+    An unrelated `pip install` will not inject Noqlen into beets' isolated
+    tool environment. Follow the
+    [uv tool or pipx installation instructions](installation.md) instead,
+    then return here after `beet nm --help` works.
 
 The second command shows the location of your existing beets configuration
 file. Open it and **add** `noqlenmeta` to the existing plugin list:
