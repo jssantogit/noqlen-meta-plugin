@@ -1,37 +1,58 @@
 # Noqlen Meta
 
-Noqlen Meta enriches music managed by beets. It complements beets' matching and
-library management with release, track, and artist metadata from focused
-sources.
+**Noqlen Meta 3.0.0** is a music-metadata enrichment plugin for
+[beets](https://beets.io/). It supplements beets' own matching and library
+management rather than choosing replacement album or recording matches.
 
-## What It Can Add
+Noqlen proposes supported release, Recording, Work, and artist metadata from
+focused sources. **Preview is the default**: database application, verified
+artwork/lyrics sidecars, and writing tags to audio files remain separate,
+explicit actions.
 
-- genres, styles, moods, labels, catalog details, and release dates;
-- plain lyrics plus language and artist geography metadata;
-- verified Cover Art Archive album covers;
-- optional local BPM analysis through Librosa;
-- separate MusicBrainz identity and AcoustID evidence workflows.
+## What it can add
 
-Preview is the default. You can inspect every proposal before authorizing a
-database change, artwork sidecar, or audio-file update.
+| Area | Capabilities |
+| --- | --- |
+| Release metadata | Genres, styles, moods, dates, labels, countries, catalog details, and verified front cover artwork |
+| Recording and Work | ISRC/ISWC/Work references, credits with role and instrument details, typed alternate titles/transliterations, and recording versions |
+| Language and lyrics | Plain lyrics, opt-in synchronized `.lrc` sidecars, and conservative opt-in vocal-language evidence |
+| Artwork | Verified `cover.jpg` front and opt-in `back.jpg` back artwork for the exact release |
+| Local audio | Optional BPM, conservative musical Key, and versioned signal-based Energy / rhythmic Danceability indices |
+| Identity | Separate MusicBrainz identity repair and AcoustID-assisted evidence workflows |
 
-## Get Started
+Some V3 capabilities are **off by default**. They require explicit field and
+provider/local-analysis settings. A missing or conflicting result is not guessed.
 
-Follow [Start Here](start-here/index.md) for one continuous path from
-installation to preview, apply, and optional file synchronization. When you are
-ready to choose fields and providers, continue to the Configuration section.
+!!! note "Energy and Danceability are proxies"
+    The optional 0–1 Energy score measures decoded audio RMS intensity, while
+    Danceability measures beat/onset regularity. They are *not* calibrated
+    human-perceptual or Spotify-equivalent ratings.
 
-Already know what you need? Use the
-[Technical Reference](technical-reference/index.md) for exact options, defaults,
-and compatibility contracts.
+!!! note "Scope limitations"
+    Vocal languages are derived only from sufficiently verified MusicBrainz
+    Recording→Work relationships, not recognized directly from the audio.
+    Individual CD/Medium surface artwork is not supported in 3.0.0.
 
-## Project
+## Get started
 
-- [PyPI](https://pypi.org/project/beets-noqlenmeta/)
+New to beets? Follow [Start Here](start-here/index.md) for installation,
+configuration, preview, safe database application, and optional file writing.
+
+Already using Noqlen 2.x? See the
+[V3 enrichment recipe](recipes/v3-enrichment.md) for opt-in configuration and
+upgrade notes, or open the [Field Reference](technical-reference/fields.md)
+for precise storage and limitations.
+
+## Releases and project
+
+- [Latest published release](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v3.0.0)
+- [Install from PyPI](https://pypi.org/project/beets-noqlenmeta/)
+- [Release history and documentation versions](project/release.md)
 - [GitHub repository](https://github.com/jssantogit/noqlen-meta-plugin)
-- [Release information](project/release.md)
 - [MIT License](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE)
 
-The GitHub repository is public. Noqlen Meta is MIT licensed, and the root
-`LICENSE` file is the canonical license text. Version 2.0.1 is the current
-stable release.
+The canonical documentation is
+[noqlen-meta.readthedocs.io/en/stable/](https://noqlen-meta.readthedocs.io/en/stable/).
+Published version 3.0.0 was released on October 30, 2026. The versioned
+documentation is built from its corresponding Git tag and may not include
+later documentation-only improvements until a subsequent release.
