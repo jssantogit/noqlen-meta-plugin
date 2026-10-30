@@ -3,6 +3,9 @@
 **Goal:** decide whether a Noqlen enrichment is safe to apply, even when one
 field is proposed but another needs review or cannot be saved.
 
+The illustrative excerpts below explain the **terminal** output shape; they
+are **not** a transcript of an actual album run.
+
 Start with an album already imported into beets:
 
 ```bash
