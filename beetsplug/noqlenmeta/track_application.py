@@ -19,6 +19,7 @@ from beetsplug.noqlenmeta.track_mapping import (
     TrackTargetChange,
     TrackTargetPlan,
     TrackTargetShape,
+    is_valid_scalar_float,
     map_change_plan_to_track_info,
 )
 from beetsplug.noqlenmeta.track_planning import effective_current_values_for_import_track
@@ -208,13 +209,10 @@ def _materialize_value(change: TrackTargetChange) -> Any:
             raise TrackApplicationError("scalar-boolean target requires a bool")
         return value
     if change.target_shape is TrackTargetShape.SCALAR_FLOAT:
-        if (
-            isinstance(value, bool)
-            or not isinstance(value, (int, float))
-            or not isfinite(value)
-            or value <= 0
-        ):
-            raise TrackApplicationError("scalar-float target requires a finite positive number")
+        if not is_valid_scalar_float(change.canonical_field, value):
+            raise TrackApplicationError(
+                "scalar-float target has invalid numeric range or value"
+            )
         return float(value)
     if change.target_shape is TrackTargetShape.SCALAR_STRING:
         if not isinstance(value, str) or not value or value != value.strip():
