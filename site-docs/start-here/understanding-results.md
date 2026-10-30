@@ -10,6 +10,12 @@ The preview groups each field under an operational status:
 - **BLOCKED**: a safety, identity, mapping, or contract requirement prevented
   the change.
 
+**Check the final application status.** `PROPOSE` is a field-level
+decision, not a guarantee that it will be saved. In ordinary **strict**
+mode, one review or mapping blocker can withhold all ordinary changes
+for that target. The preview shows `application: disabled (preview only)`
+because nothing has been committed yet.
+
 Do not treat `REVIEW` as an instruction to force a value. Noqlen has no force
 mode. Adjust the evidence or configuration, then preview again.
 
