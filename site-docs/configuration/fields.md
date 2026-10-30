@@ -3,13 +3,14 @@
 Fields choose **which kinds of metadata Noqlen is allowed to work with**.
 
 ```yaml
-fields:
-  genres: true
-  styles: true
-  moods: true
-  bpm: true
-  lyrics: false
-  cover: true
+noqlenmeta:
+  fields:
+    genres: true
+    styles: true
+    moods: true
+    bpm: true
+    lyrics: false
+    cover: true
 ```
 
 A field set to `true` is eligible for enrichment when a suitable source and a
@@ -57,11 +58,12 @@ Some fields have a second configuration block that changes **how** the enabled
 field behaves. For example:
 
 ```yaml
-fields:
-  moods: true
+noqlenmeta:
+  fields:
+    moods: true
 
-moods:
-  max_moods: 3
+  moods:
+    max_moods: 3
 ```
 
 `fields.moods` permits mood enrichment. `moods.max_moods` then controls how many
