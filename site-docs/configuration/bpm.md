@@ -6,8 +6,9 @@ calculate it from the audio file?**
 ## Enable the BPM field
 
 ```yaml
-fields:
-  bpm: true
+noqlenmeta:
+  fields:
+    bpm: true
 ```
 
 This permits BPM enrichment and synchronization. It does not start audio
@@ -24,11 +25,12 @@ pip install "beets-noqlenmeta[audio]"
 Then opt in:
 
 ```yaml
-local_analysis:
-  bpm:
-    enabled: true
-    analysis_mode: full
-    window_seconds: 90
+noqlenmeta:
+  local_analysis:
+    bpm:
+      enabled: true
+      analysis_mode: full
+      window_seconds: 90
 ```
 
 Librosa is the only current local BPM backend. There is no external BPM
@@ -45,23 +47,25 @@ provider.
 Example for a centered 60-second window:
 
 ```yaml
-local_analysis:
-  bpm:
-    enabled: true
-    analysis_mode: window
-    window_seconds: 60
+noqlenmeta:
+  local_analysis:
+    bpm:
+      enabled: true
+      analysis_mode: window
+      window_seconds: 60
 ```
 
 ## Control how BPM is stored
 
 ```yaml
-bpm:
-  round: false
-  recalculate_existing: false
-  octave_normalization: false
-  octave_range:
-    min: 70
-    max: 180
+noqlenmeta:
+  bpm:
+    round: false
+    recalculate_existing: false
+    octave_normalization: false
+    octave_range:
+      min: 70
+      max: 180
 ```
 
 | Setting | Default | What it does |
@@ -76,12 +80,13 @@ For example, to normalize octave-equivalent estimates into 70–180 BPM while
 still preserving existing values:
 
 ```yaml
-bpm:
-  recalculate_existing: false
-  octave_normalization: true
-  octave_range:
-    min: 70
-    max: 180
+noqlenmeta:
+  bpm:
+    recalculate_existing: false
+    octave_normalization: true
+    octave_range:
+      min: 70
+      max: 180
 ```
 
 ## Preview, apply, and write
