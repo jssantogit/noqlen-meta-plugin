@@ -99,12 +99,50 @@ def check_site(site: Path, artifacts: Path) -> list[dict[str, object]]:
                                     )
                                 shot = artifacts / f"{name}-{slug}.png"
                                 page.screenshot(path=str(shot), full_page=True)
+                                interacted = False
+                                if slug == "installation":
+                                    # Clicking a real tab must select its radio input.
+                                    pipx_tab = page.locator(".tabbed-labels > label").filter(
+                                        has_text="pipx"
+                                    ).first
+                                    radio_id = pipx_tab.get_attribute("for")
+                                    assert radio_id, (name, "pipx tab lacks radio target")
+                                    pipx_tab.click()
+                                    assert page.locator(f"#{radio_id}").is_checked(), (
+                                        name, "pipx tab did not activate"
+                                    )
+                                    interacted = True
+                                if slug == "home":
+                                    # Follow the exact call-to-action offered to new users.
+                                    start_link = page.locator(".md-content a").filter(
+                                        has_text="Start the guided quickstart"
+                                    ).first
+                                    assert start_link.count() == 1, (name, "quickstart link absent")
+                                    start_link.click()
+                                    page.wait_for_url("**/start-here/quickstart/")
+                                    assert "Quickstart" in page.locator(
+                                        ".md-content h1"
+                                    ).first.inner_text(), (name, "quickstart navigation failed")
+                                    if name == "mobile":
+                                        # The hamburger should open the Material mobile drawer.
+                                        drawer_button = page.locator(
+                                            'label.md-header__button[for="__drawer"]'
+                                        ).first
+                                        assert drawer_button.count() == 1, (
+                                            "mobile navigation toggle missing",
+                                        )
+                                        drawer_button.click()
+                                        assert page.locator("#__drawer").is_checked(), (
+                                            "mobile navigation drawer failed to open",
+                                        )
+                                    interacted = True
                                 observed.append(
                                     {
                                         "viewport": name,
                                         "route": route,
                                         "heading": title,
                                         "horizontal_overflow_px": overflow,
+                                        "interaction_checked": interacted,
                                         "screenshot": str(shot),
                                     }
                                 )
