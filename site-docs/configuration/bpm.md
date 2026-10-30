@@ -93,3 +93,42 @@ synchronize that already-prepared BPM to supported audio tags.
 
 See the [Configuration Reference](../technical-reference/configuration.md#artwork-and-bpm)
 for exact validation rules.
+
+
+## Key, Energy and Danceability (V3)
+
+With `pip install "beets-noqlenmeta[audio]"`, local analysis can also produce
+a conservative pitch-class **Key** and two independent signal/rhythm indices.
+Each requires a specific field opt-in and separate local analysis permission:
+
+```yaml
+noqlenmeta:
+  fields:
+    key: true
+    energy: true
+    danceability: true
+  local_analysis:
+    key:
+      enabled: true
+      analysis_mode: window
+      window_seconds: 90
+    audio_features:
+      enabled: true
+      analysis_mode: window
+      window_seconds: 90
+```
+
+`key` is stored as native beets `initial_key` (for example `C` or `Am`);
+ambiguous harmonic evidence abstains. Existing keys are never replaced.
+
+`energy` is a 0..1 **RMS amplitude intensity index** using
+`rms-dbfs-v1`. `danceability` is a 0..1 **rhythm regularity index** using
+`beat-onset-regularity-v1`; it requires stable beats and prominent onsets,
+never just a BPM. These are not independently validated perceptual labels
+or equivalent to Spotify acoustic scores. Missing evidence stays absent
+(`null`), while a measured score of `0.0` is valid.
+
+These two values and their `energy_method` and `danceability_method` identifiers
+exist in the typed beets database only. Adding `--write` never creates audio tags
+for them. The selected importer path can enrich `TrackInfo` only **after**
+beets chooses a match. Methods with conflicting existing values are preserved.
