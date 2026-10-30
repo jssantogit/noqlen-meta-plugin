@@ -1,0 +1,22 @@
+plugins:
+  - noqlenmeta
+
+noqlenmeta:
+  fields:
+    bpm: true
+    key: true
+    energy: true
+    danceability: true
+  local_analysis:
+    bpm:
+      enabled: true
+      analysis_mode: window
+      window_seconds: 90
+    key:
+      enabled: true
+      analysis_mode: window
+      window_seconds: 90
+    audio_features:
+      enabled: true
+      analysis_mode: window
+      window_seconds: 90
