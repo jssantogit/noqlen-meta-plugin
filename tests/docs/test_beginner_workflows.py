@@ -110,7 +110,7 @@ def test_first_use_explains_safety_and_linked_paths() -> None:
     assert 'beet nm album:"Discovery"' in quickstart
     assert 'beet nm --apply album:"Discovery"' in quickstart
     assert 'beet nm --apply --write album:"Discovery"' in quickstart
-    assert "does **not** alter" in quickstart
+    assert "does not alter" in quickstart.replace("**", "")
     assert "noqlen-meta.readthedocs.io/en/latest/start-here/quickstart/" in readme
     for term in ("fields", "providers", "local_analysis", "--apply", "--write"):
         assert term in mental
