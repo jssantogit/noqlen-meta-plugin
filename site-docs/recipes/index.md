@@ -7,6 +7,7 @@ one recipe, preview one track or album, and only then apply changes.
 | --- | --- | --- |
 | Try Noqlen safely | [Quickstart](../start-here/quickstart.md) | Album already in beets |
 | Choose a practical config | [Configuration profiles](configuration-profiles.md) | Merge into existing config |
+| Combine more than one feature | [Combine features safely](combine-features.md) | Keep one YAML mapping |
 | Enrich a whole album | [Existing library](existing-library.md) | Beets match/IDs |
 | Enrich while importing | [During import](import-enrichment.md) | Independent importer permissions |
 | Add album covers | [Front and back artwork](artwork.md) | Verified CAA release |

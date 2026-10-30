@@ -6,7 +6,10 @@ synchronized lyrics, or back artwork.
 
 ## 1. Upgrade safely
 
-Install the current package alongside the same Python interpreter as beets:
+Install the current package **in the same environment as beets**.
+These commands suit an ordinary pip/virtualenv setup; if beets was installed
+with `uv tool` or `pipx`, use the
+[matching installation instructions](../start-here/installation.md) instead:
 
 ```bash
 pip install --upgrade beets-noqlenmeta

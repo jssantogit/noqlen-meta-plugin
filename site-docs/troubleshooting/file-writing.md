@@ -14,14 +14,19 @@ Adding `--write` never triggers another provider call or analyzer pass.
 
 ## A Field Was Not Writable
 
-Only losslessly supported prepared fields can be synchronized. Synchronized
-lyrics have no delivered writable target. Fractional BPM may block where a
-format cannot round-trip it unless configured rounding produced the canonical
-value first.
+Only losslessly supported prepared fields can be synchronized to **audio
+tags**. Synchronized lyrics can create a guarded **`.lrc` sidecar** with
+eligible existing-library `--apply`; they do **not** have a general embedded
+SYLT writer. Likewise, `back.jpg` is a guarded Back image sidecar, not
+a universal embedded audio-art tag. Energy/Danceability proxies are
+database-only, even with `--write`.
+
+Fractional BPM may block where a format cannot round-trip it unless
+configured rounding produced the canonical value first.
 
 ## Cover Sidecar vs Embedded Art
 
-`--apply` may write verified `cover.jpg` sidecars. Audio-file embedding requires
+`--apply` may write verified `cover.jpg` and opt-in `back.jpg` sidecars. Audio-file embedding requires
 ordinary `--apply --write` or the corresponding enabled importer write path.
 
 ## File or Filesystem Blocked

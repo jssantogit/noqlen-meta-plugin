@@ -15,6 +15,7 @@ authorized application, all in one page.
 2. [Basic configuration](basic-configuration.md) — choose a small starting set.
 3. [Your first preview](first-preview.md) — test one album without changing it.
 4. [Understanding results](understanding-results.md) — KEEP/PROPOSE/REVIEW/BLOCKED.
+   Try the [worked preview example](reading-preview.md) if the statuses are confusing.
 5. [Apply changes](apply-changes.md) — authorize database and verified sidecars.
 6. [Write file tags](write-files.md) — optionally synchronize supported tags.
 

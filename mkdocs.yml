@@ -39,6 +39,10 @@ plugins:
 markdown_extensions:
   - admonition
   - attr_list
+  - md_in_html
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
   - tables
   - toc:
       permalink: true
@@ -58,11 +62,13 @@ nav:
       - Basic Configuration: start-here/basic-configuration.md
       - Your First Preview: start-here/first-preview.md
       - Understanding Results: start-here/understanding-results.md
+      - Read a Preview — Worked Example: start-here/reading-preview.md
       - Apply Changes: start-here/apply-changes.md
       - Write File Tags: start-here/write-files.md
   - Customize:
       - Choose a Task: recipes/index.md
       - Configuration Profiles: recipes/configuration-profiles.md
+      - Combine Features Safely: recipes/combine-features.md
       - Enrich an Existing Library: recipes/existing-library.md
       - Enrich During Import: recipes/import-enrichment.md
       - Artwork: recipes/artwork.md
@@ -74,18 +80,6 @@ nav:
       - Upgrade From V2: recipes/v3-enrichment.md
       - Repair MusicBrainz IDs: recipes/repair-musicbrainz-ids.md
       - Whole-Library Changes: recipes/whole-library.md
-      - Configure Features:
-          - Configuration Overview: configuration/index.md
-          - Fields: configuration/fields.md
-          - Providers: configuration/providers.md
-          - Genres & Styles: configuration/genres-styles.md
-          - Moods: configuration/moods.md
-          - Artwork: configuration/artwork.md
-          - BPM, Key & Audio Proxies: configuration/bpm.md
-          - Lyrics & Languages: configuration/lyrics-languages.md
-          - AcoustID: configuration/acoustid.md
-          - Advanced Resolution: configuration/advanced-resolution.md
-          - Default Configuration Snapshot: configuration/full-example.md
   - How It Works:
       - Configuration Mental Model: concepts/mental-model.md
       - Database, Sidecars & File Tags: concepts/data-destinations.md
@@ -104,6 +98,18 @@ nav:
       - Provider Capabilities: technical-reference/providers.md
       - beets Compatibility: technical-reference/beets-interaction.md
       - Compatibility Matrix: technical-reference/compatibility.md
+      - Configuration by Feature:
+          - Configuration Overview: configuration/index.md
+          - Fields: configuration/fields.md
+          - Providers: configuration/providers.md
+          - Genres & Styles: configuration/genres-styles.md
+          - Moods: configuration/moods.md
+          - Artwork: configuration/artwork.md
+          - BPM, Key & Audio Proxies: configuration/bpm.md
+          - Lyrics & Languages: configuration/lyrics-languages.md
+          - AcoustID: configuration/acoustid.md
+          - Advanced Resolution: configuration/advanced-resolution.md
+          - Default Configuration Snapshot: configuration/full-example.md
       - Commands:
           - Command Overview: commands/index.md
           - Preview: commands/preview.md

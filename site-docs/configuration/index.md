@@ -35,7 +35,8 @@ resolution or importer flags.
 | Verified MusicBrainz credits and Work details | [Credits profile](../recipes/configuration-profiles.md#profile-c-detailed-recording-and-work-credits) |
 | Local BPM and Key | [Audio profile](../recipes/configuration-profiles.md#profile-d-local-audio-analysis) |
 
-The profile examples are additive. Keep one `noqlenmeta:` mapping in your
+The profile examples are additive. Use the [combination walkthrough](../recipes/combine-features.md)
+if you're enabling more than one feature. Keep one `noqlenmeta:` mapping in your
 existing beets `config.yaml`; do not duplicate sections when combining them.
 
 ## Where to go next

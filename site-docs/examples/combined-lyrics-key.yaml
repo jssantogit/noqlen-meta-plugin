@@ -1,0 +1,16 @@
+plugins:
+  - noqlenmeta
+
+noqlenmeta:
+  fields:
+    lyrics: true
+    synced_lyrics: true
+    key: true
+  providers:
+    lrclib:
+      enabled: true
+  local_analysis:
+    key:
+      enabled: true
+      analysis_mode: window
+      window_seconds: 90

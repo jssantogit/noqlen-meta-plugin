@@ -1,25 +1,46 @@
-# Provider Reference
+# Provider reference
 
-Wave 1 reuses one concrete release acquisition for V2 candidates and V3 evidence. MusicBrainz is primary for release catalog and exact Recording/Work evidence; Discogs supplies secondary date and controlled edition evidence; iTunes is date fallback. MusicBrainz may add one exact Release Group support lookup only when requested group data is absent.
+This page lists **what each provider can actually contribute**. A provider
+being enabled never guarantees that an album or track has matching evidence.
+Noqlen prefers exact known identifiers and does not invent missing values.
 
-You will see each provider's real current scope and expected unavailable
-behavior. Enabling a provider does not make it support every field.
+| Provider | Setup | What it can supply | When/where it applies |
+| --- | --- | --- | --- |
+| **MusicBrainz enrichment** | On by default, no API key | Exact release catalog, Recording/Work IDs, structured credits, genre/style/mood evidence, verified Work-derived languages and Recording aliases | Existing-library Albums/Items and importer-selected material; known MBIDs required |
+| **Cover Art Archive (CAA)** | On by default, no API key | Selected verified release front and opt-in **Back** image | Album `cover.jpg` and opt-in `back.jpg` sidecars, guarded on `--apply`; embedding supported for approved front art on `--write` |
+| **LRCLIB** | Off by default, no API key | Plain lyrics, synchronized timestamped lyrics, explicit instrumental evidence when supported | Selected tracks or library Items; existing-library `--apply` can create a guarded `.lrc` sidecar, **not** embedded SYLT |
+| **Discogs** | Off by default; optional `[discogs]` package extra and usually token for search | Release genres/styles, catalog numbers, dates/format details, and verified release-scoped credits | Album/release scope; conservative ID/search matching; tracklist credits aren't promoted without a safe track map |
+| **Last.fm** | Off by default; beets shared API key | Classifiable genres, styles and moods as scoped fallback | Release, track and artist evidence; never an unconstrained tag dump |
+| **iTunes** | Off by default; no key, choose two-letter storefront | Release genre/year fallback and uniquely matched exact-track **explicitness** advisory | Edition-aware release matches and strictly matched track advisory; storefront isn't country-of-release |
+| **MusicBrainz identity source** | Independent identity command or importer identity flag | Separate four-MBID audit and repair evidence | Identity mode; toggling `providers.musicbrainz.enabled` does not switch it on/off |
 
-| Provider | Enablement/credentials | Scope and fields | Ordinary library | Importer | Identity requirement |
-| --- | --- | --- | ---: | ---: | --- |
-| Discogs | `providers.discogs.enabled`; optional extra and token for search | Release catalog plus explicitly global producer, conductor, performer, featured, and guest credits | Yes | Yes | Direct release ID preferred; conservative search otherwise. Nonblank track scope is never promoted. |
-| MusicBrainz enrichment | `providers.musicbrainz.enabled`; no plugin credential | Exact release catalog, Recording/Work identifiers, scoped core relationships, and ordered artist credits, plus existing semantic evidence | Yes | Yes | Exact existing Release/Recording/Work/Artist MBIDs; no fuzzy rematching. |
-| Last.fm | `providers.lastfm.enabled`; uses beets' shared API key | Release, Track, Artist: classified genres, styles, moods | Yes | Yes | Scoped fallback while requested semantic fields remain unresolved. |
-| iTunes | `providers.itunes.enabled`; no key; two-letter storefront | Release: genre, year | Yes | Yes | Direct collection/UPC preferred, then exact normalized search. |
-| LRCLIB | `providers.lrclib.enabled`; no key | Track: plain and synchronized lyrics | Items | Yes | Exact title/artist/album/duration signature, about two-second duration tolerance; synchronized lyrics have no lossless writable target. |
-| Cover Art Archive | `providers.coverartarchive.enabled`; no key; enabled by default | Album: one approved main front | Yes | Yes | Exact Release first; Release Group only after definitive absence/no eligible front. |
-| MusicBrainz identity source | Importer `identity.enabled` or CLI `--identity`; no plugin credential | Separate four-MBID audit evidence | Identity mode only | Identity importer only | Structural candidate scoring and complete track assignment. |
+!!! info "What will I see after enabling a provider?"
+    Enable a relevant `fields` category, choose a suitable provider,
+    then run a [preview](../start-here/reading-preview.md). A field can
+    produce no result because a source lacks the necessary identifiers or
+    safe evidence. For a ready-to-copy configuration, follow
+    [configuration profiles](../recipes/configuration-profiles.md).
 
-MusicBrainz has an important distinction: its adapter capability tables describe
-structured fields emitted directly at a scope, while the semantic pipeline can
-also classify exact-entity community tags into canonical genres, styles, and
-moods. Those classified values are still subject to field authority, confidence,
-and mapping rules; unknown tags are not accepted.
+## Important V3 boundaries
+
+- **LRCLIB:** plain lyrics and synchronized lyrics are distinct fields.
+  The synchronized output is a verified `.lrc` file alongside the audio,
+  only in eligible existing-library operations. There is no universal
+  embedded SYLT writer.
+- **Cover Art Archive:** front artwork and Back artwork are different
+  release image types. `back.jpg` doesn't replace `cover.jpg` or
+  `Album.artpath`. It doesn't represent individual CD/Medium surface art.
+- **MusicBrainz:** Work-derived `vocal_languages` is a conservative
+  relation-level inference, **not** audio language recognition.
+- **iTunes:** absent explicit/clean advisory is *unknown*, not a proof of
+  clean audio. A mismatched track is not treated as an advisory.
+- **Local audio:** BPM, Key, Energy and Danceability are not online
+  providers. They require the optional `[audio]` backend and independent
+  `local_analysis` permissions.
+
+For write-target restrictions, see the
+[Field Reference](fields.md) and
+[Where metadata is saved](../concepts/data-destinations.md).
 
 ## Requests, Pacing, And Caching
 
