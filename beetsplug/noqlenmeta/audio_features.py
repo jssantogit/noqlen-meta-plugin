@@ -204,12 +204,15 @@ class LibrosaAudioFeatureAnalyzer:
                 raise AudioFeatureUnavailable("insufficient decoded audio duration")
             rms = tuple(float(x) for x in librosa.feature.rms(y=y)[0])
             energy = estimate_energy(rms)
-            onset = tuple(float(x) for x in librosa.onset.onset_strength(
+            # Librosa beat tracking requires array semantics (including ndim),
+            # not the immutable tuple used by our pure scoring function.
+            onset_array = librosa.onset.onset_strength(
                 y=y, sr=rate, hop_length=512
-            ))
-            _, frames = librosa.beat.beat_track(
-                onset_envelope=onset, sr=rate, hop_length=512
             )
+            _, frames = librosa.beat.beat_track(
+                onset_envelope=onset_array, sr=rate, hop_length=512
+            )
+            onset = tuple(float(x) for x in onset_array)
             beats = tuple(float(t) for t in librosa.frames_to_time(
                 frames, sr=rate, hop_length=512
             ))
