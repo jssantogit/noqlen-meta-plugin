@@ -1,6 +1,6 @@
 # Database vs File Tags
 
-Wave 1 keeps plural ISRCs, ISWCs, and Work IDs queryable in the Item database. File writing expands known release/original date components and supports release type/status plus exactly one ISRC or Work ID. Multiple ISRCs/Works, ISWC, recording date, edition, and separate secondary release types are blocked for file sync. Under partial mode, those blockers do not prevent safe database application.
+The implementation keeps plural ISRCs, ISWCs, and Work IDs queryable in the Item database. File writing expands known release/original date components and supports release type/status plus exactly one ISRC or Work ID. Multiple ISRCs/Works, ISWC, recording date, edition, and separate secondary release types are blocked for file sync. Under partial mode, those blockers do not prevent safe database application.
 
 Core credits add typed name projections and normalized relationship tables to
 the same beets library database. The tables reference existing Items/Albums and
@@ -14,7 +14,7 @@ Noqlen can affect three distinct places:
 ```text
 beets database -> information managed by beets
 audio-file tags -> metadata inside FLAC, MP3, M4A, Ogg, or Opus files
-artwork sidecars -> cover.jpg files referenced by Album.artpath
+artwork and lyrics sidecars -> verified cover.jpg, back.jpg and .lrc files
 ```
 
 Ordinary `--apply` commits approved metadata to the beets database. It may also
