@@ -35,6 +35,11 @@ plugins:
   - noqlenmeta
 ```
 
+Beets and Noqlen must run in the same Python environment. If beets came
+from `uv tool` or `pipx`, use the
+[matching installation method](https://noqlen-meta.readthedocs.io/en/latest/start-here/installation/)
+rather than an unrelated `pip` environment.
+
 Check that beets loaded it, then preview one album in **your** collection:
 
 ```bash
