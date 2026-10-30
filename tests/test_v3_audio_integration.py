@@ -55,7 +55,9 @@ def test_library_audio_proxies_preview_apply_and_method_are_typed(tmp_path, monk
         command.func(library, preview, args)
         assert library.get_item(item.id).get("energy") is None
 
-        apply, args = command.parse_args(["--apply", "--all"])
+        # Explicit --write must not request file sync for DB-only V3 metrics.
+        # The synthetic Item has no actual audio file on disk.
+        apply, args = command.parse_args(["--apply", "--write", "--all"])
         command.func(library, apply, args)
         stored = library.get_item(item.id)
         assert stored.get("energy") == 0.61
