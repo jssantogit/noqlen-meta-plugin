@@ -107,6 +107,13 @@ noqlenmeta:
 See [audio-config.yaml](../examples/audio-config.yaml) for all four
 analysis options and [the audio recipe](audio-analysis.md) for limitations.
 
+## Combine two profiles
+
+To add features from two profiles, **merge** their `fields`, `providers`
+and `local_analysis` sections inside the same `noqlenmeta:` block.
+Do not paste a second `plugins:` or `noqlenmeta:` key.
+See the [worked combined lyrics + Key example](combine-features.md).
+
 ## Test each profile safely
 
 ```bash
