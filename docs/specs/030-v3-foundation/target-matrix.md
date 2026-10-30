@@ -406,3 +406,25 @@ Reference algorithm definitions: [Librosa RMS](https://librosa.org/doc/latest/ge
 Thresholds are product-specific heuristics, not independently calibrated
 classification thresholds. Human-labeled evaluation on diverse real audio is
 still required before claiming perceptual validity.
+
+
+## Accepted 3.0.0 release scope — 2026-10-30
+
+The user confirmed the following V3 product cut:
+
+- **Vocal languages** remain Work-derived and intentionally limited to
+  unambiguous, verified MusicBrainz Recording→Work relationships. No sung
+  language recognizer or broader unsupported corroboration is promised for
+  3.0.0; abstention is correct when evidence is insufficient.
+- **Individual Disc/Medium surface artwork** and unknown per-disc number
+  association are not required for 3.0.0. These are backlog candidates for
+  a later release, without a delivery commitment. Front/Back artwork remain
+  implemented.
+- **Energy/Danceability** ship only as methodology-versioned *signal and
+  rhythmic regularity proxies*, not validated perceptual or Spotify-equivalent
+  scores. Zero is a legitimate numeric result; unknown is missing.
+
+Release gates still require actual migration compatibility, cross-format
+no-write safety and the supported Python/beets CI, distribution build and
+clean-install smoke, accurate public documentation, and correct version/tag
+ancestry/publishing. Completing code does not claim GitHub/PyPI publication.

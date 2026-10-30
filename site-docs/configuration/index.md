@@ -72,8 +72,9 @@ settings at their defaults and use the command flags documented under
 - `moods` controls the maximum number of supported moods retained.
 - `artwork` controls Cover Art Archive image size and replacement policy.
 - `bpm` controls BPM persistence, recalculation, rounding, and octave handling.
-- `local_analysis` controls optional analysis of your own audio. Local BPM is
-  implemented; the reserved local mood switch currently has no analysis model.
+- `local_analysis` controls optional analysis of your own audio. Local BPM,
+  conservative Key, RMS Energy and rhythmic Danceability proxies are implemented
+  behind independent opt-ins. The reserved local mood switch has no model.
 - `acoustid` controls the separate existing-library fingerprint/evidence
   workflow and its optional use during identity audit.
 - `resolution` customizes provider authority, confidence, and existing-value

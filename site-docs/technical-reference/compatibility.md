@@ -7,7 +7,7 @@ filesystem workflow.
 
 Python 3.10 through 3.14 are supported and covered by release CI. Package
 metadata declares `Requires-Python >=3.10,<3.15`. Python 3.15 is not claimed by
-Noqlen Meta 2.0.0; supporting a future Python release requires a new package
+Noqlen Meta; supporting a future Python release requires a new package
 release after compatibility is tested.
 
 ## beets
@@ -60,3 +60,16 @@ identity-tag workflow.
 Navidrome compatibility is an indirect workflow: beets database change, then
 appropriate file-tag synchronization, then a Navidrome rescan. Noqlen does not
 call Navidrome, certify a Navidrome version, or control its cache/scan timing.
+
+
+## V3 regression coverage and limitations
+
+V3 release-candidate CI tests reopening an existing V2-typed beets library,
+preserving native/typed multivalues, and extending the Item schema without
+destroying earlier values. The audio-proxy `--apply --write` path is tested
+against synthetic FLAC, MP3, M4A, Ogg and Opus fixtures, asserting **byte-for-byte
+unchanged audio files** when the only new data belongs to the beets database.
+
+These tests do not prove every codec, filesystem, community plugin combination
+or real-world catalog quality. Human-labelled perceptual validity is not claimed
+for RMS Energy or rhythmic Danceability. Disc-surface artwork is deferred.

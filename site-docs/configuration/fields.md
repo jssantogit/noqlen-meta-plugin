@@ -36,7 +36,7 @@ write anything by themselves and do not enable providers.
 | `artist_areas` | off | Trustworthy MusicBrainz artist-area names. It is off by default because it is more detailed location metadata. |
 | `artist_languages` | on | Contextual language codes derived only from Works reached by tracks in the current target. |
 | `lyrics` | off | Plain track lyrics from LRCLIB when that provider is enabled. |
-| `synced_lyrics` | off | Synchronized LRCLIB lyrics. They can be previewed as blocked, but Noqlen currently has no lossless writable target for them. |
+| `synced_lyrics` | off | Synchronized LRCLIB lyrics; existing-library application can create a verified no-clobber `.lrc` sidecar. Not an embedded SYLT tag. |
 | `cover` | on | Album artwork handled through the verified Cover Art Archive pipeline. |
 | `composers` | on | Structured Work composer relations plus native name/ID projections. |
 | `lyricists` | on | Structured Work lyricist relations plus native name/ID projections. |
@@ -73,3 +73,29 @@ forward compatibility, but there is no implemented local mood-analysis model.
 Use the topic pages for practical setup and the
 [Fields Reference](../technical-reference/fields.md) for exact storage targets,
 provider details, and mapping limitations.
+
+
+## V3 optional Recording and audio fields (not enabled by V2 defaults)
+
+The major-version enrichment fields are intentionally opt-in. Add only the
+capabilities you want to the `noqlenmeta.fields` block:
+
+| Field | Source / behavior | Storage |
+| --- | --- | --- |
+| `vocal_languages` | A single verified MusicBrainz Recording→Work performance relationship, excluding translated, instrumental and ambiguous versions | Typed multivalue Item, not audio language tags |
+| `instrumental` | Positive explicit MusicBrainz/LRCLIB recording evidence; unknown is not false | Nullable Item |
+| `explicitness` | Unique iTunes track-level explicit/clean advisory; missing advisory is unknown | Typed Item |
+| `alternate_titles` | Exact MusicBrainz Recording aliases (no search suggestions) | Noqlen-owned SQLite records |
+| `transliterations` | Only explicit MusicBrainz transliteration aliases | Noqlen-owned SQLite records |
+| `track_version` | Whitelisted whole-string Recording disambiguation: radio edit, live version, etc. | Typed version/description Item fields |
+| `back_artwork` | Exact-release CAA Back image, not a per-disc image | Verified `back.jpg` sidecar |
+| `key` | Optional, conservative local pitch-class correlation | Native `Item.initial_key` |
+| `energy` | RMS amplitude proxy, **not** perceptual energy | Nullable Item float + `energy_method` |
+| `danceability` | Beat/onset regularity proxy, **not** a Spotify score | Nullable Item float + `danceability_method` |
+
+`fields.key` also requires `local_analysis.key.enabled: true`.
+`fields.energy` or `fields.danceability` also requires
+`local_analysis.audio_features.enabled: true` and the optional `[audio]` extra.
+These fields remain off unless explicitly supplied. Existing values and
+unresolvable ambiguities are preserved, not guessed. Individual disc-surface
+artwork is **not** a V3.0 feature.
