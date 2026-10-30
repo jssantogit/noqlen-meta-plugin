@@ -170,7 +170,15 @@ MUSICBRAINZ_TRACK_SPEC = ProviderSpec(
     name="musicbrainz",
     display_name="MusicBrainz",
     supported_fields=frozenset(
-        {"genres", "moods", "lyrics_languages", "isrcs", "works", "iswcs", "recording_date"}
+        {
+            "genres",
+            "moods",
+            "lyrics_languages",
+            "isrcs",
+            "works",
+            "iswcs",
+            "recording_date",
+        }
     ),
     scope=ProviderScope.TRACK,
 )
@@ -402,6 +410,98 @@ CREDIT_PROVIDER_CAPABILITIES = (
     ),
 )
 CREDIT_PROVIDER_CAPABILITY_REGISTRY = capability_registry(CREDIT_PROVIDER_CAPABILITIES)
+
+# V3 recording semantics have a separate capability surface. The frozen V2
+# ProviderSpec supported_fields and built-in provider registry remain unchanged.
+RECORDING_SEMANTIC_PROVIDER_CAPABILITIES = (
+    ProviderCapability(
+        "musicbrainz",
+        "track_version",
+        EntityKind.RECORDING,
+        ProviderScope.TRACK,
+        frozenset({IdentityPrerequisite.EXACT_CANONICAL_ID}),
+        frozenset({
+            AcquisitionCharacteristic.DIRECT_LOOKUP,
+            AcquisitionCharacteristic.RESPONSE_REUSE,
+        }),
+    ),
+    ProviderCapability(
+        "musicbrainz",
+        "transliterations",
+        EntityKind.RECORDING,
+        ProviderScope.TRACK,
+        frozenset({IdentityPrerequisite.EXACT_CANONICAL_ID}),
+        frozenset({
+            AcquisitionCharacteristic.DIRECT_LOOKUP,
+            AcquisitionCharacteristic.RESPONSE_REUSE,
+        }),
+    ),
+    ProviderCapability(
+        "musicbrainz",
+        "alternate_titles",
+        EntityKind.RECORDING,
+        ProviderScope.TRACK,
+        frozenset({IdentityPrerequisite.EXACT_CANONICAL_ID}),
+        frozenset({
+            AcquisitionCharacteristic.DIRECT_LOOKUP,
+            AcquisitionCharacteristic.RESPONSE_REUSE,
+        }),
+    ),
+    ProviderCapability(
+        "musicbrainz",
+        "vocal_languages",
+        EntityKind.RECORDING,
+        ProviderScope.TRACK,
+        frozenset({IdentityPrerequisite.EXACT_CANONICAL_ID}),
+        frozenset({
+            AcquisitionCharacteristic.DIRECT_LOOKUP,
+            AcquisitionCharacteristic.SUPPORTING_TRAVERSAL,
+            AcquisitionCharacteristic.RESPONSE_REUSE,
+        }),
+    ),
+    ProviderCapability(
+        "itunes",
+        "explicitness",
+        EntityKind.RECORDING,
+        ProviderScope.TRACK,
+        frozenset({IdentityPrerequisite.STRUCTURALLY_VALIDATED_CONTEXT}),
+        frozenset(
+            {
+                AcquisitionCharacteristic.SEARCH,
+                AcquisitionCharacteristic.RESPONSE_REUSE,
+            }
+        ),
+    ),
+    ProviderCapability(
+        "musicbrainz",
+        "instrumental",
+        EntityKind.RECORDING,
+        ProviderScope.TRACK,
+        frozenset({IdentityPrerequisite.EXACT_CANONICAL_ID}),
+        frozenset(
+            {
+                AcquisitionCharacteristic.DIRECT_LOOKUP,
+                AcquisitionCharacteristic.RESPONSE_REUSE,
+            }
+        ),
+    ),
+    ProviderCapability(
+        "lrclib",
+        "instrumental",
+        EntityKind.RECORDING,
+        ProviderScope.TRACK,
+        frozenset({IdentityPrerequisite.STRUCTURALLY_VALIDATED_CONTEXT}),
+        frozenset(
+            {
+                AcquisitionCharacteristic.DIRECT_LOOKUP,
+                AcquisitionCharacteristic.RESPONSE_REUSE,
+            }
+        ),
+    ),
+)
+RECORDING_SEMANTIC_PROVIDER_CAPABILITY_REGISTRY = capability_registry(
+    RECORDING_SEMANTIC_PROVIDER_CAPABILITIES
+)
 BUILTIN_PROVIDER_SPECS: Mapping[ProviderKey, ProviderSpec] = MappingProxyType(
     {(spec.name, spec.scope): spec for spec in _BUILTIN_PROVIDER_CAPABILITIES}
 )

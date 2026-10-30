@@ -185,6 +185,47 @@ def test_selected_isrc_matching_provider_evidence_keeps_without_review() -> None
     assert result.change_plan.kept[0].field == "isrcs"
 
 
+def test_recording_instrumental_semantics_use_the_shared_plan_and_review_gate() -> None:
+    item = Item(instrumental=False)
+    selected = SelectedImportTrack(item, _track_info(), None)
+    recording = MetadataEvidence(
+        "instrumental",
+        True,
+        SubjectRef(
+            EntityKind.RECORDING,
+            (ExternalIdentifier("musicbrainz.recording", RECORDING_ID),),
+        ),
+        "musicbrainz",
+        ProviderScope.TRACK,
+        RECORDING_ID,
+        AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+        confidence=0.99,
+    )
+
+    plan = build_import_track_planning_result(
+        selected,
+        TrackEnrichmentContext("Synthetic Artist", "Synthetic Track"),
+        from_scratch=True,
+        candidates=(),
+        evidence=(recording,),
+        policy=ResolutionPolicy({}, {"musicbrainz": True}),
+    )
+    assert plan.change_plan.changes == ()
+    assert len(plan.change_plan.reviews) == 1
+    assert plan.change_plan.reviews[0].field == "instrumental"
+
+    missing_plan = build_track_planning_result(
+        TrackEnrichmentContext("Synthetic Artist", "Synthetic Track"),
+        {},
+        candidates=(),
+        evidence=(recording,),
+        policy=ResolutionPolicy({}, {"musicbrainz": True}),
+    )
+    assert missing_plan.change_plan.changes[0].after is True
+    assert missing_plan.target_plan.mapped_changes[0].target_field == "instrumental"
+    assert missing_plan.target_plan.blocked_changes == ()
+
+
 def test_album_selected_metadata_uses_beets_merged_application_data() -> None:
     track = _track_info(artist=None, album=None)
     album = AlbumInfo(

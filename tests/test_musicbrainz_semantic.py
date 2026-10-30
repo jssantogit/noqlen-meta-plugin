@@ -12,6 +12,7 @@ from beetsplug.noqlenmeta.domain import (
     SemanticCategory,
     TrackEnrichmentContext,
 )
+from beetsplug.noqlenmeta.evidence import AcquisitionMethod
 from beetsplug.noqlenmeta.field_contracts import EntityKind, PartialDate
 from beetsplug.noqlenmeta.genre_evidence import GenreEvidenceKind
 from beetsplug.noqlenmeta.provider_cache import CommandEntityCache
@@ -602,6 +603,365 @@ def test_recording_cache_does_not_reuse_insufficient_include_profile() -> None:
     ).get_enrichment(track_context())
 
     assert calls == [("genres", "tags"), ("isrcs",)]
+
+
+def test_work_credit_acquisition_rejects_non_performance_relations() -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [
+                {
+                    "type": "other",
+                    "type_id": "11111111-2222-4333-8444-555555555555",
+                    "work": {"id": WORK_TWO},
+                }
+            ],
+        },
+        works={
+            WORK_TWO: {
+                "id": WORK_TWO,
+                "iswcs": ["T-123.456.789-0"],
+                "artist_relations": [
+                    {
+                        "type": "composer",
+                        "type_id": "d59d99ea-23d4-4a80-b066-edca32ee158f",
+                        "artist": {"id": ARTIST_MBID, "name": "Wrong Composer"},
+                    }
+                ],
+            }
+        },
+    )
+    enrichment = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"composers", "iswcs"}
+    ).get_enrichment(track_context())
+
+    assert calls["work"] == []
+    assert not any(item.field in {"composers", "iswcs"} for item in enrichment.evidence)
+
+
+def test_mixed_work_relations_keep_legacy_languages_without_v3_credit_leak() -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [
+                {
+                    "type": "performance",
+                    "type_id": PERFORMANCE_TYPE_ID,
+                    "work": {"id": WORK_ONE},
+                },
+                {
+                    "type": "other",
+                    "type_id": "11111111-2222-4333-8444-555555555555",
+                    "work": {"id": WORK_TWO},
+                },
+            ],
+        },
+        works={
+            WORK_ONE: {"id": WORK_ONE, "iswcs": ["T-123.456.789-0"]},
+            WORK_TWO: {
+                "id": WORK_TWO,
+                "languages": ["eng"],
+                "iswcs": ["T-987.654.321-0"],
+                "artist_relations": [
+                    {
+                        "type": "composer",
+                        "type_id": "d59d99ea-23d4-4a80-b066-edca32ee158f",
+                        "artist": {"id": ARTIST_MBID, "name": "Wrong Composer"},
+                    }
+                ],
+            },
+        },
+    )
+    result = MusicBrainzTrackProvider(
+        semantic_client,
+        enabled_fields={"lyrics_languages", "composers", "iswcs"},
+    ).get_enrichment(track_context())
+
+    assert calls["work"] == [WORK_ONE, WORK_TWO]
+    assert not any(item.field == "composers" for item in result.evidence)
+    assert len([item for item in result.evidence if item.field == "iswcs"]) == 1
+    assert result.semantic.metadata[0].value == ("eng",)
+
+
+def test_explicit_recording_disambiguation_supplies_track_version_only() -> None:
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "title": "Song (Radio Edit)",
+            "disambiguation": "radio edit",
+        },
+    )
+    result = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"track_version"}
+    ).get_enrichment(track_context())
+    assert result.version is not None
+    assert result.version.kind == "radio_edit"
+    assert result.version.description == "radio edit"
+    assert result.evidence == ()
+    assert result.semantic.metadata == ()
+
+
+def test_explicit_transliteration_only_mode_excludes_other_alias_types() -> None:
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "title": "Original",
+            "aliases": [
+                {"name": "Romanized", "type": "Transliteration", "locale": "ja-Latn"},
+                {"name": "Localized", "type": "Recording name", "locale": "ja"},
+            ],
+        },
+    )
+    output = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"transliterations"}
+    ).get_enrichment(track_context())
+    assert [(record.text, record.alias_type, record.script) for record in output.aliases] == [
+        ("Romanized", "Transliteration", "Latn")
+    ]
+
+
+def test_v3_recording_aliases_are_structured_and_do_not_replace_title() -> None:
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "title": "Primary Recording Title",
+            "aliases": [
+                {"name": "Other Recording Title", "locale": "en",
+                 "type": "Recording name"},
+                {"name": "Search this", "type": "Search hint"},
+            ],
+        },
+    )
+    output = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"alternate_titles"}
+    ).get_enrichment(track_context())
+    assert [(row.text, row.locale, row.alias_type) for row in output.aliases] == [
+        ("Other Recording Title", "en", "Recording name")
+    ]
+    assert output.evidence == ()
+    assert output.semantic.metadata == ()
+
+
+@pytest.mark.parametrize("languages", [("eng",), ("kor", "eng")])
+def test_v3_vocal_languages_require_one_unambiguous_sung_performance(
+    languages: tuple[str, ...],
+) -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [{
+                "type": "performance",
+                "type_id": PERFORMANCE_TYPE_ID,
+                "work": {"id": WORK_ONE},
+            }],
+        },
+        works={WORK_ONE: {"id": WORK_ONE, "languages": list(languages)}},
+    )
+    result = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"vocal_languages"}
+    ).get_enrichment(track_context())
+    assert calls["work"] == [WORK_ONE]
+    assert [(item.field, item.value) for item in result.evidence] == [
+        ("vocal_languages", languages)
+    ]
+    assert result.semantic.metadata == ()
+    evidence = result.evidence[0]
+    assert evidence.source_id == WORK_ONE
+    assert evidence.subject.entity is EntityKind.RECORDING
+    assert evidence.provenance.method is AcquisitionMethod.SUPPORTING_TRAVERSAL
+    assert evidence.provenance.supporting_entity is EntityKind.WORK
+
+
+@pytest.mark.parametrize("attribute", [
+    "instrumental", "karaoke", "partial", "medley", "translated",
+])
+def test_v3_vocal_languages_reject_inapplicable_performances(
+    attribute: str,
+) -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [{
+                "type": "performance",
+                "type_id": PERFORMANCE_TYPE_ID,
+                "attributes": [attribute],
+                "work": {"id": WORK_ONE},
+            }],
+        },
+        works={WORK_ONE: {"id": WORK_ONE, "languages": ["eng"]}},
+    )
+    result = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"vocal_languages"}
+    ).get_enrichment(track_context())
+    assert not any(item.field == "vocal_languages" for item in result.evidence)
+    assert calls["work"] == []
+
+
+def test_v3_vocal_languages_reach_real_plugin_collection_without_v2_language_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from beetsplug.noqlenmeta import NoqlenMetaPlugin
+    from beetsplug.noqlenmeta.integration import resolution_policy_from_settings
+    from beetsplug.noqlenmeta.resolver import default_resolution_policy
+
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [{
+                "type": "performance", "type_id": PERFORMANCE_TYPE_ID,
+                "work": {"id": WORK_ONE},
+            }],
+        },
+        works={WORK_ONE: {"id": WORK_ONE, "languages": ["kor"]}},
+    )
+    plugin = NoqlenMetaPlugin()
+    monkeypatch.setattr(plugin, "_musicbrainz_client", lambda: semantic_client)
+    settings = {
+        field: field == "vocal_languages"
+        for field in default_resolution_policy().field_rules
+    }
+    policy = resolution_policy_from_settings(settings, {"musicbrainz": True})
+
+    assert plugin._has_contributing_track_provider(policy)
+    collected = plugin._collect_track_candidates(track_context(), policy)
+    assert collected.candidates == ()
+    assert [(item.field, item.value) for item in collected.evidence] == [
+        ("vocal_languages", ("kor",))
+    ]
+    assert calls["work"] == [WORK_ONE]
+
+
+def test_v3_vocal_languages_exclude_nonperformance_edges_and_multiple_works() -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [
+                {"type": "performance", "type_id": PERFORMANCE_TYPE_ID,
+                 "work": {"id": WORK_ONE}},
+                {"type": "performance", "type_id": PERFORMANCE_TYPE_ID,
+                 "work": {"id": WORK_TWO}},
+            ],
+        },
+        works={
+            WORK_ONE: {"id": WORK_ONE, "languages": ["kor"]},
+            WORK_TWO: {"id": WORK_TWO, "languages": ["eng"]},
+        },
+    )
+    result = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"vocal_languages"}
+    ).get_enrichment(track_context())
+    assert calls["work"] == []
+    assert result.evidence == ()
+
+
+def test_duplicate_work_links_with_instrumental_attribute_block_vocal_languages() -> None:
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [
+                {"type": "performance", "type_id": PERFORMANCE_TYPE_ID,
+                 "work": {"id": WORK_ONE}},
+                {"type": "performance", "type_id": PERFORMANCE_TYPE_ID,
+                 "attributes": ["instrumental"],
+                 "work": {"id": WORK_ONE}},
+            ],
+        },
+        works={WORK_ONE: {"id": WORK_ONE, "languages": ["eng"]}},
+    )
+    result = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"vocal_languages"}
+    ).get_enrichment(track_context())
+    assert not any(item.field == "vocal_languages" for item in result.evidence)
+
+
+def test_v3_vocal_languages_do_not_follow_other_relation_or_unusable_work() -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [{
+                "type": "other",
+                "type_id": "11111111-2222-4333-8444-555555555555",
+                "work": {"id": WORK_ONE},
+            }],
+        },
+        works={WORK_ONE: {"id": WORK_ONE, "languages": ["eng"]}},
+    )
+    assert MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"vocal_languages"}
+    ).get_enrichment(track_context()).evidence == ()
+    assert calls["work"] == []
+
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [{
+                "type": "performance",
+                "type_id": PERFORMANCE_TYPE_ID,
+                "work": {"id": WORK_ONE},
+            }],
+        },
+        works={WORK_ONE: {"id": WORK_ONE, "languages": ["zxx", "mul", "und"]}},
+    )
+    assert MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"vocal_languages"}
+    ).get_enrichment(track_context()).evidence == ()
+
+
+def test_explicit_performance_instrumental_attribute_emits_recording_evidence() -> None:
+    semantic_client, calls = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [
+                {
+                    "type": "performance",
+                    "type_id": PERFORMANCE_TYPE_ID,
+                    "attributes": ["instrumental"],
+                    "work": {"id": WORK_ONE},
+                },
+                {
+                    "type": "other",
+                    "type_id": "11111111-2222-4333-8444-555555555555",
+                    "attributes": ["instrumental"],
+                    "work": {"id": WORK_TWO},
+                },
+            ],
+        },
+    )
+    result = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"instrumental"}
+    ).get_enrichment(track_context())
+
+    assert calls["work"] == []
+    assert len(result.evidence) == 1
+    assert result.evidence[0].field == "instrumental"
+    assert result.evidence[0].value is True
+    assert result.evidence[0].subject.entity is EntityKind.RECORDING
+
+
+def test_absent_or_untrusted_instrumental_attribute_is_unknown() -> None:
+    semantic_client, _ = client(
+        recording={
+            "id": RECORDING_MBID,
+            "work_relations": [
+                {
+                    "type": "performance",
+                    "type_id": PERFORMANCE_TYPE_ID,
+                    "work": {"id": WORK_ONE},
+                },
+                {
+                    "type": "performance",
+                    "type_id": "11111111-2222-4333-8444-555555555555",
+                    "attributes": ["instrumental"],
+                    "work": {"id": WORK_TWO},
+                },
+            ],
+        },
+    )
+    result = MusicBrainzTrackProvider(
+        semantic_client, enabled_fields={"instrumental"}
+    ).get_enrichment(track_context())
+
+    assert result.evidence == ()
 
 
 def test_only_performance_work_relationship_is_accepted() -> None:

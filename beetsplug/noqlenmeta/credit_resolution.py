@@ -11,6 +11,7 @@ from beetsplug.noqlenmeta.credits import (
     ArtistCredit,
     CreditReference,
     canonical_credit_references,
+    credit_reference_identity,
 )
 from beetsplug.noqlenmeta.evidence import CanonicalValue, MetadataEvidence
 from beetsplug.noqlenmeta.resolver import ResolutionAction
@@ -153,8 +154,8 @@ def _resolve_field(
             contributors,
         )
     current_references = tuple(current)
-    current_keys = {_unit_key(reference) for reference in current_references}
-    incoming_keys = {_unit_key(reference) for reference in incoming}
+    current_keys = {credit_reference_identity(reference) for reference in current_references}
+    incoming_keys = {credit_reference_identity(reference) for reference in incoming}
     if incoming_keys <= current_keys:
         return CreditDecision(
             field,
@@ -183,7 +184,7 @@ def _merge_references(values: object) -> tuple[CreditReference, ...]:
     for reference in references:
         if not isinstance(reference, CreditReference):
             raise TypeError("credit union requires CreditReference values")
-        grouped[_unit_key(reference)].append(reference)
+        grouped[credit_reference_identity(reference)].append(reference)
     merged: list[CreditReference] = []
     for group in grouped.values():
         preferred = group[0]
@@ -201,21 +202,6 @@ def _merge_references(values: object) -> tuple[CreditReference, ...]:
             )
         merged.append(preferred)
     return canonical_credit_references(merged)
-
-
-def _unit_key(reference: CreditReference) -> tuple[object, ...]:
-    party = (
-        ("mbid", reference.party.mbid)
-        if reference.party.mbid is not None
-        else ("name", reference.party.name)
-    )
-    return (
-        party,
-        reference.role,
-        reference.scope,
-        reference.instrument,
-        reference.source_entity_id,
-    )
 
 
 def _is_credit_tuple(value: object) -> bool:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Mapping, Sequence
 
 from beets.library import Library
@@ -15,11 +16,12 @@ from beetsplug.noqlenmeta.credits import (
     CreditReference,
     CreditRole,
     canonical_credit_references,
+    credit_reference_identity,
 )
 from beetsplug.noqlenmeta.evidence import MetadataEvidence
 from beetsplug.noqlenmeta.field_contracts import EntityKind
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 _OWNER_KINDS = frozenset({"item", "album"})
 _CREDIT_FIELDS = frozenset(
     {
@@ -115,7 +117,7 @@ def read_credit_state(
     with library.transaction() as tx:
         if not _tables_exist(tx):
             return {}
-        _require_schema_version(tx)
+        _require_schema_version(tx, allow_legacy=True)
         credit_rows = tx.query(
             """SELECT * FROM noqlenmeta_credit
             WHERE owner_kind=? AND owner_id=? ORDER BY field, ordinal, relation_key""",
@@ -241,7 +243,83 @@ def _ensure_schema(tx: object) -> None:
     rows = tx.query("SELECT version FROM noqlenmeta_credit_schema")
     if not rows:
         tx.mutate("INSERT INTO noqlenmeta_credit_schema (version) VALUES (?)", (_SCHEMA_VERSION,))
+    elif len(rows) == 1 and rows[0]["version"] == 1:
+        _upgrade_legacy_relation_keys(tx)
+        tx.mutate("UPDATE noqlenmeta_credit_schema SET version=?", (_SCHEMA_VERSION,))
     _require_schema_version(tx)
+
+
+def _upgrade_legacy_relation_keys(tx: object) -> None:
+    """Migrate existing Wave 2A keys without replacing credit or provenance rows.
+
+    Schema v1 used a coarse hash that omitted relationship type/attributes.
+    Rewrite parent and child keys inside the caller's transaction before
+    accepting new evidence, so unchanged credits do not duplicate on upgrade.
+    """
+    credit_rows = tx.query("SELECT * FROM noqlenmeta_credit")
+    attribute_rows = tx.query(
+        "SELECT * FROM noqlenmeta_credit_attribute ORDER BY ordinal"
+    )
+    variant_rows = tx.query(
+        "SELECT * FROM noqlenmeta_credit_name_variant ORDER BY ordinal"
+    )
+    # Include ownership in migration keys: identical relation hashes may exist
+    # on different Items or Albums with different attributed evidence.
+    def grouped_children(
+        rows: Sequence[Mapping[str, object]],
+    ) -> dict[tuple[object, ...], tuple[str, ...]]:
+        grouped: dict[tuple[object, ...], list[str]] = {}
+        for child in rows:
+            key = (
+                child["owner_kind"],
+                child["owner_id"],
+                child["field"],
+                child["relation_key"],
+            )
+            grouped.setdefault(key, []).append(child["value"])
+        return {key: tuple(values) for key, values in grouped.items()}
+
+    attributes = grouped_children(attribute_rows)
+    variants = grouped_children(variant_rows)
+    for row in credit_rows:
+        old_key = row["relation_key"]
+        group_key = (row["owner_kind"], row["owner_id"], row["field"], old_key)
+        reference = CreditReference(
+            CreditParty(
+                row["party_name"],
+                row["party_mbid"],
+                row["credited_as"],
+                variants.get(group_key, ()),
+            ),
+            CreditRole(row["role"]),
+            EntityKind(row["scope"]),
+            instrument=row["instrument"],
+            relation_type=row["relation_type"],
+            relation_type_id=row["relation_type_id"],
+            source_entity_id=row["source_entity_id"],
+            attributes=attributes.get(group_key, ()),
+            direction=row["direction"],
+            ordering_key=row["ordering_key"],
+        )
+        new_key = _relation_key(reference)
+        if old_key == new_key:
+            continue
+        for table in (
+            "noqlenmeta_credit",
+            "noqlenmeta_credit_attribute",
+            "noqlenmeta_credit_name_variant",
+        ):
+            tx.mutate(
+                f"UPDATE {table} SET relation_key=? "
+                "WHERE owner_kind=? AND owner_id=? AND field=? AND relation_key=?",
+                (
+                    new_key,
+                    row["owner_kind"],
+                    row["owner_id"],
+                    row["field"],
+                    old_key,
+                ),
+            )
 
 
 def _tables_exist(tx: object) -> bool:
@@ -251,9 +329,10 @@ def _tables_exist(tx: object) -> bool:
     return bool(rows)
 
 
-def _require_schema_version(tx: object) -> None:
+def _require_schema_version(tx: object, *, allow_legacy: bool = False) -> None:
     rows = tx.query("SELECT version FROM noqlenmeta_credit_schema")
-    if len(rows) != 1 or rows[0]["version"] != _SCHEMA_VERSION:
+    accepted = {1, _SCHEMA_VERSION} if allow_legacy else {_SCHEMA_VERSION}
+    if len(rows) != 1 or rows[0]["version"] not in accepted:
         raise RuntimeError("unsupported Noqlen Meta credit schema version")
 
 
@@ -375,14 +454,8 @@ def _child_values(rows: Sequence[Mapping[str, object]]) -> dict[tuple[str, str],
 
 
 def _relation_key(reference: CreditReference) -> str:
-    return _digest(
-        reference.party.mbid or "",
-        reference.party.name if reference.party.mbid is None else "",
-        reference.role.value,
-        reference.scope.value,
-        reference.instrument or "",
-        reference.source_entity_id or "",
-    )
+    identity = credit_reference_identity(reference)
+    return _digest(json.dumps(identity, ensure_ascii=False, separators=(",", ":")))
 
 
 def _artist_credit_key(credit: ArtistCredit) -> str:

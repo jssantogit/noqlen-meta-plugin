@@ -167,6 +167,74 @@ def test_composer_credit_maps_native_names_and_aligned_ids_plus_state() -> None:
     assert result.blocked_changes == ()
 
 
+def test_same_name_distinct_composer_mbids_stay_positionally_aligned() -> None:
+    first_id = "12345678-1234-5678-9234-567812345678"
+    second_id = "22345678-1234-5678-9234-567812345678"
+    references = (
+        CreditReference(
+            CreditParty("Same Name", first_id),
+            CreditRole.COMPOSER,
+            EntityKind.WORK,
+        ),
+        CreditReference(
+            CreditParty("Same Name", second_id),
+            CreditRole.COMPOSER,
+            EntityKind.WORK,
+        ),
+    )
+    plan = map_change_plan_to_track_info(
+        ChangePlan(changes=(credit_change("composers", references),))
+    )
+    targets = {change.target_field: change.target_value for change in plan.mapped_changes}
+
+    assert targets["composers"] == ("Same Name", "Same Name")
+    assert targets["composers_ids"] == (first_id, second_id)
+
+
+def test_v3_vocal_languages_map_to_typed_item_only() -> None:
+    plan = map_change_plan_to_track_info(
+        ChangePlan(changes=(planned_change("vocal_languages", ("kor", "eng")),))
+    )
+    assert len(plan.mapped_changes) == 1
+    assert plan.mapped_changes[0].target_field == "vocal_languages"
+    assert plan.mapped_changes[0].target_shape is TrackTargetShape.STRING_LIST
+    assert plan.blocked_changes == ()
+
+
+def test_explicitness_maps_only_known_canonical_values_to_v3_db_target() -> None:
+    for advisory in ("explicit", "clean"):
+        plan = map_change_plan_to_track_info(
+            ChangePlan(changes=(planned_change("explicitness", advisory),))
+        )
+        assert len(plan.mapped_changes) == 1
+        assert plan.mapped_changes[0].target_field == "explicitness"
+        assert plan.mapped_changes[0].target_shape is TrackTargetShape.SCALAR_STRING
+        assert plan.blocked_changes == ()
+
+    with pytest.raises(TrackMappingError, match="explicitness"):
+        map_change_plan_to_track_info(
+            ChangePlan(changes=(planned_change("explicitness", "notExplicit"),))
+        )
+
+
+def test_instrumental_maps_to_boolean_database_target() -> None:
+    plan = map_change_plan_to_track_info(
+        ChangePlan(changes=(planned_change("instrumental", True),))
+    )
+    mapped = plan.mapped_changes[0]
+    assert mapped.target_field == "instrumental"
+    assert mapped.target_shape is TrackTargetShape.SCALAR_BOOLEAN
+    assert mapped.target_value is True
+    assert plan.blocked_changes == ()
+
+
+def test_integer_is_not_accepted_as_boolean_instrumental_state() -> None:
+    with pytest.raises(TrackMappingError, match="boolean"):
+        map_change_plan_to_track_info(
+            ChangePlan(changes=(planned_change("instrumental", 1),))
+        )
+
+
 def test_performer_projection_deduplicates_names_without_flattening_instrument() -> None:
     party = CreditParty("Performer", "12345678-1234-5678-9234-567812345678")
     references = (

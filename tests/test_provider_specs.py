@@ -21,6 +21,7 @@ from beetsplug.noqlenmeta.providers.specs import (
     MUSICBRAINZ_ARTIST_SPEC,
     MUSICBRAINZ_SPEC,
     MUSICBRAINZ_TRACK_SPEC,
+    RECORDING_SEMANTIC_PROVIDER_CAPABILITY_REGISTRY,
     RELEASE_CATALOG_PROVIDER_CAPABILITIES,
     RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY,
     AcquisitionCharacteristic,
@@ -76,6 +77,22 @@ def test_lastfm_spec_describes_exact_current_adapter_capabilities() -> None:
     assert LASTFM_SPEC.name == "lastfm"
     assert LASTFM_SPEC.display_name == "Last.fm"
     assert LASTFM_SPEC.supported_fields == frozenset({"genres", "styles", "moods"})
+
+
+def test_itunes_explicitness_capability_is_search_only_not_direct_lookup() -> None:
+    capability = RECORDING_SEMANTIC_PROVIDER_CAPABILITY_REGISTRY[
+        ("itunes", "explicitness", EntityKind.RECORDING, ProviderScope.TRACK)
+    ]
+    assert AcquisitionCharacteristic.SEARCH in capability.characteristics
+    assert AcquisitionCharacteristic.DIRECT_LOOKUP not in capability.characteristics
+
+
+def test_v3_instrumental_capabilities_are_separate_from_v2_provider_specs() -> None:
+    for name in ("musicbrainz", "lrclib"):
+        key = (name, "instrumental", EntityKind.RECORDING, ProviderScope.TRACK)
+        assert key in RECORDING_SEMANTIC_PROVIDER_CAPABILITY_REGISTRY
+    assert "instrumental" not in MUSICBRAINZ_TRACK_SPEC.supported_fields
+    assert "instrumental" not in LRCLIB_SPEC.supported_fields
 
 
 def test_lrclib_spec_describes_exact_track_adapter_capabilities() -> None:

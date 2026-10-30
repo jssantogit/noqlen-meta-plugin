@@ -1,4 +1,12 @@
-# Current Context
+# Historical Context — Block 029 / V1
+
+> Historical snapshot retained for Block 029 continuity, not the current
+> repository state. As of 2026-10-29, release `2.0.1` is stable, `main`
+> remains at `30d54dda2c24fdecd4519988cdbe2988cd9abcd8`, and V3
+> development targets `3.0.0`. V3 specs 030–033 are in main; corrective
+> work from the Wave 2A review is on draft PR #30:
+> https://github.com/jssantogit/noqlen-meta-plugin/pull/30
+> GitHub code and CI remain the source of truth, not this archived snapshot.
 
 This file is an optional working snapshot, not a mandatory workflow gate. Use
 repository state, relevant code/tests, and durable docs as the source of truth;

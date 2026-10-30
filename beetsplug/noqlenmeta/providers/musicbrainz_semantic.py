@@ -52,6 +52,8 @@ from beetsplug.noqlenmeta.providers.specs import (
 )
 from beetsplug.noqlenmeta.release_catalog import parse_partial_date
 from beetsplug.noqlenmeta.semantic_tags import classify_semantic_tag
+from beetsplug.noqlenmeta.title_aliases import TitleAlias, parse_recording_aliases
+from beetsplug.noqlenmeta.track_version import TrackVersion, parse_recording_version
 from beetsplug.noqlenmeta.work_identity import WorkReference, canonical_work_references
 
 EntityFetcher = Callable[..., Mapping[str, object] | None]
@@ -74,6 +76,8 @@ class MusicBrainzTrackEnrichment:
     semantic: SemanticEvidenceBundle = SemanticEvidenceBundle()
     evidence: tuple[MetadataEvidence, ...] = ()
     unavailable_fields: frozenset[str] = frozenset()
+    aliases: tuple[TitleAlias, ...] = ()
+    version: TrackVersion | None = None
 
 
 class MusicBrainzSemanticClient:
@@ -209,6 +213,14 @@ class MusicBrainzTrackProvider:
         wave_unavailable: set[str] = set()
         evidence: list[MetadataEvidence] = []
         work_references = _work_references(payload)
+        # Only a validated Recording→Work performance relationship may assert
+        # instrumental. No attribute means unknown, never vocal/false.
+        if "instrumental" in self.enabled_fields and any(
+            attribute.casefold() == "instrumental"
+            for reference in work_references
+            for attribute in reference.attributes
+        ):
+            evidence.append(_recording_evidence("instrumental", True, recording_id))
         if "isrcs" in self.enabled_fields and (isrcs := _recording_isrcs(payload)):
             evidence.append(_recording_evidence("isrcs", isrcs, recording_id))
         if "works" in self.enabled_fields and work_references:
@@ -231,15 +243,39 @@ class MusicBrainzTrackProvider:
                 _recording_evidence("structured_artist_credits", artist_credit, recording_id)
             )
         work_credit_fields = {"composers", "lyricists", "arrangers"}
-        work_fields = {"lyrics_languages", "artist_languages", "iswcs"} | work_credit_fields
-        if self.enabled_fields & work_fields:
-            work_ids = (
-                tuple(reference.mbid for reference in work_references)
-                if self.enabled_fields & {"works", "iswcs"}
-                else _related_ids(payload, "work")
+        legacy_language_fields = {"lyrics_languages", "artist_languages"}
+        # Work lyric language does not automatically describe the sung language
+        # of every recording. Limit V3 vocal evidence to a single unambiguous
+        # complete performance with no instrumental/karaoke/partial/medley flag.
+        vocal_reference = (
+            work_references[0]
+            if "vocal_languages" in self.enabled_fields
+            and len(work_references) == 1
+            and not {
+                "instrumental", "karaoke", "partial", "medley", "translated"
+            }.intersection(
+                attribute.casefold() for attribute in work_references[0].attributes
             )
-            if not work_ids:
-                work_ids = _related_ids(payload, "work")
+            else None
+        )
+        work_fields = (
+            legacy_language_fields | {"iswcs", "vocal_languages"} | work_credit_fields
+        )
+        if self.enabled_fields & work_fields:
+            # Legacy V2 language lookups retain their established breadth, but
+            # V3 identity and credit evidence must only follow performance edges.
+            performance_ids = (
+                tuple(reference.mbid for reference in work_references)
+                if self.enabled_fields
+                & (legacy_language_fields | {"iswcs"} | work_credit_fields)
+                else (vocal_reference.mbid,) if vocal_reference is not None else ()
+            )
+            language_ids = (
+                _related_ids(payload, "work")
+                if self.enabled_fields & legacy_language_fields
+                else ()
+            )
+            work_ids = tuple(dict.fromkeys((*performance_ids, *language_ids)))
             for work_id in work_ids:
                 try:
                     work = self.client.lookup_work(
@@ -256,15 +292,29 @@ class MusicBrainzTrackProvider:
                     continue
                 if work is None:
                     continue
-                for language in _work_languages(work):
+                work_languages = _work_languages(work)
+                for language in work_languages:
                     _append_unique(languages, language)
-                if "iswcs" in self.enabled_fields and (iswcs := _work_iswcs(work)):
-                    evidence.append(_work_evidence("iswcs", iswcs, work_id, recording_id))
-                for field, value in _work_credit_values(work, work_id).items():
-                    if field in self.enabled_fields:
-                        evidence.append(_work_evidence(field, value, work_id, recording_id))
+                if (
+                    vocal_reference is not None
+                    and work_id == vocal_reference.mbid
+                    and work_languages
+                ):
+                    evidence.append(
+                        _work_derived_recording_evidence(
+                            "vocal_languages", work_languages, recording_id, work_id
+                        )
+                    )
+                if work_id in performance_ids:
+                    if "iswcs" in self.enabled_fields and (iswcs := _work_iswcs(work)):
+                        evidence.append(_work_evidence("iswcs", iswcs, work_id, recording_id))
+                    for field, value in _work_credit_values(work, work_id).items():
+                        if field in self.enabled_fields:
+                            evidence.append(_work_evidence(field, value, work_id, recording_id))
         metadata = ()
-        if languages:
+        # The legacy V2 language output is a *different* canonical concept.
+        # A V3-only vocal lookup must not silently emit lyrics_languages.
+        if languages and self.enabled_fields & legacy_language_fields:
             metadata = (
                 MetadataCandidate(
                     "lyrics_languages",
@@ -276,7 +326,25 @@ class MusicBrainzTrackProvider:
                 ),
             )
         semantic = SemanticEvidenceBundle(metadata, genres, tags, frozenset(unavailable_fields))
-        return MusicBrainzTrackEnrichment(semantic, tuple(evidence), frozenset(wave_unavailable))
+        title_fields = {"alternate_titles", "transliterations"}
+        aliases = (
+            parse_recording_aliases(payload, recording_id)
+            if self.enabled_fields & title_fields
+            else ()
+        )
+        if "alternate_titles" not in self.enabled_fields:
+            aliases = tuple(
+                alias for alias in aliases
+                if alias.alias_type.casefold() == "transliteration"
+            )
+        version = (
+            parse_recording_version(payload, recording_id)
+            if "track_version" in self.enabled_fields
+            else None
+        )
+        return MusicBrainzTrackEnrichment(
+            semantic, tuple(evidence), frozenset(wave_unavailable), aliases, version
+        )
 
 
 class MusicBrainzArtistProvider:
@@ -384,6 +452,32 @@ def _recording_evidence(field: str, value: object, recording_id: str) -> Metadat
         source_id=recording_id,
         source_url=_PUBLIC_URL.format("recording", recording_id),
         provenance=AcquisitionProvenance(AcquisitionMethod.EXACT_LOOKUP),
+        confidence=_DIRECT_CONFIDENCE,
+    )
+
+
+def _work_derived_recording_evidence(
+    field: str,
+    value: object,
+    recording_id: str,
+    work_id: str,
+) -> MetadataEvidence:
+    """Work languages assert a linked Recording, with Work as the traceable source."""
+    return MetadataEvidence(
+        field=field,
+        value=value,  # type: ignore[arg-type]
+        subject=SubjectRef(
+            EntityKind.RECORDING,
+            (ExternalIdentifier("musicbrainz.recording", recording_id),),
+        ),
+        provider="musicbrainz",
+        acquisition_scope=ProviderScope.TRACK,
+        source_id=work_id,
+        source_url=_PUBLIC_URL.format("work", work_id),
+        provenance=AcquisitionProvenance(
+            AcquisitionMethod.SUPPORTING_TRAVERSAL,
+            supporting_entity=EntityKind.WORK,
+        ),
         confidence=_DIRECT_CONFIDENCE,
     )
 
@@ -528,7 +622,12 @@ def _recording_profile(enabled_fields: Collection[str]) -> EntityFetchProfile:
         includes.update({"genres", "tags"})
     if "isrcs" in fields:
         includes.add("isrcs")
-    if fields & {"works", "iswcs", "lyrics_languages", "artist_languages"}:
+    if fields & {"alternate_titles", "transliterations"}:
+        includes.add("aliases")
+    if fields & {
+        "works", "iswcs", "lyrics_languages", "artist_languages",
+        "instrumental", "vocal_languages",
+    }:
         includes.add("work-rels")
     if "recording_date" in fields:
         includes.add("place-rels")

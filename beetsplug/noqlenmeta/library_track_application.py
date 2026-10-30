@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import isfinite
 from typing import Any
 
 from beets.dbcore.db import NotFoundError
 from beets.library import Item
 
 from beetsplug.noqlenmeta.credit_state import apply_credit_state
+from beetsplug.noqlenmeta.database_transaction import atomic_credit_application
 from beetsplug.noqlenmeta.track_application import TrackApplicationMode
 from beetsplug.noqlenmeta.track_integration import current_values_from_library_item
 from beetsplug.noqlenmeta.track_mapping import (
@@ -17,6 +17,7 @@ from beetsplug.noqlenmeta.track_mapping import (
     TrackTargetChange,
     TrackTargetPlan,
     TrackTargetShape,
+    is_valid_scalar_float,
     map_change_plan_to_track_info,
 )
 
@@ -129,11 +130,20 @@ def apply_library_track_plan(
     if not materialized and not plan.state_changes:
         return result
 
-    if materialized:
-        item.store()
-    if not isinstance(item.id, int):
-        raise LibraryTrackApplicationError("credit state requires a persisted Item")
-    apply_credit_state(item._db, "item", item.id, plan.state_changes)
+    try:
+        # Model.store() uses beets transactions that can commit on exception.
+        # Explicit SQLite SAVEPOINT rollback keeps projections and credits atomic.
+        with atomic_credit_application(item._db):
+            if materialized:
+                item.store()
+            if not isinstance(item.id, int):
+                raise LibraryTrackApplicationError("credit state requires a persisted Item")
+            apply_credit_state(item._db, "item", item.id, plan.state_changes)
+    except Exception:
+        # Model.store() clears dirty flags before the outer transaction commits.
+        # Restore the caller's object after a rolled-back write.
+        item.__dict__.update(item.get_fresh_from_db().__dict__)
+        raise
     return LibraryTrackApplicationResult(
         mode=mode,
         applied_changes=plan.mapped_changes,
@@ -158,15 +168,14 @@ def _materialize_value(change: TrackTargetChange) -> Any:
                 "string-list target requires canonical strings"
             )
         return list(value)
+    if change.target_shape is TrackTargetShape.SCALAR_BOOLEAN:
+        if type(value) is not bool:
+            raise LibraryTrackApplicationError("scalar-boolean target requires a bool")
+        return value
     if change.target_shape is TrackTargetShape.SCALAR_FLOAT:
-        if (
-            isinstance(value, bool)
-            or not isinstance(value, (int, float))
-            or not isfinite(value)
-            or value <= 0
-        ):
+        if not is_valid_scalar_float(change.canonical_field, value):
             raise LibraryTrackApplicationError(
-                "scalar-float target requires a finite positive number"
+                "scalar-float target has invalid numeric range or value"
             )
         return float(value)
     if change.target_shape is TrackTargetShape.SCALAR_STRING:

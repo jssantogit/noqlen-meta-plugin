@@ -345,6 +345,7 @@ def _current_track_values(getter: Callable[[str], object]) -> dict[str, Canonica
         "genres",
         "moods",
         "lyrics_languages",
+        "vocal_languages",
         "artist_countries",
         "artist_areas",
         "artist_languages",
@@ -352,6 +353,36 @@ def _current_track_values(getter: Callable[[str], object]) -> dict[str, Canonica
         multi_value = _text_tuple(getter(field))
         if multi_value:
             values[field] = multi_value
+
+    # A missing nullable boolean remains unknown, not false.
+    instrumental = getter("instrumental")
+    if type(instrumental) is bool:
+        values["instrumental"] = instrumental
+
+    # Preserve unexpected existing state as a conflict, not a missing field
+    # that could be overwritten by a fresh provider assertion.
+    advisory = _optional_text(getter("explicitness"))
+    if advisory is not None:
+        values["explicitness"] = advisory
+
+    # V3 canonical key uses native beets Item.initial_key, not an
+    # additional string field or a renamed private media tag.
+    existing_key = _optional_text(getter("initial_key"))
+    if existing_key is not None:
+        values["key"] = existing_key
+
+    for field in ("energy", "danceability"):
+        candidate = getter(field)
+        if (
+            type(candidate) in (int, float)
+            and isfinite(candidate)
+            and 0 <= candidate <= 1
+        ):
+            values[field] = float(candidate)
+    for field in ("energy_method", "danceability_method"):
+        method = _optional_text(getter(field))
+        if method is not None:
+            values[field] = method
 
     bpm = getter("bpm")
     if (

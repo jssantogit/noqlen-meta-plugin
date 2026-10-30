@@ -11,6 +11,7 @@ from beets.library import Album
 
 from beetsplug.noqlenmeta.beets_mapping import BeetsTargetShape
 from beetsplug.noqlenmeta.credit_state import apply_credit_state
+from beetsplug.noqlenmeta.database_transaction import atomic_credit_application
 from beetsplug.noqlenmeta.library_integration import current_values_from_library_album
 from beetsplug.noqlenmeta.library_mapping import (
     LibraryMappingError,
@@ -128,11 +129,18 @@ def apply_library_target_plan(
     if not materialized and not plan.state_changes:
         return result
 
-    if materialized:
-        album.store(inherit=True)
-    if not isinstance(album.id, int):
-        raise LibraryApplicationError("credit state requires a persisted Album")
-    apply_credit_state(album._db, "album", album.id, plan.state_changes)
+    try:
+        # Album.store(inherit=True) may also write multiple Items. Explicit
+        # SAVEPOINT rollback covers both native projections and credit state.
+        with atomic_credit_application(album._db):
+            if materialized:
+                album.store(inherit=True)
+            if not isinstance(album.id, int):
+                raise LibraryApplicationError("credit state requires a persisted Album")
+            apply_credit_state(album._db, "album", album.id, plan.state_changes)
+    except Exception:
+        album.__dict__.update(album.get_fresh_from_db().__dict__)
+        raise
     return LibraryApplicationResult(
         mode=mode,
         applied_changes=plan.mapped_changes,

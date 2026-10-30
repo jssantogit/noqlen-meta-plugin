@@ -112,6 +112,7 @@ _TARGETS = (
     FileTagTarget("year", "year", FileTagShape.SCALAR_INT),
     FileTagTarget("lyrics", "lyrics", FileTagShape.SCALAR_STRING),
     FileTagTarget("bpm", "bpm", FileTagShape.SCALAR_FLOAT),
+    FileTagTarget("key", "initial_key", FileTagShape.SCALAR_STRING),
 )
 FILE_TAG_TARGETS: Mapping[str, FileTagTarget] = MappingProxyType(
     {target.canonical_field: target for target in _TARGETS}

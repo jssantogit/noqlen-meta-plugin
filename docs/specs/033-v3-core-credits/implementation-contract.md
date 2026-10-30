@@ -227,3 +227,39 @@ replacement.
 - Automatic primary artist or album-artist correction.
 - Mixing, mastering, recording-engineer taxonomy and all Wave 2B features.
 - Deep classical Work hierarchy and naming rules.
+
+## Post-Wave 2A corrective boundary (2026-10-29)
+
+The canonical relation identity is shared across credit canonicalization,
+authority resolution, and SQLite storage. It distinguishes party MBID/name,
+role, asserted scope, instrument, relationship type/UUID, source entity,
+attributes, and direction. Credited-as variants and provider ordering remain
+presentation/provenance details rather than separate identities. Equal display
+names with different MBIDs must remain separate.
+
+Native composer/lyricist/arranger names and IDs use one ordered sequence of
+references, including repeated names/IDs when distinct references warrant
+them; parallel projections must not be independently deduplicated.
+
+Only structurally validated Recording `performance` edges may supply V3
+Work identifiers, ISWC, or Work-sourced composer/lyricist/arranger credits.
+The existing V2 Work-language lookup retains its prior broader behavior for
+backward compatibility, but cannot contribute V3 evidence across non-performance
+edges.
+
+Native Item/Album projections and normalized credit state share an explicit
+SQLite SAVEPOINT. A `Library.transaction()` wrapper alone is insufficient:
+beets' root transaction may commit despite a propagated exception. On failure,
+Noqlen rolls back the SAVEPOINT before it leaves the beets transaction and
+refreshes the caller's model from the persistent database. Importer event
+hooks remain lifecycle-specific; they do not acquire evidence on persistence.
+
+The credit tables use schema version 2 for the expanded relation keys. Version
+1 remains readable without mutation, and the first authorized structured-credit
+application migrates all existing v1 parent/child relation keys transactionally
+and owner-scoped; unknown future versions still fail closed. Migration must
+never duplicate a preexisting accepted relation or mix identical relation keys
+from different Items or Albums.
+
+These corrections are covered by synthetic/offline regressions and the
+multi-version beets CI, and do not alter the published `2.0.1` release.

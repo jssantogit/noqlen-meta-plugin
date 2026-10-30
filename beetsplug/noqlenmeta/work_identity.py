@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from beetsplug.noqlenmeta.domain import canonical_uuid
 
@@ -60,7 +60,14 @@ def canonical_work_references(values: Iterable[WorkReference]) -> tuple[WorkRefe
     unique: dict[tuple[str, str, str | None], WorkReference] = {}
     for reference in sorted(references, key=_work_key):
         key = (reference.mbid, reference.relation_type, reference.relation_type_id)
-        unique.setdefault(key, reference)
+        previous = unique.get(key)
+        if previous is None:
+            unique[key] = reference
+        else:
+            # Do not discard safety-critical flags from duplicate relations.
+            # A distinct row may mark the same performance instrumental.
+            attributes = tuple(sorted(set(previous.attributes) | set(reference.attributes)))
+            unique[key] = replace(previous, attributes=attributes)
     return tuple(sorted(unique.values(), key=_work_key))
 
 

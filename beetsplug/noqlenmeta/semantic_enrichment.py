@@ -29,6 +29,8 @@ from beetsplug.noqlenmeta.semantic_resolution import (
     resolve_moods,
     resolve_styles,
 )
+from beetsplug.noqlenmeta.title_aliases import TitleAlias
+from beetsplug.noqlenmeta.track_version import TrackVersion
 
 BundleCollector = Callable[[], SemanticEvidenceBundle]
 _FIELDS = (
@@ -64,11 +66,14 @@ class SemanticEnrichmentResult:
     candidates: tuple[MetadataCandidate, ...]
     outcomes: Mapping[str, SemanticFieldOutcome]
     evidence: tuple[MetadataEvidence, ...] = ()
+    aliases: tuple[TitleAlias, ...] = ()
+    version: TrackVersion | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "candidates", tuple(self.candidates))
         object.__setattr__(self, "outcomes", MappingProxyType(dict(self.outcomes)))
         object.__setattr__(self, "evidence", tuple(self.evidence))
+        object.__setattr__(self, "aliases", tuple(self.aliases))
 
 
 def derive_artist_languages(

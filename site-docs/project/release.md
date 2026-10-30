@@ -1,5 +1,17 @@
 # Release Status
 
+## 3.0.0 release candidate (source only, not published yet)
+
+The repository's V3 release branch declares package version `3.0.0` for
+validation, but **this is not evidence that 3.0.0 is publicly released**.
+The last confirmed published distribution remains `2.0.1` until the tagged
+main-branch release workflow and external PyPI/GitHub/Read the Docs checks pass.
+The source release-candidate scope includes structured Recording metadata,
+conservative native Key, guarded `.lrc` and `back.jpg` assets, and opt-in
+RMS/rhythm proxy features (not perceptual Spotify-equivalent scores).
+Conservative MusicBrainz Work-derived vocal languages are included; disc-surface
+artwork and audio language recognition are not part of 3.0.0.
+
 Current stable release: `2.0.1` (2026-08-12).
 
 Noqlen Meta 2.0.1 is published on

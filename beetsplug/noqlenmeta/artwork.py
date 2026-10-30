@@ -284,6 +284,7 @@ def _candidate_from_payload(
     release_group_mbid: str | None,
     settings: ArtworkSettings,
     require_release_mbid: str | None = None,
+    image_type: str = "front",
 ) -> ArtworkCandidate | None:
     images = payload.get("images")
     source_release_mbid = _release_identity(payload.get("release"))
@@ -292,22 +293,22 @@ def _candidate_from_payload(
     if require_release_mbid is not None and source_release_mbid != require_release_mbid:
         raise _InvalidArtworkMetadata("CAA release identity does not match the request")
 
-    front = next(
+    selected = next(
         (
             image
             for image in images
             if isinstance(image, Mapping)
-            and image.get("front") is True
+            and image.get(image_type) is True
             and image.get("approved") is True
         ),
         None,
     )
-    if front is None:
+    if selected is None:
         return None
 
-    image_id = front.get("id")
-    original_url = front.get("image")
-    raw_thumbnails = front.get("thumbnails", {})
+    image_id = selected.get("id")
+    original_url = selected.get("image")
+    raw_thumbnails = selected.get("thumbnails", {})
     if not isinstance(image_id, (str, int)) or not isinstance(original_url, str):
         raise _InvalidArtworkMetadata("CAA front metadata is invalid")
     if not isinstance(raw_thumbnails, Mapping):

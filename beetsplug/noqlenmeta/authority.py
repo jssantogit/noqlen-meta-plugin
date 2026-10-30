@@ -11,6 +11,7 @@ from beetsplug.noqlenmeta.field_contracts import EntityKind, field_contract
 from beetsplug.noqlenmeta.providers.specs import (
     BUILTIN_PROVIDER_CAPABILITY_REGISTRY,
     CREDIT_PROVIDER_CAPABILITY_REGISTRY,
+    RECORDING_SEMANTIC_PROVIDER_CAPABILITY_REGISTRY,
     RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY,
     ProviderScope,
 )
@@ -225,6 +226,10 @@ _RULES = (
     _rule("moods", "lastfm", AuthorityRole.SECONDARY, ProviderScope.ARTIST, EntityKind.ARTIST),
     _rule("moods", "lastfm", AuthorityRole.SECONDARY, ProviderScope.RELEASE, EntityKind.RELEASE),
     _rule("lyrics_languages", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.TRACK),
+    _rule("vocal_languages", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.TRACK),
+    _rule("instrumental", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.TRACK),
+    _rule("instrumental", "lrclib", AuthorityRole.SECONDARY, ProviderScope.TRACK),
+    _rule("explicitness", "itunes", AuthorityRole.PRIMARY, ProviderScope.TRACK),
     _rule("artist_countries", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.ARTIST),
     _rule("artist_areas", "musicbrainz", AuthorityRole.PRIMARY, ProviderScope.ARTIST),
     # LRCLIB is the current lyrics source; artwork/AcoustID are separate domains.
@@ -348,7 +353,9 @@ def _validate_capabilities(rules: tuple[AuthorityRule, ...]) -> None:
         )
         if key not in BUILTIN_PROVIDER_CAPABILITY_REGISTRY and (
             key not in RELEASE_CATALOG_PROVIDER_CAPABILITY_REGISTRY
-        ) and key not in CREDIT_PROVIDER_CAPABILITY_REGISTRY:
+        ) and key not in CREDIT_PROVIDER_CAPABILITY_REGISTRY and (
+            key not in RECORDING_SEMANTIC_PROVIDER_CAPABILITY_REGISTRY
+        ):
             raise ValueError(f"authority has no registered provider capability: {key!r}")
 
 

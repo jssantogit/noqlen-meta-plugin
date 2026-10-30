@@ -109,3 +109,322 @@ Primary technical references:
 [Vorbis comments](https://xiph.org/vorbis/doc/v-comment.html),
 [Mutagen ID3](https://mutagen.readthedocs.io/en/latest/api/id3_frames.html), and
 [Mutagen MP4](https://mutagen.readthedocs.io/en/latest/api/mp4.html).
+
+
+## Instrumental V3 implementation — 2026-10-29
+
+The executable V3 `instrumental` field is a **nullable Boolean Item value**.
+Only an explicit positive assertion may be proposed; no evidence means
+**unknown**, never `false`. An existing explicit `false` is preserved and
+conflicting positive evidence produces REVIEW.
+
+MusicBrainz is primary only when the canonical Recording-to-Work `performance`
+relationship explicitly includes the `instrumental` attribute. Non-performance
+edges, missing attributes, free-text genres/titles and unrelated Work metadata
+do not prove instrumental state.
+
+LRCLIB is secondary and may assert `true` only after its existing exact
+artist/title/album/duration validation and explicit `instrumental: true`.
+Its explicit `false` is deliberately not accepted as proof of vocals. The V2
+`get_candidates()` lyrics behavior and request/cache scope are unchanged;
+the same normalized response supplies the separate V3 evidence.
+
+The V2 public configuration defaults, provider spec capability sets and
+`TRACK_FIELD_TARGETS` remain unchanged. The separate V3 authority capability
+registry and track mapper support `fields.instrumental: true` as an explicit
+opt-in in development configuration. Application is database-only through the
+normal ChangePlan/preview/review/SQLite rollback pipeline. No media-file tag is
+advertised or written for instrumental state.
+
+
+## Explicitness V3 implementation — 2026-10-29
+
+The V3 recording-level `explicitness` field uses **three states**:
+`explicit`, `clean`, or **unknown** (no known canonical value).
+The executable value is a typed nullable string in the beets Item database;
+no universal media-file advisory tag is written. Conflicting existing values
+are preserved and require REVIEW before any application.
+
+iTunes supplies track-level evidence only from an unambiguous song in a
+bounded storefront search using exact normalized artist, title, album,
+track/disc numbers when available, and duration within two seconds.
+Existing iTunes track/collection identifiers, when present, must also agree;
+different known identities never share a cached verdict. A matching
+collection/album cannot assert track explicitness. Search results with two
+distinct plausible tracks are deliberately withheld. Provider/network
+failure cannot fabricate metadata or block unrelated provider evidence.
+
+The iTunes Search API documents approximately 20 calls/minute. The adapter
+serializes searches and spaces request starts by at least 3.1 seconds,
+including after failures, while reusing successful/no-data cache entries
+for identical exact contexts. This rate-limit cost is opt-in.
+
+The Apple Music/iTunes API documents `trackExplicitness` as
+`explicit`, `cleaned`, or `notExplicit`
+(https://performance-partners.apple.com/search-api).
+V3 maps only **`explicit` → `explicit`** and
+**`cleaned` → `clean`**. It treats `notExplicit`, missing,
+malformed, and unknown flags as **unknown** rather than proof of a
+specifically clean/censored edition. Album-level `collectionExplicitness`
+is intentionally ignored.
+
+The V2 iTunes release provider and its public `ProviderSpec` are unchanged.
+The separate V3 recording capability and target registries support this
+feature as an explicit development opt-in via `fields.explicitness: true`
+plus `providers.itunes.enabled: true`. The current CLI remains preview-first,
+with explicit database application and unchanged file-write restrictions.
+
+
+## Vocal languages V3 implementation — 2026-10-29
+
+The opt-in `fields.vocal_languages: true` field is a **Recording-level,
+ISO-639-3 multivalue assertion**, distinct from V2 `lyrics_languages`
+(Work lyric languages), `artist_languages` and release-title language.
+The field is stored as a typed multivalue beets Item field, and no speculative
+embedded LANGUAGE tag is written. V2 public config defaults, provider specs,
+target registry and legacy Work-language lookup breadth remain frozen.
+
+MusicBrainz Work lyric languages can provide **structurally derived evidence**
+for a recording only when the Recording has exactly one validated
+`performance` relationship, the Work lookup identity is verified, and that
+Work supplies one or more concrete 3-letter language codes. Ambiguous
+non-performance or multiple-Work links yield no vocal assertion. Relationship
+attributes `instrumental`, `karaoke`, `partial`, `medley`, and `translated`
+suppress derivation because the Work's lyrics may not match that audio.
+Work attributes `instrumental` or `no lyrics` and generic `zxx`, `mul`,
+`und` language values cannot create vocal languages. Duplicate Work links
+must retain the union of flags rather than losing a disqualifying attribute.
+The exact supporting Work MBID, provenance and source URL are retained.
+
+The resolver preserves existing codes: identical or subset source evidence
+KEEPS the local value; an unambiguous superset may PROPOSE; incomparable
+sets require REVIEW instead of deleting local languages. An explicit
+instrumental assertion from another authoritative provider (or an existing
+instrumental=true Item) blocks automatic vocal-language application and
+routes the candidate to REVIEW.
+
+This is **not audio-derived language identification**. Even a unique Work
+language describes the composition's lyrical language, not guaranteed audio
+content, so the feature deliberately has narrow coverage and remains opt-in.
+No lyric-language detector or artist-country shortcut is used.
+
+Reference: [MusicBrainz Work language semantics](https://musicbrainz.org/doc/Work)
+and [Recording-to-Work Performance relation](https://musicbrainz.org/relationship/a3005666-a872-32c3-ad06-98af558e99b0).
+
+
+## V3 lossless synchronized lyrics and Back artwork — 2026-10-29
+
+### Exact-track synchronized lyrics
+
+The existing LRCLIB candidate `synced_lyrics` is not treated as a normal
+TrackInfo or media-file field: an approved candidate is now routed to a
+dedicated **`<audio-stem>.lrc` associated sidecar plan** in the library
+`beet nm` command. The V2 TrackInfo mapper, legacy import behavior and
+public field defaults are unchanged. A valid timestamped LRC (minimum one
+`[mm:ss.xx]` or equivalent time tag) is required. The selected text is
+written as UTF-8 without flattening into plain lyrics.
+
+Preview does not write. `--apply` may create the sidecar without
+`--write`; the audio file is never rewritten for LRC. An existing
+byte-identical sidecar is KEEP, an existing different or non-regular
+destination is REVIEW, and invalid/untimed content is BLOCKED.
+Application re-reads the Item path from the library and uses a staged,
+fsynced file and **atomic no-clobber hardlink**; stale, moved or
+concurrently-created destinations are never overwritten. The operation
+is a separately verified asset commit, not an audio-tag change.
+
+### Exact-edition Back artwork
+
+A separate V3 `fields.back_artwork: true` opt-in selects one approved
+`back: true` image from **exact MusicBrainz Release** CAA metadata;
+release-group fallback and multiple approved Back candidates are withheld.
+Only trusted CAA HTTPS URLs are admitted. The selected JPEG is downloaded
+only on `--apply` and saved as `back.jpg` in the release's item
+directories, with no replacement of existing sidecars, no Album.artpath
+mutation, and no implicit embed or Front artwork overwrite. It
+preserves earlier commits if a later disc-directory target changes,
+reporting a partial outcome rather than claiming rollback.
+
+Example user configuration for these **opt-in** development features:
+
+```yaml
+noqlenmeta:
+  fields:
+    synced_lyrics: true
+    back_artwork: true
+  providers:
+    lrclib:
+      enabled: true
+    coverartarchive:
+      enabled: true
+```
+
+`beet nm --all` previews and `beet nm --apply --all` applies.
+All other identity, field, edition and conflict guards remain active;
+this is not yet a V3 release or an authorization to merge.
+
+
+## V3 structured Recording titles — 2026-10-29
+
+The V3 `fields.alternate_titles: true` opt-in collects **actual
+MusicBrainz Recording aliases**, when an exact MBID is already known.
+Alternatively, `fields.transliterations: true` alone selects only aliases
+explicitly typed `Transliteration` by MusicBrainz, retaining their
+recorded locale/script. It does not infer romanization from names or
+script similarity, and uses the same non-lossy storage table.
+It requests `aliases` from the Recording resource, not by searching for
+matching titles or following Work/Release relationships. Alias rows retain
+the original text, source Recording MBID, provider, locale, explicit
+alias type, optional sort name, primary flag and script subtag when
+explicitly encoded in a locale such as `ja-Latn`.
+
+The implementation deliberately excludes aliases identical to the main
+Recording title and MusicBrainz `Search hint` aliases. It never changes
+Item.title, auto-repairs identity, writes freeform native tags, or flattens
+the locale/type metadata into a delimiter-separated string.
+
+Approved rows are persisted in the plugin-owned, append-only
+`noqlenmeta_title_alias` table, scoped by Item ID and canonical Recording
+MBID. Duplicate rows are idempotent, existing aliases are preserved,
+and application verifies a fresh Item path, recording identity, native
+title and prior alias snapshot. Preview and read do not create the table;
+`--apply` commits only genuinely new rows. Existing V2 public defaults
+and exposed generic field/target registries stay frozen. This scope
+covers the library `beet nm` command; importer completion, non-Recording
+aliases and typed track-version semantics remain separate work.
+
+
+## Explicit track-version V3 implementation — 2026-10-29
+
+The opt-in `fields.track_version: true` does **not** parse keywords
+from the track title or assume a remix/remaster based on title punctuation.
+It may propose a version only when the **exact MusicBrainz Recording**
+supplies a dedicated `disambiguation` string matching one of a small,
+explicitly enumerated whole-string descriptions, e.g. `radio edit`,
+`extended mix`, `instrumental version`, `live version`,
+`demo version`, `acoustic version`, `album version`,
+`single version`, or `remix`. Other comments, including arbitrary
+mixed prose, remain unknown. This intentionally underfills rather than
+misclassifies.
+
+The proposed version has a normalized type and the original description.
+It uses two separately typed beets Item DB fields,
+`track_version_type` and `track_version_description`; no speculative
+audio-file `VERSION` tag or lossy `subtitle` projection is written.
+Existing agreeing state is KEEP; contradicting or partially present
+values require REVIEW. Application rechecks exact Recording MBID, Item path,
+display title and both previous values, using the same explicit SQLite
+SAVEPOINT-backed database mutation pattern as other V3 fields.
+Importer-side version projection and richer relationship-typed mix/version
+semantics remain open.
+
+
+
+## Conservative local Key V3 — implementation 2026-10-29
+
+The V3 library command can opt into local key estimation with two explicit
+switches, without modifying V2 public defaults:
+
+```yaml
+noqlenmeta:
+  fields:
+    key: true
+  local_analysis:
+    key:
+      enabled: true
+      analysis_mode: window  # full or window
+      window_seconds: 90
+```
+
+The optional `[audio]` Librosa backend computes a pitch-class distribution and
+correlates it against 24 major/minor templates. The policy abstains unless the
+leading correlation is >= 0.70 and at least 0.10 above the runner-up. This is
+conservative evidence, **not** ground-truth key recognition: modal ambiguity,
+modulation, atonal content, percussion, silence and poor harmonic separation
+can yield no assertion. The canonical beets notation (`C` major, `Am` minor, etc.) maps to native
+`initial_key` and the interoperable `INITIALKEY` file tag. Existing keys are
+always preserved; only verified missing values may be proposed. Analysis is available on library preview/apply and on the selected importer
+track path, after matching (never as matching/identity evidence). Importer
+preview is side-effect-free; opt-in application updates the selected TrackInfo
+only, with beets remaining responsible for the subsequent import lifecycle.
+The audio backend is loaded lazily and the default remains disabled.
+
+
+## V3 Energy and Danceability: versioned, opt-in local proxy indices (2026-10-30)
+
+**Semantics and limitations:** These values are *not* Spotify, Echo Nest, or
+validated perceptual feature scores. They are two explicitly labeled signal
+analysis proxies on a fixed 0..1 scale. They are only comparable when the
+methodology and decoder assumptions match, and must not be shown as generic
+ground-truth danceability or emotional energy.
+
+- `energy` uses median frame-wise root-mean-square signal amplitude of the
+  decoded, full-scale float audio. The `rms-dbfs-v1` transform maps a measured
+  level in [-50, -8] dBFS linearly to [0,1] and clamps extremes. It is an
+  *amplitude intensity proxy*, not loudness normalization or a model of musical
+  activity. Silence and invalid/out-of-range measurements abstain.
+- `danceability` uses estimated beat times and spectral onset-strength peaks
+  from Librosa. `beat-onset-regularity-v1` requires at least nine strictly
+  ordered beats, plausible intervals, inter-beat coefficient of variation
+  <= 0.15, and on-beat onset prominence >= 1.25x mean strength. A fixed,
+  documented combination of regularity (65%) and prominence (35%) yields a
+  *rhythm-stability proxy*, not a validated prediction of suitability to dance.
+  Instrumental silence, missing beats, unstable rhythm and weak supporting
+  onsets produce unknown instead of 0. The score deliberately excludes BPM.
+- `energy_method` and `danceability_method` are separate typed DB strings.
+  Values are nullable floats; missing is unknown, not 0. Each method identifier
+  is recorded alongside any new score and is not silently relabeled on conflict.
+  All four fields are Item/TrackInfo DB-only: **no new embedded media tags**.
+- Pure computed, nonpersisted `score_level` (low <=.33, medium <=.67, high)
+  and `tempo_range` (slow <90, medium <140, fast) helpers are optional
+  presentation buckets, not independent provider evidence.
+
+Enable *both* the specific fields and the local backend; defaults remain frozen:
+
+```yaml
+noqlenmeta:
+  fields:
+    energy: true
+    danceability: true
+  local_analysis:
+    audio_features:
+      enabled: true
+      analysis_mode: window   # full or centered window
+      window_seconds: 90
+```
+
+Only a missing field is eligible. Analysis runs once for all requested missing
+features of an eligible track, with optional Librosa imported lazily.
+Library CLI preview does not write; `--apply` stores to the beets DB.
+The importer may enrich only the already selected TrackInfo, after matching,
+and does not use this evidence for identity selection. `--write` never embeds
+these DB-only values.
+
+Reference algorithm definitions: [Librosa RMS](https://librosa.org/doc/latest/generated/librosa.feature.rms.html),
+[Librosa onset strength](https://librosa.org/doc/latest/generated/librosa.onset.onset_strength.html),
+[Librosa beat tracking](https://librosa.org/doc/latest/generated/librosa.beat.beat_track.html).
+Thresholds are product-specific heuristics, not independently calibrated
+classification thresholds. Human-labeled evaluation on diverse real audio is
+still required before claiming perceptual validity.
+
+
+## Accepted 3.0.0 release scope — 2026-10-30
+
+The user confirmed the following V3 product cut:
+
+- **Vocal languages** remain Work-derived and intentionally limited to
+  unambiguous, verified MusicBrainz Recording→Work relationships. No sung
+  language recognizer or broader unsupported corroboration is promised for
+  3.0.0; abstention is correct when evidence is insufficient.
+- **Individual Disc/Medium surface artwork** and unknown per-disc number
+  association are not required for 3.0.0. These are backlog candidates for
+  a later release, without a delivery commitment. Front/Back artwork remain
+  implemented.
+- **Energy/Danceability** ship only as methodology-versioned *signal and
+  rhythmic regularity proxies*, not validated perceptual or Spotify-equivalent
+  scores. Zero is a legitimate numeric result; unknown is missing.
+
+Release gates still require actual migration compatibility, cross-format
+no-write safety and the supported Python/beets CI, distribution build and
+clean-install smoke, accurate public documentation, and correct version/tag
+ancestry/publishing. Completing code does not claim GitHub/PyPI publication.

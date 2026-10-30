@@ -18,6 +18,10 @@ from beetsplug.noqlenmeta.domain import (
 )
 from beetsplug.noqlenmeta.evidence import CanonicalValue, MetadataEvidence
 from beetsplug.noqlenmeta.recording_identity_resolution import resolve_recording_identity
+from beetsplug.noqlenmeta.recording_semantic_resolution import (
+    RECORDING_SEMANTIC_FIELDS,
+    resolve_recording_semantics,
+)
 from beetsplug.noqlenmeta.resolver import (
     FieldDecision,
     ResolutionPolicy,
@@ -41,9 +45,17 @@ _TRACK_CURRENT_FIELDS = (
     "lyrics",
     "synced_lyrics",
     "bpm",
+    "initial_key",
+    "energy",
+    "danceability",
+    "energy_method",
+    "danceability_method",
     "genres",
     "moods",
     "lyrics_languages",
+    "vocal_languages",
+    "instrumental",
+    "explicitness",
     "artist_countries",
     "artist_areas",
     "artist_languages",
@@ -188,13 +200,26 @@ def build_track_planning_result(
         build_change_plan(
             resolve_recording_identity(
                 current_values,
-                tuple(item for item in evidence if item.field not in CREDIT_FIELDS),
+                tuple(
+                    item
+                    for item in evidence
+                    if item.field not in CREDIT_FIELDS
+                    and item.field not in RECORDING_SEMANTIC_FIELDS
+                ),
             )
         ),
         build_change_plan(
             resolve_credits(
                 current_values,
                 tuple(item for item in evidence if item.field in CREDIT_FIELDS),
+            )
+        ),
+        build_change_plan(
+            resolve_recording_semantics(
+                current_values,
+                tuple(
+                    item for item in evidence if item.field in RECORDING_SEMANTIC_FIELDS
+                ),
             )
         ),
     )
@@ -220,6 +245,7 @@ def _current_values_surviving_beets_clear(item: Item) -> dict[str, MetadataValue
         field: value
         for field, value in current.items()
         if field not in Item._media_tag_fields
+        and not (field == "key" and "initial_key" in Item._media_tag_fields)
     }
 
 

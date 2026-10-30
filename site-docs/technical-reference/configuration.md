@@ -297,3 +297,34 @@ The full example is illustrative, not a recommendation to enable every
 provider or field. AcoustID has no audio-file write authority. Ordinary file
 replacement requires `--apply --write`; legacy `--identity-tags --write`
 authority remains unchanged.
+
+
+## V3 optional enrichment (absent from frozen V2 defaults)
+
+The following optional keys are accepted only when explicitly supplied.
+They are not new default providers or universal media tag targets.
+
+| Key | Valid values | Default when omitted | Notes |
+| --- | --- | --- | --- |
+| `noqlenmeta.fields.vocal_languages` | boolean | false | Exact, unambiguous Work-derived language only |
+| `noqlenmeta.fields.instrumental` | boolean | false | Positive structural evidence, unknown is not false |
+| `noqlenmeta.fields.explicitness` | boolean | false | Track-level iTunes advisory only |
+| `noqlenmeta.fields.alternate_titles` | boolean | false | Typed Recording aliases, no main-title mutation |
+| `noqlenmeta.fields.transliterations` | boolean | false | Only explicitly typed transliteration aliases |
+| `noqlenmeta.fields.track_version` | boolean | false | Explicit Recording disambiguation allowlist |
+| `noqlenmeta.fields.back_artwork` | boolean | false | Exact CAA Release Back image; not per-disc art |
+| `noqlenmeta.fields.key` | boolean | false | Native beets `initial_key` via local audio |
+| `noqlenmeta.fields.energy` | boolean | false | RMS intensity proxy 0..1 (nullable) |
+| `noqlenmeta.fields.danceability` | boolean | false | Rhythm regularity proxy 0..1 (nullable) |
+| `noqlenmeta.local_analysis.key.enabled` | boolean | false | Also requires `fields.key: true` |
+| `noqlenmeta.local_analysis.key.analysis_mode` | `full`, `window` | `full` if section omitted | Full track vs centered window |
+| `noqlenmeta.local_analysis.key.window_seconds` | positive finite number | `90` if section omitted | Used for `window` |
+| `noqlenmeta.local_analysis.audio_features.enabled` | boolean | false | Also requires at least one audio proxy field |
+| `noqlenmeta.local_analysis.audio_features.analysis_mode` | `full`, `window` | `full` if section omitted | Shared decode for both proxies |
+| `noqlenmeta.local_analysis.audio_features.window_seconds` | positive finite number | `90` if section omitted | Used for `window` |
+
+When a V3 local-analysis section is supplied, **all three keys** `enabled`,
+`analysis_mode`, `window_seconds` must be provided; unknown keys fail
+validation. This opt-in format is intentionally absent from the frozen V2
+`full-config.yaml` sample so upgrades do not silently enable new analysis.
+The `[audio]` extra supplies the optional Librosa backend.

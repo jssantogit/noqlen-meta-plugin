@@ -40,6 +40,20 @@ from beetsplug.noqlenmeta.artwork_application import (
     ArtworkApplicationResult,
     apply_artwork_plan,
 )
+from beetsplug.noqlenmeta.audio_features import (
+    AudioFeaturePlanningResult,
+    AudioFeatureSettings,
+    LibrosaAudioFeatureAnalyzer,
+    audio_feature_settings_from_config,
+    plan_audio_features,
+)
+from beetsplug.noqlenmeta.back_artwork import (
+    BackArtworkPlan,
+    apply_back_artwork_plan,
+    back_artwork_requires_lookup,
+    plan_back_artwork,
+    resolve_caa_back_artwork,
+)
 from beetsplug.noqlenmeta.beets_application import (
     BeetsApplicationMode,
     apply_beets_target_plan,
@@ -68,6 +82,7 @@ from beetsplug.noqlenmeta.domain import (
     SemanticEvidenceBundle,
     TrackEnrichmentContext,
 )
+from beetsplug.noqlenmeta.evidence import MetadataEvidence
 from beetsplug.noqlenmeta.field_types import ALBUM_FIELD_TYPES, ITEM_FIELD_TYPES
 from beetsplug.noqlenmeta.file_sync import (
     FileSyncApplicationError,
@@ -137,6 +152,13 @@ from beetsplug.noqlenmeta.integration import (
     resolution_policy_from_settings,
     resolve_discogs_token,
 )
+from beetsplug.noqlenmeta.key_analysis import (
+    KeyPlanningResult,
+    KeySettings,
+    LibrosaKeyAnalyzer,
+    key_settings_from_config,
+    plan_key,
+)
 from beetsplug.noqlenmeta.library_application import (
     LibraryApplicationError,
     LibraryApplicationMode,
@@ -159,6 +181,12 @@ from beetsplug.noqlenmeta.library_track_application import (
     apply_library_track_plan,
 )
 from beetsplug.noqlenmeta.library_track_preview import render_library_track_plan
+from beetsplug.noqlenmeta.lyrics_sidecar import (
+    LyricsSidecarError,
+    LyricsSidecarPlan,
+    apply_lyrics_sidecar_plan,
+    plan_lyrics_sidecar,
+)
 from beetsplug.noqlenmeta.orchestration import (
     provider_can_contribute,
     validate_provider_candidates,
@@ -177,6 +205,7 @@ from beetsplug.noqlenmeta.providers.specs import (
     ITUNES_SPEC,
     LRCLIB_SPEC,
     MUSICBRAINZ_SPEC,
+    RECORDING_SEMANTIC_PROVIDER_CAPABILITIES,
     RELEASE_CATALOG_PROVIDER_CAPABILITIES,
     ProviderScope,
     ProviderSpec,
@@ -206,6 +235,11 @@ from beetsplug.noqlenmeta.tempo import (
     local_bpm_settings_from_config,
     plan_bpm,
 )
+from beetsplug.noqlenmeta.title_aliases import (
+    TitleAliasPlan,
+    apply_title_alias_plan,
+    plan_title_aliases,
+)
 from beetsplug.noqlenmeta.track_application import (
     TrackApplicationMode,
     TrackApplicationResult,
@@ -234,6 +268,11 @@ from beetsplug.noqlenmeta.track_planning import (
 from beetsplug.noqlenmeta.track_preview import (
     render_import_track_plan,
     render_incomplete_track_note,
+)
+from beetsplug.noqlenmeta.track_version import (
+    TrackVersionPlan,
+    apply_track_version_plan,
+    plan_track_version,
 )
 
 _FIELD_DEFAULTS = default_config()["fields"]
@@ -347,6 +386,90 @@ def _change_plan_with_bpm(
     return merged, build_change_plan(merged)
 
 
+def _integrate_key_decision(
+    planning: TrackPlanningResult | ImportTrackPlanningResult, result: KeyPlanningResult
+) -> TrackPlanningResult | ImportTrackPlanningResult:
+    if (
+        result.outcome != "RESOLVED"
+        or result.observation is None
+        or result.canonical_key is None
+        or any(change.field == "key" for change in planning.change_plan.changes)
+    ):
+        return planning
+    candidate = MetadataCandidate(
+        "key", result.canonical_key, result.observation.backend,
+        result.observation.confidence, "local-analysis",
+    )
+    decision = FieldDecision(
+        "key", result.current_key, candidate, ResolutionAction.PROPOSE,
+        result.reason,
+    )
+    change_plan = compose_change_plans(
+        planning.change_plan, build_change_plan((decision,))
+    )
+    return replace(
+        planning,
+        candidate_count=planning.candidate_count + 1,
+        decisions=tuple(sorted((*planning.decisions, decision), key=lambda d: d.field)),
+        change_plan=change_plan,
+        target_plan=map_change_plan_to_track_info(change_plan),
+    )
+
+
+def _integrate_audio_feature_decisions(
+    planning: TrackPlanningResult | ImportTrackPlanningResult,
+    result: AudioFeaturePlanningResult,
+    current_values: Mapping[str, MetadataValue],
+) -> TrackPlanningResult | ImportTrackPlanningResult:
+    """Only persist measured scores paired with their exact methodology."""
+    new_decisions: list[FieldDecision] = []
+    for field, metric in result.proposals.items():
+        method_field = f"{field}_method"
+        current_method = current_values.get(method_field)
+        if current_method is not None and current_method != metric.method:
+            # A conflicting stored methodology is a blocker, never an excuse
+            # to attribute the new score to older audio evidence.
+            continue
+        if any(
+            change.field in {field, method_field}
+            for change in planning.change_plan.changes
+        ):
+            continue
+        candidate = MetadataCandidate(
+            field, metric.value, "local_audio", metric.confidence, metric.method
+        )
+        new_decisions.append(
+            FieldDecision(
+                field, current_values.get(field), candidate, ResolutionAction.PROPOSE,
+                f"local measured proxy ({metric.method}); not perceptual ground truth",
+            )
+        )
+        if current_method is None:
+            method_candidate = MetadataCandidate(
+                method_field, metric.method, "local_audio", 1.0, metric.method
+            )
+            new_decisions.append(
+                FieldDecision(
+                    method_field, None, method_candidate, ResolutionAction.PROPOSE,
+                    "persist exact analysis methodology beside the score",
+                )
+            )
+    if not new_decisions:
+        return planning
+    change_plan = compose_change_plans(
+        planning.change_plan, build_change_plan(tuple(new_decisions))
+    )
+    return replace(
+        planning,
+        candidate_count=planning.candidate_count + len(new_decisions),
+        decisions=tuple(
+            sorted((*planning.decisions, *new_decisions), key=lambda decision: decision.field)
+        ),
+        change_plan=change_plan,
+        target_plan=map_change_plan_to_track_info(change_plan),
+    )
+
+
 class IdentityImporterSettingsError(RuntimeError):
     """Raised before provider work when importer identity settings are unsafe."""
 
@@ -372,6 +495,9 @@ class LibraryItemPlan:
     total: int
     semantic_outcomes: Mapping[str, SemanticFieldOutcome]
     bpm_result: BpmPlanningResult | None = None
+    lyrics_sidecar: LyricsSidecarPlan | None = None
+    title_aliases: TitleAliasPlan | None = None
+    track_version: TrackVersionPlan | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -421,6 +547,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         self._lastfm_track_provider = None
         self._lastfm_artist_provider = None
         self._lrclib_provider = None
+        self._itunes_track_explicitness_provider = None
         self._musicbrainz_provider = None
         self._musicbrainz_semantic_client = None
         self._semantic_cache = CommandEntityCache()
@@ -526,6 +653,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
         policy = self._resolution_policy()
         local_bpm_settings = self._local_bpm_settings()
+        local_key_settings = self._local_key_settings()
+        local_audio_settings = self._local_audio_settings()
         import_artwork = self._prepare_import_artwork(session, task, album_info)
         if import_artwork is not None and apply_enabled:
             self._pending_import_artwork.setdefault(import_artwork.key, []).append(
@@ -545,6 +674,11 @@ class NoqlenMetaPlugin(BeetsPlugin):
             and (
                 self._has_contributing_track_provider(policy)
                 or policy.is_field_enabled("bpm") and local_bpm_settings.enabled
+                or policy.is_field_enabled("key") and local_key_settings.enabled
+                or local_audio_settings.enabled and any(
+                    policy.is_field_enabled(field)
+                    for field in ("energy", "danceability")
+                )
             )
             and (preview_enabled or apply_enabled)
         )
@@ -674,6 +808,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     from_scratch=from_scratch,
                     policy=policy,
                     local_bpm_settings=local_bpm_settings,
+                    local_key_settings=local_key_settings,
+                    local_audio_settings=local_audio_settings,
                 )
                 track_application_result = None
                 if apply_enabled:
@@ -877,6 +1013,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
         policy = self._resolution_policy()
         bpm_settings = self._bpm_settings()
         local_bpm_settings = self._local_bpm_settings()
+        local_key_settings = self._local_key_settings()
+        local_audio_settings = self._local_audio_settings()
         ordinary_release_can_contribute = self._has_contributing_release_provider(policy) or (
             policy.is_provider_enabled("musicbrainz")
             and any(
@@ -885,10 +1023,22 @@ class NoqlenMetaPlugin(BeetsPlugin):
             )
         )
         artwork_enabled = self.config["fields"]["cover"].get(bool)
-        release_can_contribute = ordinary_release_can_contribute or artwork_enabled
-        track_can_contribute = self._has_contributing_track_provider(policy) or (
-            policy.is_field_enabled("bpm")
+        back_enabled = (
+            "back_artwork" in set(self.config["fields"].keys())
+            and self.config["fields"]["back_artwork"].get(bool)
+        )
+        release_can_contribute = (
+            ordinary_release_can_contribute or artwork_enabled or back_enabled
+        )
+        track_can_contribute = (
+            self._has_contributing_track_provider(policy)
+            or policy.is_field_enabled("bpm")
             and (local_bpm_settings.enabled or write_enabled)
+            or policy.is_field_enabled("key") and local_key_settings.enabled
+            or local_audio_settings.enabled and any(
+                policy.is_field_enabled(field)
+                for field in ("energy", "danceability")
+            )
         )
         if not release_can_contribute and not track_can_contribute:
             ui.print_("Noqlen Meta: no enabled provider can contribute to the configured fields")
@@ -903,6 +1053,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
         prepared_albums: list[LibraryAlbumPlan] = []
         prepared_artwork: list[tuple[Album, ArtworkPlan]] = []
+        prepared_back_artwork: list[tuple[Album, BackArtworkPlan]] = []
         artwork_settings = self._artwork_settings()
         total = len(albums)
         for position, album in enumerate(albums, 1):
@@ -933,6 +1084,36 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     )
                 prepared_artwork.append((album, artwork_plan))
                 self._render_artwork_plan(artwork_plan)
+            if back_enabled:
+                try:
+                    back_context = artwork_context_from_album(
+                        album, tuple(album.items())
+                    )
+                    back_lookup = None
+                    if (
+                        back_artwork_requires_lookup(back_context)
+                        and self.config["providers"]["coverartarchive"]["enabled"].get(bool)
+                    ):
+                        if self._coverartarchive_client is None:
+                            self._coverartarchive_client = CoverArtArchiveClient()
+                        back_lookup = resolve_caa_back_artwork(
+                            self._coverartarchive_client,
+                            back_context.release_mbid,
+                            artwork_settings,
+                        )
+                    back_plan = plan_back_artwork(back_context, back_lookup)
+                    prepared_back_artwork.append((album, back_plan))
+                    ui.print_(
+                        "Noqlen Meta / Back artwork PREVIEW: "
+                        f"Album {back_plan.album_id}; status={back_plan.status}; "
+                        f"reason={back_plan.reason}"
+                    )
+                except ValueError as error:
+                    ui.print_(
+                        f"Noqlen Meta / Back artwork BLOCKED: Album {album.id}; "
+                        f"reason={error}"
+                    )
+
             if not ordinary_release_can_contribute:
                 continue
             context = context_from_library_album(album)
@@ -1027,14 +1208,77 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 semantic_outcomes=track_enrichment.outcomes,
             )
             planning = self._integrate_library_bpm(planning, bpm_result)
+            key_result = plan_key(
+                path=item.path,
+                existing_key=item.get("initial_key", None),
+                field_enabled=policy.is_field_enabled("key"),
+                settings=local_key_settings,
+                analyzer=LibrosaKeyAnalyzer() if local_key_settings.enabled else None,
+            )
+            planning = _integrate_key_decision(planning, key_result)
+            audio_result = plan_audio_features(
+                path=item.path,
+                current_values=current_values,
+                field_enabled={
+                    field: policy.is_field_enabled(field)
+                    for field in ("energy", "danceability")
+                },
+                settings=local_audio_settings,
+                analyzer=(
+                    LibrosaAudioFeatureAnalyzer() if local_audio_settings.enabled else None
+                ),
+            )
+            planning = _integrate_audio_feature_decisions(
+                planning, audio_result, current_values
+            )
+            # A timed .lrc is an associated asset, never a beets TrackInfo
+            # field. Separate its approved proposal from the ordinary DB
+            # target mapping without changing V2's public mapping contract.
+            synced = next(
+                (
+                    change for change in planning.change_plan.changes
+                    if change.field == "synced_lyrics"
+                ),
+                None,
+            )
+            lyrics_plan = plan_lyrics_sidecar(item, synced) if synced is not None else None
+            if synced is not None:
+                canonical = planning.change_plan
+                database_plan = ChangePlan(
+                    changes=tuple(
+                        change for change in canonical.changes
+                        if change.field != "synced_lyrics"
+                    ),
+                    reviews=canonical.reviews,
+                    kept=canonical.kept,
+                    skipped=canonical.skipped,
+                )
+                database_target = map_change_plan_to_track_info(database_plan)
+            else:
+                database_target = planning.target_plan
             prepared_items.append(
                 LibraryItemPlan(
                     item,
-                    planning.target_plan,
+                    database_target,
                     position,
                     item_total,
                     planning.semantic_outcomes,
                     bpm_result,
+                    lyrics_plan,
+                    (
+                        plan_title_aliases(lib, item, track_enrichment.aliases)
+                        if any(
+                            policy.is_field_enabled(field)
+                            for field in ("alternate_titles", "transliterations")
+                        )
+                        else None
+                    ),
+                    (
+                        plan_track_version(item, track_enrichment.version)
+                        if policy.is_field_enabled("track_version")
+                        and track_enrichment.version is not None
+                        else None
+                    ),
                 )
             )
 
@@ -1046,12 +1290,21 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 item: Item,
                 changes: Sequence[LibraryTargetChange | TrackTargetChange],
             ) -> None:
+                file_changes = tuple(
+                    value for value in changes
+                    if value.source.field not in {
+                        "energy", "danceability", "energy_method", "danceability_method"
+                    }
+                )
+                # No file preflight, access, or reservation for DB-only metrics.
+                if not file_changes:
+                    return
                 if not isinstance(item.id, int):
                     raise ui.UserError("noqlenmeta: ordinary file target is not persisted")
                 target_item, collected = changes_by_item.setdefault(item.id, (item, {}))
                 if target_item.path != item.path:
                     raise ui.UserError("noqlenmeta: conflicting ordinary file targets")
-                for value in changes:
+                for value in file_changes:
                     source = value.source
                     previous = collected.get(source.field)
                     if previous is not None and previous.after != source.after:
@@ -1181,12 +1434,78 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 and application_result.stored
             )
 
+        for item_plan in prepared_items:
+            version_plan = item_plan.track_version
+            if version_plan is None:
+                continue
+            ui.print_(
+                "Noqlen Meta / track version PREVIEW: "
+                f"Item {version_plan.item_id}; status={version_plan.status}; "
+                f"type={version_plan.version.kind}"
+            )
+            if apply_enabled and version_plan.status == "PROPOSE":
+                result = apply_track_version_plan(lib, version_plan)
+                ui.print_(
+                    "Noqlen Meta / track version application: "
+                    f"Item {result.item_id}; status={result.status}"
+                )
+
+        # Structured aliases have their own lossless SQLite table. They are
+        # not a flattened TrackInfo target and never replace the native title.
+        for item_plan in prepared_items:
+            alias_plan = item_plan.title_aliases
+            if alias_plan is None:
+                continue
+            ui.print_(
+                "Noqlen Meta / structured title aliases: "
+                f"Item {alias_plan.item_id}; status={alias_plan.status}; "
+                f"new={len(alias_plan.additions)}"
+            )
+            if apply_enabled and alias_plan.status == "PROPOSE":
+                result = apply_title_alias_plan(lib, alias_plan)
+                ui.print_(
+                    "Noqlen Meta / structured alias application: "
+                    f"Item {result.item_id}; status={result.status}; "
+                    f"stored={result.stored}; reason={result.reason}"
+                )
+
+        # Preview was prepared before any mutation and the sidecar commit
+        # rechecks the live Item and target path with atomic no-clobber create.
+        for item_plan in prepared_items:
+            lyrics_plan = item_plan.lyrics_sidecar
+            if lyrics_plan is None:
+                continue
+            ui.print_(
+                "Noqlen Meta / synced lyrics sidecar: "
+                f"Item {lyrics_plan.item_id}; status={lyrics_plan.status}; "
+                f"reason={lyrics_plan.reason}"
+            )
+            if apply_enabled and lyrics_plan.status == "PROPOSE":
+                try:
+                    result = apply_lyrics_sidecar_plan(lib, lyrics_plan)
+                except LyricsSidecarError as error:
+                    raise ui.UserError(
+                        "noqlenmeta: synced lyrics sidecar was not created: "
+                        f"{error}"
+                    ) from error
+                ui.print_(
+                    f"Noqlen Meta / .lrc application: Item {result.item_id}; "
+                    f"status={result.status}"
+                )
+
         if apply_enabled:
             for artwork_album, artwork_plan in prepared_artwork:
                 artwork_result = self._apply_artwork_plan(
                     lib, artwork_album, artwork_plan
                 )
                 self._render_artwork_application_result(artwork_result)
+            for back_album, back_plan in prepared_back_artwork:
+                result = apply_back_artwork_plan(lib, back_album, back_plan)
+                ui.print_(
+                    "Noqlen Meta / Back artwork application: "
+                    f"Album {result.album_id}; status={result.status}; "
+                    f"sidecars={len(result.committed)}; reason={result.reason}"
+                )
 
         for album_plan, application_result in zip(
             prepared_albums, album_results, strict=True
@@ -1567,6 +1886,16 @@ class NoqlenMetaPlugin(BeetsPlugin):
         field_settings = {
             field: self.config["fields"][field].get(bool) for field in _FIELD_DEFAULTS
         }
+        # The V2 defaults remain frozen. Read only known V3 opt-in keys
+        # explicitly supplied by the caller; never turn them on by default.
+        available_fields = set(self.config["fields"].keys())
+        for field in (
+            "instrumental", "explicitness", "vocal_languages",
+            "alternate_titles", "transliterations", "track_version", "key",
+            "energy", "danceability"
+        ):
+            if field in available_fields:
+                field_settings[field] = self.config["fields"][field].get(bool)
         provider_settings = {
             provider: self.config["providers"][provider]["enabled"].get(bool)
             for provider in BUILTIN_PROVIDER_NAMES
@@ -1824,6 +2153,28 @@ class NoqlenMetaPlugin(BeetsPlugin):
         except (confuse.ConfigError, ValueError) as error:
             raise ui.UserError(f"noqlenmeta: invalid local BPM configuration: {error}") from None
 
+    def _local_key_settings(self) -> KeySettings:
+        try:
+            settings = self.config["local_analysis"].get(dict)
+            return (
+                key_settings_from_config(settings["key"])
+                if "key" in settings else KeySettings()
+            )
+        except (confuse.ConfigError, ValueError) as error:
+            raise ui.UserError(f"noqlenmeta: invalid local key configuration: {error}") from None
+
+    def _local_audio_settings(self) -> AudioFeatureSettings:
+        try:
+            sections = self.config["local_analysis"].get(dict)
+            return (
+                audio_feature_settings_from_config(sections["audio_features"])
+                if "audio_features" in sections else AudioFeatureSettings()
+            )
+        except (confuse.ConfigError, ValueError) as error:
+            raise ui.UserError(
+                f"noqlenmeta: invalid audio_features configuration: {error}"
+            ) from None
+
     def _bpm_analyzer(self, settings: LocalBpmSettings) -> TempoAnalyzer | None:
         if not settings.enabled:
             return None
@@ -1905,6 +2256,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
 
     @staticmethod
     def _has_contributing_track_provider(policy: ResolutionPolicy) -> bool:
+        if policy.is_provider_enabled("itunes") and policy.is_field_enabled("explicitness"):
+            return True
         return any(
             provider_can_contribute(policy, spec)
             or any(
@@ -1915,10 +2268,16 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 for capability in (
                     *BUILTIN_PROVIDER_CAPABILITIES,
                     *CREDIT_PROVIDER_CAPABILITIES,
+                    *RECORDING_SEMANTIC_PROVIDER_CAPABILITIES,
                 )
                 if capability.acquisition_scope is ProviderScope.TRACK
                 and capability.field
-                in {"isrcs", "works", "iswcs", "recording_date", *CREDIT_FIELDS}
+                in {
+                    "isrcs", "works", "iswcs", "recording_date",
+                    "instrumental", "vocal_languages", "alternate_titles",
+                    "transliterations", "track_version",
+                    *CREDIT_FIELDS
+                }
             )
             for spec in BUILTIN_TRACK_PROVIDER_SPECS.values()
         )
@@ -1931,6 +2290,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
         from_scratch: bool,
         policy: ResolutionPolicy,
         local_bpm_settings: LocalBpmSettings,
+        local_key_settings: KeySettings | None = None,
+        local_audio_settings: AudioFeatureSettings | None = None,
     ) -> ImportTrackPlanningResult:
         enrichment = self._collect_track_candidates(context, policy)
         current_values = effective_current_values_for_import_track(
@@ -1953,7 +2314,33 @@ class NoqlenMetaPlugin(BeetsPlugin):
             policy=policy,
             semantic_outcomes=enrichment.outcomes,
         )
-        return self._integrate_import_bpm(planning, bpm_result)
+        planning = self._integrate_import_bpm(planning, bpm_result)
+        key_settings = local_key_settings if local_key_settings is not None else KeySettings()
+        key_result = plan_key(
+            path=selected.item.path,
+            existing_key=current_values.get("key"),
+            field_enabled=policy.is_field_enabled("key"),
+            settings=key_settings,
+            analyzer=LibrosaKeyAnalyzer() if key_settings.enabled else None,
+        )
+        planning = _integrate_key_decision(planning, key_result)
+        audio_settings = (
+            local_audio_settings if local_audio_settings is not None
+            else AudioFeatureSettings()
+        )
+        audio_result = plan_audio_features(
+            path=selected.item.path,
+            current_values=current_values,
+            field_enabled={
+                field: policy.is_field_enabled(field)
+                for field in ("energy", "danceability")
+            },
+            settings=audio_settings,
+            analyzer=LibrosaAudioFeatureAnalyzer() if audio_settings.enabled else None,
+        )
+        return _integrate_audio_feature_decisions(
+            planning, audio_result, current_values
+        )
 
     @staticmethod
     def _integrate_library_bpm(
@@ -2011,13 +2398,45 @@ class NoqlenMetaPlugin(BeetsPlugin):
     ) -> SemanticEnrichmentResult:
         candidates: list[MetadataCandidate] = []
         semantic_outcomes: Mapping[str, SemanticFieldOutcome] = {}
-        if provider_can_contribute(policy, LRCLIB_SPEC):
-            candidates.extend(
-                self._collect_provider_candidates(
-                    LRCLIB_SPEC,
-                    lambda: self._lrclib_candidates(context),
+        lrclib_instrumental: tuple[MetadataEvidence, ...] = ()
+        title_aliases = ()
+        track_version = None
+        lyrics_requested = provider_can_contribute(policy, LRCLIB_SPEC)
+        instrumental_requested = (
+            policy.is_provider_enabled("lrclib")
+            and policy.is_field_enabled("instrumental")
+        )
+        if lyrics_requested or instrumental_requested:
+
+            def collect_lrclib() -> tuple[MetadataCandidate, ...]:
+                nonlocal lrclib_instrumental
+                results = self._lrclib_candidates(context)
+                # V2 adapters/tests may supply candidates without constructing
+                # the concrete provider. Only actual LRCLIB instances can
+                # provide the separate V3 instrumental assertion.
+                provider = self._lrclib_provider
+                if instrumental_requested and provider is not None:
+                    get_evidence = getattr(provider, "get_instrumental_evidence", None)
+                    if callable(get_evidence):
+                        lrclib_instrumental = get_evidence(context)
+                return results
+
+            fetched = self._collect_provider_candidates(LRCLIB_SPEC, collect_lrclib)
+            if lyrics_requested:
+                candidates.extend(fetched)
+
+        itunes_explicitness: tuple[MetadataEvidence, ...] = ()
+        if policy.is_provider_enabled("itunes") and policy.is_field_enabled(
+            "explicitness"
+        ):
+            try:
+                itunes_explicitness = self._itunes_track_explicitness(context)
+            except ProviderError:
+                self._log.warning(
+                    "Noqlen Meta: iTunes track advisory unavailable; "
+                    "processing will continue"
                 )
-            )
+
         semantic_fields = {
             field
             for field in (
@@ -2032,10 +2451,21 @@ class NoqlenMetaPlugin(BeetsPlugin):
         }
         wave_fields = {
             field
-            for field in ("isrcs", "works", "iswcs", "recording_date", *CREDIT_FIELDS)
+            for field in (
+                "isrcs",
+                "works",
+                "iswcs",
+                "recording_date",
+                "instrumental",
+                "vocal_languages",
+                "alternate_titles",
+                "transliterations",
+                "track_version",
+                *CREDIT_FIELDS,
+            )
             if policy.is_field_enabled(field)
         }
-        recording_evidence = ()
+        recording_evidence = (*lrclib_instrumental, *itunes_explicitness)
         if semantic_fields or wave_fields:
             musicbrainz_release = None
             musicbrainz_tracks = ()
@@ -2050,7 +2480,9 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     self._musicbrainz_client(),
                     enabled_fields=semantic_fields | wave_fields,
                 ).get_enrichment(context)
-                recording_evidence = track_enrichment.evidence
+                recording_evidence = (*recording_evidence, *track_enrichment.evidence)
+                title_aliases = track_enrichment.aliases
+                track_version = track_enrichment.version
                 musicbrainz_tracks = (
                     (lambda: track_enrichment.semantic,) if semantic_fields else ()
                 )
@@ -2137,7 +2569,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 candidates.extend(semantic.candidates)
                 semantic_outcomes = semantic.outcomes
         return SemanticEnrichmentResult(
-            tuple(candidates), semantic_outcomes, tuple(recording_evidence)
+            tuple(candidates), semantic_outcomes, tuple(recording_evidence),
+            title_aliases, track_version,
         )
 
     def _build_change_plan_for_release(
@@ -2529,3 +2962,17 @@ class NoqlenMetaPlugin(BeetsPlugin):
         if self._lrclib_provider is None:
             self._lrclib_provider = LRCLIBProvider()
         return tuple(self._lrclib_provider.get_candidates(context))
+
+    def _itunes_track_explicitness(
+        self, context: TrackEnrichmentContext
+    ) -> tuple[MetadataEvidence, ...]:
+        from beetsplug.noqlenmeta.providers.itunes_track import (
+            ITunesTrackExplicitnessProvider,
+        )
+
+        if self._itunes_track_explicitness_provider is None:
+            storefront = self.config["providers"]["itunes"]["storefront"].as_str()
+            self._itunes_track_explicitness_provider = ITunesTrackExplicitnessProvider(
+                storefront
+            )
+        return self._itunes_track_explicitness_provider.get_evidence(context)

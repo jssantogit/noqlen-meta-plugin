@@ -23,7 +23,7 @@ can be represented safely.
 | `artist_areas` | off | MusicBrainz | Typed track/album list | Typed Item/Album list | Uses trustworthy main artist areas; never inferred from text. |
 | `artist_languages` | on | MusicBrainz-derived Work evidence | Typed track/album list | Typed Item/Album list | Derived only from Work languages reached by tracks in the current target, not a direct artist-provider field. |
 | `lyrics` | off | LRCLIB | Selected `TrackInfo.lyrics` | Item lyrics | Importer and existing-library Items share LRCLIB resolution. |
-| `synced_lyrics` | off | LRCLIB | No lossless target | No lossless target | Previewed as blocked; synchronized lyrics/SYLT are not applied. |
+| `synced_lyrics` | off | LRCLIB | No lossless target | No lossless target | Existing library CLI creates an atomic no-clobber `.lrc` sidecar on `--apply`; importer/file SYLT remains unsupported. |
 | `cover` | on | Cover Art Archive | Album sidecar/embed | Album sidecar/embed | Exact approved main front; fixed `cover.jpg`; no singleton artwork. |
 | `composers` | on | MusicBrainz Work relations | Native names/IDs plus structured state | Native names/IDs plus structured state | Exact Work scope; generic writer is not promoted. |
 | `lyricists` | on | MusicBrainz Work relations | Native names/IDs plus structured state | Native names/IDs plus structured state | Exact Work scope; generic writer is not promoted. |
@@ -59,3 +59,22 @@ canonical representation. Composer, lyricist, and arranger names use audited
 MediaFile targets; multiple MP3 values are blocked because ID3v2.3 can flatten
 them. Producer, conductor, performer/instrument, featured/guest, and structured
 artist-credit state remain database-only.
+
+
+## V3 opt-in supplemental fields
+
+| Field | Authority | Importer / library target | Safe-write boundary |
+| --- | --- | --- | --- |
+| `vocal_languages` | Exact MusicBrainz Recording→Work evidence | Typed plural Item/TrackInfo | DB only, unknown/ambiguous abstains |
+| `instrumental` | Explicit MusicBrainz or LRCLIB assertion | Nullable Item/TrackInfo | DB only, never infer false from absence |
+| `explicitness` | Uniquely matched iTunes track advisory | Item/TrackInfo `explicit` or `clean` | DB only |
+| `alternate_titles`, `transliterations` | Exact MusicBrainz Recording aliases | Structured plugin-owned SQLite | Never mutate native title |
+| `track_version` | Exact Recording disambiguation allowlist | Typed Item version and description | DB only |
+| `back_artwork` | Exact CAA Release Back asset | Atomic `back.jpg` sidecar | No overwrite, no `Album.artpath` mutation |
+| `key` | Opt-in local Librosa correlation | Native `initial_key` | Interoperable native key representation |
+| `energy`, `danceability` | Opt-in, versioned RMS / rhythm proxies | Bounded 0..1 typed Item/TrackInfo + method IDs | DB only; no media tag |
+| Disc/Medium surface artwork | Unsupported in V3.0 | None | Deferred to later evaluation |
+
+These V3 fields do not change the V2 public defaults. Disc artwork is not the
+same thing as the `back.jpg` image. `vocal_languages` does not identify sung
+language from audio; it is only derived where the Work relation is unequivocal.

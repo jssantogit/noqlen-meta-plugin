@@ -26,6 +26,7 @@ class TrackTargetShape(Enum):
     SCALAR_STRING = "scalar_string"
     STRING_LIST = "string_list"
     SCALAR_FLOAT = "scalar_float"
+    SCALAR_BOOLEAN = "scalar_boolean"
 
 
 def _validate_field_name(value: object, label: str) -> None:
@@ -82,6 +83,33 @@ TRACK_FIELD_TARGETS: Mapping[str, TrackFieldTarget] = MappingProxyType(
     {target.canonical_field: target for target in _TARGETS}
 )
 
+# V2 registry remains frozen. V3 targets extend mapping without changing its
+# public compatibility snapshot or the media-file writing policy.
+V3_TRACK_FIELD_TARGETS: Mapping[str, TrackFieldTarget] = MappingProxyType(
+    {
+        "key": TrackFieldTarget("key", "initial_key", TrackTargetShape.SCALAR_STRING),
+        "energy": TrackFieldTarget("energy", "energy", TrackTargetShape.SCALAR_FLOAT),
+        "danceability": TrackFieldTarget(
+            "danceability", "danceability", TrackTargetShape.SCALAR_FLOAT
+        ),
+        "energy_method": TrackFieldTarget(
+            "energy_method", "energy_method", TrackTargetShape.SCALAR_STRING
+        ),
+        "danceability_method": TrackFieldTarget(
+            "danceability_method", "danceability_method", TrackTargetShape.SCALAR_STRING
+        ),
+        "vocal_languages": TrackFieldTarget(
+            "vocal_languages", "vocal_languages", TrackTargetShape.STRING_LIST
+        ),
+        "instrumental": TrackFieldTarget(
+            "instrumental", "instrumental", TrackTargetShape.SCALAR_BOOLEAN
+        ),
+        "explicitness": TrackFieldTarget(
+            "explicitness", "explicitness", TrackTargetShape.SCALAR_STRING
+        ),
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class TrackTargetChange:
@@ -125,6 +153,20 @@ class TrackTargetPlan:
         return self.source.requires_review or self.has_mapping_blockers
 
 
+def is_valid_scalar_float(field: str, value: object) -> bool:
+    """Validate field-specific numeric semantics, preserving V2 BPM rules.
+
+    Audio proxy scores are inclusive 0..1. BPM remains strictly positive.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    if not isfinite(value):
+        return False
+    if field in {"energy", "danceability"}:
+        return 0 <= value <= 1
+    return value > 0
+
+
 def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
     """Analyze canonical changes against the supported TrackInfo contract."""
     if not isinstance(plan, ChangePlan):
@@ -146,15 +188,22 @@ def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
                 isinstance(value, CreditReference) for value in change.after
             ):
                 raise TrackMappingError(f"{change.field!r} requires CreditReference values")
-            names = tuple(dict.fromkeys(value.party.name for value in change.after))
-            mapped.append(
-                _target_change(change, change.field, TrackTargetShape.STRING_LIST, names)
-            )
             id_target = {
                 "composers": "composers_ids",
                 "lyricists": "lyricists_ids",
                 "arrangers": "arrangers_ids",
             }.get(change.field)
+            # Parallel native credit projections must retain the same ordering
+            # and cardinality, including same-name/different-MBID identities.
+            names = (
+                tuple(value.party.name for value in change.after)
+                if id_target is not None
+                else tuple(dict.fromkeys(value.party.name for value in change.after))
+            )
+            mapped.append(
+                _target_change(change, change.field, TrackTargetShape.STRING_LIST, names)
+            )
+            # Keep the native ID sequence aligned with its name sequence.
             ids = tuple(value.party.mbid for value in change.after)
             if id_target is not None and all(ids):
                 mapped.append(
@@ -162,7 +211,7 @@ def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
                         change,
                         id_target,
                         TrackTargetShape.STRING_LIST,
-                        tuple(dict.fromkeys(ids)),  # type: ignore[arg-type]
+                        tuple(ids),  # type: ignore[arg-type]
                     )
                 )
             continue
@@ -228,7 +277,9 @@ def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
             )
             continue
 
-        target = TRACK_FIELD_TARGETS.get(change.field)
+        target = TRACK_FIELD_TARGETS.get(change.field) or V3_TRACK_FIELD_TARGETS.get(
+            change.field
+        )
         if target is None:
             blocked.append(
                 TrackMappingBlocker(
@@ -240,6 +291,12 @@ def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
             continue
 
         value = change.after
+        if change.field == "explicitness" and (
+            type(value) is not str or value not in {"explicit", "clean"}
+        ):
+            raise TrackMappingError(
+                "explicitness must be canonical 'explicit' or 'clean'"
+            )
         if target.shape is TrackTargetShape.STRING_LIST:
             if (
                 not isinstance(value, tuple)
@@ -252,15 +309,15 @@ def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
                 raise TrackMappingError(
                     f"{change.field!r} requires a non-empty tuple of canonical strings"
                 )
-        elif target.shape is TrackTargetShape.SCALAR_FLOAT:
-            if (
-                isinstance(value, bool)
-                or not isinstance(value, (int, float))
-                or not isfinite(value)
-                or value <= 0
-            ):
+        elif target.shape is TrackTargetShape.SCALAR_BOOLEAN:
+            if type(value) is not bool:
                 raise TrackMappingError(
-                    f"{change.field!r} requires a finite positive number"
+                    f"{change.field!r} requires an explicit boolean value"
+                )
+        elif target.shape is TrackTargetShape.SCALAR_FLOAT:
+            if not is_valid_scalar_float(change.field, value):
+                raise TrackMappingError(
+                    f"{change.field!r} has an invalid numeric range or value"
                 )
             value = float(value)
         elif target.shape is TrackTargetShape.SCALAR_STRING:
