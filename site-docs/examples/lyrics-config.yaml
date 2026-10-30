@@ -1,0 +1,10 @@
+plugins:
+  - noqlenmeta
+
+noqlenmeta:
+  fields:
+    lyrics: true
+    synced_lyrics: true
+  providers:
+    lrclib:
+      enabled: true
