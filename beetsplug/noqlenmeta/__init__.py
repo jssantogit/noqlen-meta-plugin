@@ -47,6 +47,13 @@ from beetsplug.noqlenmeta.back_artwork import (
     plan_back_artwork,
     resolve_caa_back_artwork,
 )
+from beetsplug.noqlenmeta.audio_features import (
+    AudioFeaturePlanningResult,
+    AudioFeatureSettings,
+    LibrosaAudioFeatureAnalyzer,
+    audio_feature_settings_from_config,
+    plan_audio_features,
+)
 from beetsplug.noqlenmeta.beets_application import (
     BeetsApplicationMode,
     apply_beets_target_plan,
@@ -409,6 +416,60 @@ def _integrate_key_decision(
     )
 
 
+def _integrate_audio_feature_decisions(
+    planning: TrackPlanningResult | ImportTrackPlanningResult,
+    result: AudioFeaturePlanningResult,
+    current_values: Mapping[str, MetadataValue],
+) -> TrackPlanningResult | ImportTrackPlanningResult:
+    """Only persist measured scores paired with their exact methodology."""
+    new_decisions: list[FieldDecision] = []
+    for field, metric in result.proposals.items():
+        method_field = f"{field}_method"
+        current_method = current_values.get(method_field)
+        if current_method is not None and current_method != metric.method:
+            # A conflicting stored methodology is a blocker, never an excuse
+            # to attribute the new score to older audio evidence.
+            continue
+        if any(
+            change.field in {field, method_field}
+            for change in planning.change_plan.changes
+        ):
+            continue
+        candidate = MetadataCandidate(
+            field, metric.value, "local_audio", metric.confidence, metric.method
+        )
+        new_decisions.append(
+            FieldDecision(
+                field, current_values.get(field), candidate, ResolutionAction.PROPOSE,
+                f"local measured proxy ({metric.method}); not perceptual ground truth",
+            )
+        )
+        if current_method is None:
+            method_candidate = MetadataCandidate(
+                method_field, metric.method, "local_audio", 1.0, metric.method
+            )
+            new_decisions.append(
+                FieldDecision(
+                    method_field, None, method_candidate, ResolutionAction.PROPOSE,
+                    "persist exact analysis methodology beside the score",
+                )
+            )
+    if not new_decisions:
+        return planning
+    change_plan = compose_change_plans(
+        planning.change_plan, build_change_plan(tuple(new_decisions))
+    )
+    return replace(
+        planning,
+        candidate_count=planning.candidate_count + len(new_decisions),
+        decisions=tuple(
+            sorted((*planning.decisions, *new_decisions), key=lambda decision: decision.field)
+        ),
+        change_plan=change_plan,
+        target_plan=map_change_plan_to_track_info(change_plan),
+    )
+
+
 class IdentityImporterSettingsError(RuntimeError):
     """Raised before provider work when importer identity settings are unsafe."""
 
@@ -593,6 +654,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         policy = self._resolution_policy()
         local_bpm_settings = self._local_bpm_settings()
         local_key_settings = self._local_key_settings()
+        local_audio_settings = self._local_audio_settings()
         import_artwork = self._prepare_import_artwork(session, task, album_info)
         if import_artwork is not None and apply_enabled:
             self._pending_import_artwork.setdefault(import_artwork.key, []).append(
@@ -613,6 +675,10 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 self._has_contributing_track_provider(policy)
                 or policy.is_field_enabled("bpm") and local_bpm_settings.enabled
                 or policy.is_field_enabled("key") and local_key_settings.enabled
+                or local_audio_settings.enabled and any(
+                    policy.is_field_enabled(field)
+                    for field in ("energy", "danceability")
+                )
             )
             and (preview_enabled or apply_enabled)
         )
@@ -743,6 +809,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     policy=policy,
                     local_bpm_settings=local_bpm_settings,
                     local_key_settings=local_key_settings,
+                    local_audio_settings=local_audio_settings,
                 )
                 track_application_result = None
                 if apply_enabled:
@@ -947,6 +1014,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         bpm_settings = self._bpm_settings()
         local_bpm_settings = self._local_bpm_settings()
         local_key_settings = self._local_key_settings()
+        local_audio_settings = self._local_audio_settings()
         ordinary_release_can_contribute = self._has_contributing_release_provider(policy) or (
             policy.is_provider_enabled("musicbrainz")
             and any(
@@ -967,6 +1035,10 @@ class NoqlenMetaPlugin(BeetsPlugin):
             or policy.is_field_enabled("bpm")
             and (local_bpm_settings.enabled or write_enabled)
             or policy.is_field_enabled("key") and local_key_settings.enabled
+            or local_audio_settings.enabled and any(
+                policy.is_field_enabled(field)
+                for field in ("energy", "danceability")
+            )
         )
         if not release_can_contribute and not track_can_contribute:
             ui.print_("Noqlen Meta: no enabled provider can contribute to the configured fields")
@@ -1144,6 +1216,21 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 analyzer=LibrosaKeyAnalyzer() if local_key_settings.enabled else None,
             )
             planning = _integrate_key_decision(planning, key_result)
+            audio_result = plan_audio_features(
+                path=item.path,
+                current_values=current_values,
+                field_enabled={
+                    field: policy.is_field_enabled(field)
+                    for field in ("energy", "danceability")
+                },
+                settings=local_audio_settings,
+                analyzer=(
+                    LibrosaAudioFeatureAnalyzer() if local_audio_settings.enabled else None
+                ),
+            )
+            planning = _integrate_audio_feature_decisions(
+                planning, audio_result, current_values
+            )
             # A timed .lrc is an associated asset, never a beets TrackInfo
             # field. Separate its approved proposal from the ordinary DB
             # target mapping without changing V2's public mapping contract.
@@ -1210,6 +1297,12 @@ class NoqlenMetaPlugin(BeetsPlugin):
                     raise ui.UserError("noqlenmeta: conflicting ordinary file targets")
                 for value in changes:
                     source = value.source
+                    # These V3 metrics and their methods belong only to the
+                    # typed database; there are no interoperable media tags.
+                    if source.field in {
+                        "energy", "danceability", "energy_method", "danceability_method"
+                    }:
+                        continue
                     previous = collected.get(source.field)
                     if previous is not None and previous.after != source.after:
                         raise ui.UserError(
@@ -1795,7 +1888,8 @@ class NoqlenMetaPlugin(BeetsPlugin):
         available_fields = set(self.config["fields"].keys())
         for field in (
             "instrumental", "explicitness", "vocal_languages",
-            "alternate_titles", "transliterations", "track_version", "key"
+            "alternate_titles", "transliterations", "track_version", "key",
+            "energy", "danceability"
         ):
             if field in available_fields:
                 field_settings[field] = self.config["fields"][field].get(bool)
@@ -2066,6 +2160,18 @@ class NoqlenMetaPlugin(BeetsPlugin):
         except (confuse.ConfigError, ValueError) as error:
             raise ui.UserError(f"noqlenmeta: invalid local key configuration: {error}") from None
 
+    def _local_audio_settings(self) -> AudioFeatureSettings:
+        try:
+            sections = self.config["local_analysis"].get(dict)
+            return (
+                audio_feature_settings_from_config(sections["audio_features"])
+                if "audio_features" in sections else AudioFeatureSettings()
+            )
+        except (confuse.ConfigError, ValueError) as error:
+            raise ui.UserError(
+                f"noqlenmeta: invalid audio_features configuration: {error}"
+            ) from None
+
     def _bpm_analyzer(self, settings: LocalBpmSettings) -> TempoAnalyzer | None:
         if not settings.enabled:
             return None
@@ -2182,6 +2288,7 @@ class NoqlenMetaPlugin(BeetsPlugin):
         policy: ResolutionPolicy,
         local_bpm_settings: LocalBpmSettings,
         local_key_settings: KeySettings | None = None,
+        local_audio_settings: AudioFeatureSettings | None = None,
     ) -> ImportTrackPlanningResult:
         enrichment = self._collect_track_candidates(context, policy)
         current_values = effective_current_values_for_import_track(
@@ -2213,7 +2320,24 @@ class NoqlenMetaPlugin(BeetsPlugin):
             settings=key_settings,
             analyzer=LibrosaKeyAnalyzer() if key_settings.enabled else None,
         )
-        return _integrate_key_decision(planning, key_result)
+        planning = _integrate_key_decision(planning, key_result)
+        audio_settings = (
+            local_audio_settings if local_audio_settings is not None
+            else AudioFeatureSettings()
+        )
+        audio_result = plan_audio_features(
+            path=selected.item.path,
+            current_values=current_values,
+            field_enabled={
+                field: policy.is_field_enabled(field)
+                for field in ("energy", "danceability")
+            },
+            settings=audio_settings,
+            analyzer=LibrosaAudioFeatureAnalyzer() if audio_settings.enabled else None,
+        )
+        return _integrate_audio_feature_decisions(
+            planning, audio_result, current_values
+        )
 
     @staticmethod
     def _integrate_library_bpm(
