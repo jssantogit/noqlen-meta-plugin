@@ -25,6 +25,7 @@ def test_start_here_is_a_continuous_existing_library_tutorial() -> None:
     required = {
         "index.md",
         "installation.md",
+        "quickstart.md",
         "basic-configuration.md",
         "first-preview.md",
         "understanding-results.md",
@@ -84,6 +85,10 @@ def test_recipes_replace_legacy_guides() -> None:
         "import-enrichment.md",
         "artwork.md",
         "local-bpm.md",
+        "audio-analysis.md",
+        "recording-credits.md",
+        "lyrics-synced.md",
+        "configuration-profiles.md",
         "v3-enrichment.md",
         "lyrics-languages.md",
         "repair-musicbrainz-ids.md",
@@ -111,23 +116,26 @@ def test_troubleshooting_routes_by_symptom() -> None:
         assert f"({name})" in index
 
 
-def test_public_navigation_matches_v2_information_architecture() -> None:
+def test_public_navigation_is_task_first_and_has_separate_concepts() -> None:
     mkdocs = yaml.safe_load((ROOT / "mkdocs.yml").read_text(encoding="utf-8"))
     labels = [next(iter(entry)) for entry in mkdocs["nav"]]
 
     assert labels == [
         "Home",
         "Start Here",
-        "Configuration",
-        "Commands",
-        "Recipes",
+        "Customize",
+        "How It Works",
         "Troubleshooting",
-        "Technical Reference",
+        "Reference",
         "Advanced",
         "Project",
     ]
-    for legacy in ("getting-started", "concepts", "guides", "reference"):
+    for legacy in ("getting-started", "guides", "reference"):
         assert not (ROOT / "site-docs" / legacy).exists()
+    concepts = ROOT / "site-docs" / "concepts"
+    assert {
+        "mental-model.md", "data-destinations.md", "glossary.md"
+    } == {page.name for page in concepts.glob("*.md")}
 
 
 def test_default_config_is_fresh_and_complete() -> None:
@@ -161,9 +169,15 @@ def test_readme_is_concise_project_landing_page() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     headings = [line for line in readme.splitlines() if line.startswith("#")]
 
-    assert headings == ["# Noqlen Meta", "## Capabilities", "## Installation"]
-    assert "## Documentation" not in readme
-    assert "## First Preview" not in readme
+    assert headings == [
+        "# Noqlen Meta",
+        "## Quick start",
+        "## What can I customize?",
+        "## Optional dependencies",
+    ]
+    assert "https://noqlen-meta.readthedocs.io/en/latest/start-here/quickstart/" in readme
+    assert 'beet nm album:"Discovery"' in readme
+    assert "preview" in readme.lower()
     assert "## License" not in readme
     assert "Version `" not in readme
     assert "releases/tag/v" not in readme
@@ -226,7 +240,7 @@ def test_public_release_state_is_consistent() -> None:
     permissions = (ROOT / "site-docs/advanced/preview-apply-write.md").read_text(
         encoding="utf-8"
     )
-    assert not (ROOT / "site-docs" / "concepts").exists()
+    assert (ROOT / "site-docs" / "concepts" / "mental-model.md").exists()
     checklist = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
     release_words = " ".join(release.split()).casefold()
     combined = " ".join(

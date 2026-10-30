@@ -4,12 +4,13 @@ Genres are classified labels; styles preserve ordered source style or subgenre
 detail as a lossless multivalued field.
 
 ```yaml
-fields:
-  genres: true
-  styles: true
-genres:
-  num_genres: 1
-  promote_styles: true
+noqlenmeta:
+  fields:
+    genres: true
+    styles: true
+  genres:
+    num_genres: 1
+    promote_styles: true
 ```
 
 The default keeps at most one independently supported genre. Set `num_genres`

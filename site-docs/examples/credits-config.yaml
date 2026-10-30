@@ -1,0 +1,22 @@
+plugins:
+  - noqlenmeta
+
+noqlenmeta:
+  fields:
+    works: true
+    isrcs: true
+    iswcs: true
+    composers: true
+    lyricists: true
+    producers: true
+    performers: true
+    featured_artists: true
+    structured_artist_credits: true
+    vocal_languages: true
+    instrumental: true
+    alternate_titles: true
+    transliterations: true
+    track_version: true
+  providers:
+    musicbrainz:
+      enabled: true

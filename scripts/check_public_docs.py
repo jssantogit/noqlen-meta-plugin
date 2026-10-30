@@ -171,6 +171,23 @@ def check() -> list[str]:
         str(page.relative_to(DOCS)) for page in public_pages
     }:
         failures.append("V3 upgrade guide is missing")
+    required_beginner_pages = {
+        "start-here/quickstart.md",
+        "concepts/mental-model.md",
+        "concepts/data-destinations.md",
+        "concepts/glossary.md",
+        "recipes/lyrics-synced.md",
+        "recipes/audio-analysis.md",
+        "recipes/recording-credits.md",
+        "recipes/configuration-profiles.md",
+    }
+    missing_beginner_pages = required_beginner_pages - {
+        str(page.relative_to(DOCS)) for page in public_pages
+    }
+    if missing_beginner_pages:
+        failures.append(
+            "beginner-first docs omit: " + ", ".join(sorted(missing_beginner_pages))
+        )
 
     command = NoqlenMetaPlugin().commands()[0]
     long_options = sorted(
@@ -222,11 +239,21 @@ def check() -> list[str]:
         if term.casefold() in readme_text.casefold():
             failures.append(f"README contains internal term: {term}")
     readme_headings = [line for line in readme_text.splitlines() if line.startswith("#")]
-    if readme_headings != ["# Noqlen Meta", "## Capabilities", "## Installation"]:
-        failures.append("README does not use the approved landing-page structure")
-    for forbidden_heading in ("## Documentation", "## First Preview", "## License"):
-        if forbidden_heading in readme_text:
-            failures.append(f"README retains removed section: {forbidden_heading}")
+    expected_headings = [
+        "# Noqlen Meta",
+        "## Quick start",
+        "## What can I customize?",
+        "## Optional dependencies",
+    ]
+    if readme_headings != expected_headings:
+        failures.append("README lacks the beginner-first landing-page structure")
+    for required in (
+        "https://noqlen-meta.readthedocs.io/en/latest/start-here/quickstart/",
+        'beet nm album:"Discovery"',
+        "## Quick start",
+    ):
+        if required not in readme_text:
+            failures.append(f"README beginner journey omits: {required}")
     if "Version `" in readme_text or "releases/tag/v" in readme_text:
         failures.append("README contains release-specific version metadata")
     for required_install_text in (

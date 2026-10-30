@@ -4,11 +4,12 @@ Mood enrichment uses controlled canonical labels from supported MusicBrainz and
 Last.fm evidence.
 
 ```yaml
-fields:
-  moods: true
+noqlenmeta:
+  fields:
+    moods: true
 
-moods:
-  max_moods: 1
+  moods:
+    max_moods: 1
 ```
 
 `fields.moods` permits mood enrichment. `moods.max_moods` is the maximum number
@@ -17,8 +18,9 @@ of independently supported canonical moods retained. The default is one.
 To retain up to three supported moods:
 
 ```yaml
-moods:
-  max_moods: 3
+noqlenmeta:
+  moods:
+    max_moods: 3
 ```
 
 Noqlen may return fewer than the maximum. It never invents or pads moods to

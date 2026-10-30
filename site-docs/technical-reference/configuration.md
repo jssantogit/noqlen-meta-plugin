@@ -5,7 +5,9 @@ and write authority. The canonical complete example is
 [`full-config.yaml`](../examples/full-config.yaml).
 
 All paths below are relative to the beets configuration root and begin with
-`noqlenmeta`.
+`noqlenmeta`. **Short YAML blocks in this exhaustive reference show fragments**;
+for complete copyable files with the correct root and safe opt-ins, prefer the
+[configuration profiles](../recipes/configuration-profiles.md).
 
 ## Importer Controls
 
@@ -115,7 +117,7 @@ exist. Enabling a field does not guarantee an enabled provider can supply it.
 | `noqlenmeta.fields.artist_areas` | `false` | Typed release/track targets | Typed Album/Item targets | Trustworthy MusicBrainz main area; no string inference. |
 | `noqlenmeta.fields.artist_languages` | `true` | Typed release/track targets | Typed Album/Item targets | Three-letter codes derived only from current-target Works. |
 | `noqlenmeta.fields.lyrics` | `false` | Selected tracks | Items | LRCLIB plain lyrics use shared import/library resolution. |
-| `noqlenmeta.fields.synced_lyrics` | `false` | Preview/block | Preview/block | No lossless synchronized-lyrics target is delivered. |
+| `noqlenmeta.fields.synced_lyrics` | `false` | Preview only; no embedded SYLT target | Verified existing-library `.lrc` sidecar | LRCLIB synchronized lyrics may create a no-clobber `.lrc` sidecar on explicit ordinary library `--apply`; no universal embedded SYLT writing. |
 | `noqlenmeta.fields.cover` | `true` | Album artwork | Album artwork | Exact CAA front selection and deterministic `cover.jpg`. |
 | `noqlenmeta.fields.isrcs` | `true` | Recording | Item | All exact ISRCs; scalar native/file projection only when singular. |
 | `noqlenmeta.fields.works` | `true` | Recording | Item | Structured exact Work relationships; plural Work IDs persist in the database. |

@@ -1,85 +1,64 @@
-# Configuration Overview
+# Configuration basics
 
-Noqlen Meta configuration lives under one `noqlenmeta` block in your beets
-configuration file.
+You do not have to enable every field or copy the full configuration file.
+Start with a **goal**, then pick only the settings that support it.
 
-Most existing-library users can start with **fields** and **providers**. The
-other sections let you tune individual features or importer behavior when you
-need them.
-
-## The full shape
+## A three-part configuration
 
 ```yaml
 noqlenmeta:
-  preview: true
-  apply: false
-  apply_mode: strict
-
-  identity:
-    enabled: false
-    preview: true
-    apply: false
-
   fields:
-    ...
+    lyrics: true
   providers:
-    ...
-  genres:
-    ...
-  moods:
-    ...
-  artwork:
-    ...
-  bpm:
-    ...
-  local_analysis:
-    ...
-  acoustid:
-    ...
-  resolution:
-    ...
+    lrclib:
+      enabled: true
 ```
 
-You do **not** need to configure every section. Noqlen already has conservative
-defaults.
+- **Fields** decide *what information* Noqlen may enrich.
+- **Providers** decide *which online source* can supply it.
+- **Local analysis** is a separate optional way to calculate certain values
+  (e.g. BPM or Key) from the audio.
 
-## Importer controls
+None of these settings grants write permission on its own. Run
+`beet nm QUERY` for a preview, `--apply` for approved database changes
+and sidecars, and `--apply --write` for supported audio tags.
 
-The first settings apply to Noqlen while beets is importing music. They do not
-control the `beet nm` library command.
+See [the mental model](../concepts/mental-model.md) before using advanced
+resolution or importer flags.
 
-- `preview: true` shows ordinary importer enrichment without authorizing a
-  Noqlen metadata mutation. This is the default.
-- `apply: false` means importer proposals are not applied by Noqlen. Set it to
-  `true` only when you want approved proposals added to the metadata selected by
-  beets.
-- `apply_mode: strict` requires the selected ordinary enrichment work to be
-  safely applicable as a whole. `partial` may keep independently safe fields
-  while withholding blockers; **partial is not force**.
-- `identity` is a separate importer MusicBrainz identity audit. Its `enabled`,
-  `preview`, and `apply` switches do not enable ordinary enrichment and are
-  independent of `providers.musicbrainz.enabled`.
+## Start from a profile
 
-If you only use Noqlen on an existing library, you can leave these importer
-settings at their defaults and use the command flags documented under
-[Commands](../commands/index.md).
+| Goal | Example to copy |
+| --- | --- |
+| Genres, styles, moods and front cover | [Starter profile](../recipes/configuration-profiles.md#profile-a-starter-library-enrichment) |
+| Plain lyrics and `.lrc` files | [Lyrics profile](../recipes/configuration-profiles.md#profile-b-plain-and-synchronized-lyrics) |
+| Verified MusicBrainz credits and Work details | [Credits profile](../recipes/configuration-profiles.md#profile-c-detailed-recording-and-work-credits) |
+| Local BPM and Key | [Audio profile](../recipes/configuration-profiles.md#profile-d-local-audio-analysis) |
 
-## Feature blocks
+The profile examples are additive. Keep one `noqlenmeta:` mapping in your
+existing beets `config.yaml`; do not duplicate sections when combining them.
 
-- `fields` chooses which metadata categories Noqlen may handle.
-- `providers` chooses metadata sources and their prerequisites.
-- `genres` controls genre count and style promotion.
-- `moods` controls the maximum number of supported moods retained.
-- `artwork` controls Cover Art Archive image size and replacement policy.
-- `bpm` controls BPM persistence, recalculation, rounding, and octave handling.
-- `local_analysis` controls optional analysis of your own audio. Local BPM,
-  conservative Key, RMS Energy and rhythmic Danceability proxies are implemented
-  behind independent opt-ins. The reserved local mood switch has no model.
-- `acoustid` controls the separate existing-library fingerprint/evidence
-  workflow and its optional use during identity audit.
-- `resolution` customizes provider authority, confidence, and existing-value
-  preservation. Most users should leave it alone.
+## Where to go next
 
-Start with [Fields](fields.md) and [Providers](providers.md), then open the page
-for the feature you want to customize. For every exact path, type, range, and
-default, use the [Configuration Reference](../technical-reference/configuration.md).
+Browse [Fields](fields.md) and [Providers](providers.md) for user-oriented
+explanations; use the separate
+[Configuration Reference](../technical-reference/configuration.md) when you
+need precise types, defaults and restrictions.
+
+### Importer configuration is different
+
+`noqlenmeta.preview`, `noqlenmeta.apply` and `apply_mode` configure
+Noqlen **during beets import**. They do **not** control the standalone
+`beet nm --apply` command for your existing library. The standalone
+`identity` and AcoustID modes also have separate authorities.
+
+If you don't use importer enrichment, keep those importer switches at their
+conservative defaults. See [Enrich During Import](../recipes/import-enrichment.md).
+
+### What is the full configuration file?
+
+[Default Configuration Snapshot](full-example.md) documents every
+**established default**, not every possible optional V3 field. New V3
+capabilities are intentionally omitted from the default tree until you opt in.
+Use the [Field Reference](../technical-reference/fields.md) for all supported
+field names.

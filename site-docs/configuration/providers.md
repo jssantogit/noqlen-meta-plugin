@@ -4,11 +4,12 @@ Providers are metadata sources. Enable a provider only when its contribution is
 useful to the fields you selected.
 
 ```yaml
-providers:
-  musicbrainz:
-    enabled: true
-  coverartarchive:
-    enabled: true
+noqlenmeta:
+  providers:
+    musicbrainz:
+      enabled: true
+    coverartarchive:
+      enabled: true
 ```
 
 MusicBrainz is the zero-credential semantic backbone for exact known IDs across
@@ -30,12 +31,13 @@ and guarded `.lrc` sidecars for existing-library Items when enabled.
 Example field/source relationship:
 
 ```yaml
-fields:
-  lyrics: true
-  synced_lyrics: false
-providers:
-  lrclib:
-    enabled: true
+noqlenmeta:
+  fields:
+    lyrics: true
+    synced_lyrics: false
+  providers:
+    lrclib:
+      enabled: true
 ```
 
 See [Providers Reference](../technical-reference/providers.md) for capability

@@ -1,9 +1,17 @@
-# Full Configuration Example
+# Default configuration snapshot
 
-This is a reference example, not a recommended starter configuration.
+!!! warning "These are defaults, not the full list of available features"
+    This file reproduces the *established default configuration* exactly.
+    New V3 features such as `key`, `energy`, `danceability`,
+    `vocal_languages`, `back_artwork` and `explicitness` are **intentionally
+    absent** until you explicitly opt in. Their absence doesn't mean the
+    features are unsupported.
+
+**Do not copy this entire file just to get started.** Instead, choose a
+small [configuration profile](../recipes/configuration-profiles.md).
 
 The block below exactly matches the production defaults represented by
-`full-config.yaml`:
+[`full-config.yaml`](../examples/full-config.yaml):
 
 ```yaml
 plugins:
@@ -120,3 +128,24 @@ noqlenmeta:
     mood:
       enabled: false
 ```
+
+
+## How to enable a V3 feature
+
+For example, local Key needs *both* a field switch and an analyzer:
+
+```yaml
+noqlenmeta:
+  fields:
+    key: true
+  local_analysis:
+    key:
+      enabled: true
+      analysis_mode: window
+      window_seconds: 90
+```
+
+Install the optional `[audio]` extra first.
+For all available optional fields, see the
+[Field Reference](../technical-reference/fields.md) and
+[local audio recipe](../recipes/audio-analysis.md).
