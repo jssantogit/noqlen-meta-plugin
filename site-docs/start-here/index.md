@@ -1,23 +1,33 @@
-# What Is Noqlen Meta?
+# Start here: your first safe result
 
-Noqlen Meta adds carefully selected metadata to music that beets already
-manages. beets still matches albums and tracks, stores your library, and runs
-the importer. Noqlen adds focused enrichment such as genres, styles, moods,
-artwork, BPM, lyrics, languages, and identity evidence.
+Noqlen Meta adds metadata to music already managed by beets. Start with
+**one album**; there's no need to master the configuration reference first.
 
-Every library command starts as a preview. A preview may contact enabled
-providers, but it does not change the beets database or your files.
+## Choose your path
 
-This tutorial will help you:
+**New to the plugin?** Follow the
+[complete quickstart](quickstart.md) for install → preview → interpretation →
+authorized application, all in one page.
 
-1. install and enable the plugin;
-2. choose a useful starter configuration;
-3. preview one existing album;
-4. understand the result;
-5. apply approved changes;
-6. optionally synchronize supported metadata to audio files.
+**Prefer smaller lessons?** Use the gradual tour below:
 
-The tutorial uses an album named `Discovery`. It is only an example: replace it
-with an album in your own beets library.
+1. [Installation](installation.md) — install the package and enable the plugin.
+2. [Basic configuration](basic-configuration.md) — choose a small starting set.
+3. [Your first preview](first-preview.md) — test one album without changing it.
+4. [Understanding results](understanding-results.md) — KEEP/PROPOSE/REVIEW/BLOCKED.
+5. [Apply changes](apply-changes.md) — authorize database and verified sidecars.
+6. [Write file tags](write-files.md) — optionally synchronize supported tags.
 
-Continue with [Installation](installation.md).
+## What you need
+
+- A beets installation and a library containing at least one imported album.
+- Python 3.10–3.14 and supported beets 2.x.
+- Internet for the default MusicBrainz/Cover Art Archive lookups.
+
+Use your own album title in the examples; `Discovery` is just a teaching
+placeholder, **not** a bundled test album.
+
+!!! tip "Want a specific feature instead?"
+    Use [Choose a Task](../recipes/index.md). If the difference between
+    fields, providers and writing is unclear, read
+    [How Noqlen works](../concepts/mental-model.md).
