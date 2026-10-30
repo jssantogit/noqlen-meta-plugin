@@ -4,6 +4,19 @@ All notable user-facing changes are recorded here.
 
 ## Unreleased
 
+## 3.0.1 - 2026-10-30
+
+### Documentation
+
+- Updated the Read the Docs landing page to describe the shipped V3 metadata,
+  guarded lyrics and artwork sidecars, Key and versioned audio proxies.
+- Added a practical V3 upgrade recipe, clarified provider and field contracts,
+  and corrected publication/versioning guidance for stable and latest manuals.
+- Aligned the public documentation validator, release checklist and source
+  tests with the verified 3.0.0 release and the V3 documentation refresh.
+- Documentation-only maintenance release: **no runtime behavior changes**
+  relative to 3.0.0.
+
 ## 3.0.0 - 2026-10-30
 
 ### Added
