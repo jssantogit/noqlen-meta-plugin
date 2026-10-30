@@ -17,19 +17,67 @@ replace `Discovery` with an album **already imported** into your library.
 This command previews only. The [guided quickstart](start-here/quickstart.md)
 shows every step and explains the results.
 
-## What do you want to do?
+## Choose what you want to do
 
-| My goal | Step-by-step guide |
-| --- | --- |
-| Get started without changing my files | [Quickstart: one album](start-here/quickstart.md) |
-| Set up a few common features | [Configuration profiles](recipes/configuration-profiles.md) |
-| Improve genres, styles, moods or release metadata | [Configuration overview](configuration/index.md) |
-| Add album covers and back artwork | [Artwork recipe](recipes/artwork.md) |
-| Add lyrics or synchronized `.lrc` files | [Lyrics recipe](recipes/lyrics-synced.md) |
-| Add composers, performers and Recording/Work details | [Recording credits recipe](recipes/recording-credits.md) |
-| Analyze BPM, Key, Energy or Danceability locally | [Audio analysis recipe](recipes/audio-analysis.md) |
-| Repair MusicBrainz identities | [Identity recipe](recipes/repair-musicbrainz-ids.md) |
-| Find every option, default and write target | [Technical reference](technical-reference/index.md) |
+<div class="grid cards" markdown>
+
+- **I'm new — show me how**
+
+    ---
+
+    Install Noqlen, preview one album and understand the safety controls.
+
+    [Start the guided quickstart](start-here/quickstart.md)
+
+- **I want to customize my music**
+
+    ---
+
+    Pick a goal, use a ready-to-adapt configuration and add more features.
+
+    [Browse task-based recipes](recipes/index.md)
+
+- **I want to combine features**
+
+    ---
+
+    Turn on lyrics, analysis and other sources without breaking YAML mappings.
+
+    [Learn to combine settings](recipes/combine-features.md)
+
+- **I don't understand a result**
+
+    ---
+
+    Learn what KEEP, PROPOSE, REVIEW and BLOCKED mean, with a worked example.
+
+    [Read a preview](start-here/reading-preview.md)
+
+- **I want to know where data is saved**
+
+    ---
+
+    Distinguish the beets database, `.lrc`/`cover.jpg` sidecars and audio tags.
+
+    [See data destinations](concepts/data-destinations.md)
+
+- **I need every option and default**
+
+    ---
+
+    Find exact field, provider, command and compatibility contracts.
+
+    [Open the technical reference](technical-reference/index.md)
+
+</div>
+
+### Popular tasks
+
+[Add artwork](recipes/artwork.md) ·
+[Synchronized lyrics](recipes/lyrics-synced.md) ·
+[Recording/Work credits](recipes/recording-credits.md) ·
+[Local BPM and Key](recipes/audio-analysis.md) ·
+[MusicBrainz identity repair](recipes/repair-musicbrainz-ids.md)
 
 ## How does it work?
 
