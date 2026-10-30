@@ -62,12 +62,12 @@ def _license_metadata(
     return path
 
 
-def test_active_project_version_is_2_0_1() -> None:
+def test_active_project_version_is_v3_release_candidate() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
         "project"
     ]
 
-    assert project["version"] == "2.0.1"
+    assert project["version"] == "3.0.0"
 
 
 def test_requires_python_validation_accepts_semantically_equivalent_order(
@@ -299,12 +299,29 @@ def test_release_checklist_records_completed_v1_release() -> None:
     assert "[ ] Tag workflow builds, checks, and publishes" not in checklist
 
 
-def test_v2_release_version_is_exact() -> None:
+def test_v3_release_candidate_version_is_exact() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
         "project"
     ]
 
-    assert project["version"] == "2.0.1"
+    assert project["version"] == "3.0.0"
+
+
+def test_v3_release_scope_is_documented_without_claiming_publication() -> None:
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    release = (ROOT / "site-docs" / "project" / "release.md").read_text(
+        encoding="utf-8"
+    )
+    checklist = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
+    assert changelog.index("## Unreleased") < changelog.index(
+        "## 3.0.0 - 2026-10-30"
+    ) < changelog.index("## 2.0.1 - 2026-08-12")
+    assert "3.0.0 release candidate" in release
+    assert "not published yet" in release
+    assert "Current stable release: `2.0.1`" in release
+    assert "disc-surface" in release
+    assert "V3.0" not in checklist  # release numbering has one canonical form
+    assert "[ ] Create `v3.0.0` tag" in checklist
 
 
 def test_changelog_orders_unreleased_v2_and_v1() -> None:
