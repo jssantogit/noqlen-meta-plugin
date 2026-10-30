@@ -19,12 +19,13 @@ recording evidence to `beet nm --identity`.
 A practical starting configuration is:
 
 ```yaml
-acoustid:
-  enabled: false
-  reuse_existing: true
-  compute_missing: false
-  lookup: true
-  use_for_identity: true
+noqlenmeta:
+  acoustid:
+    enabled: false
+    reuse_existing: true
+    compute_missing: false
+    lookup: true
+    use_for_identity: true
 ```
 
 ## What each setting does
@@ -61,8 +62,9 @@ beet nm --acoustid --fingerprint-missing QUERY
 Or persist the permission in configuration:
 
 ```yaml
-acoustid:
-  compute_missing: true
+noqlenmeta:
+  acoustid:
+    compute_missing: true
 ```
 
 Both are restricted to standalone AcoustID mode. `--identity` never calculates
@@ -85,10 +87,11 @@ configuration files.
 ## Use AcoustID with identity audit
 
 ```yaml
-acoustid:
-  enabled: true
-  lookup: true
-  use_for_identity: true
+noqlenmeta:
+  acoustid:
+    enabled: true
+    lookup: true
+    use_for_identity: true
 ```
 
 With valid fingerprint material and decisive evidence, AcoustID may filter
