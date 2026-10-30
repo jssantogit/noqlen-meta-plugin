@@ -102,3 +102,37 @@
 - [ ] Read the Docs builds `v2.0.1` successfully.
 - [ ] `/en/stable/` displays the redesigned Documentation v2 rather than the old v2.0.0 manual.
 - [ ] Public `beets-noqlenmeta==2.0.1` clean install discovers `noqlenmeta` and `beet nm --help` works.
+
+
+## Version 3.0.0 release candidate (2026-10-30)
+
+### Accepted product boundaries
+
+- [x] Conservative MusicBrainz Work-derived `vocal_languages` are sufficient;
+      audio language recognition is not required.
+- [x] Individual disc-surface/Medium artwork is deferred for later evaluation;
+      exact-release Front and Back artwork remain in scope.
+- [x] RMS Energy and rhythmic Danceability are explicitly methodology-versioned
+      0..1 proxies, not human-labelled perceptual estimates or Spotify scores.
+- [x] Zero-valued proxy persistence is safe and legacy BPM remains >0.
+- [x] Existing V2-typed databases reopen with native and multivalue preservation
+      in regression tests.
+- [x] `--apply --write` for DB-only V3 audio leaves synthetic FLAC, MP3,
+      M4A, Ogg Vorbis and Opus bytes unmodified in tests.
+
+### Repository and distribution gates
+
+- [ ] Release candidate `3.0.0` metadata, user documentation and changelog
+      pass strict validation together.
+- [ ] Full CI green at the final prepared release-branch HEAD.
+- [ ] The V3 PR is reviewed/approved and merged into `main`.
+- [ ] Full CI green on the resulting `main` commit.
+
+### External publishing gates (not implied by repository tests)
+
+- [ ] Confirm the release commit is contained in remote `main`.
+- [ ] Create `v3.0.0` tag pointing to the vetted `main` commit.
+- [ ] Confirm tag workflow succeeds and publishes wheel/sdist through PyPI OIDC.
+- [ ] Create and verify the GitHub Release and public PyPI 3.0.0 artifacts.
+- [ ] Confirm clean installation of **published** package and Read the Docs
+      `stable`/versioned 3.0.0 documentation. Do not mark complete prematurely.
