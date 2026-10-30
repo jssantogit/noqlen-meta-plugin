@@ -26,3 +26,18 @@ canonical sidecar.
 Ordinary `--apply` may write and verify sidecars without mutating audio files.
 `--apply --write` may additionally embed the already prepared image. See the
 [Fields Reference](../technical-reference/fields.md) for exact boundaries.
+
+
+## Back artwork (V3, opt-in)
+
+Set `noqlenmeta.fields.back_artwork: true` to request an approved Cover Art
+Archive `Back` image for the **exact selected release**. On an existing-library
+album, `--apply` can create a guarded `back.jpg` in the verified disc
+directories. It will not overwrite an existing `back.jpg`, replace the front
+cover, alter `Album.artpath`, or silently embed Back artwork in audio files.
+Competing images require REVIEW; a failure while writing multiple disc
+directories triggers conservative rollback of newly created sidecars.
+
+**Not included in V3.0:** artwork printed on the disc surface (Disc/Medium art)
+and mapping different Medium images to specific disc numbers. This is planned
+for evaluation in a later version, and must never be confused with `back.jpg`.
