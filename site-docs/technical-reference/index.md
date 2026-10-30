@@ -1,16 +1,21 @@
-# Technical Reference
+# Technical reference
 
-Looking for setup instructions or examples? Start with **Getting Started** for
-now; the redesigned **Configuration** and **Commands** sections follow in this
-migration. This section documents exact Noqlen Meta contracts and edge cases.
+This section answers **"what exactly does this option mean?"** rather than
+**"how do I get started?"**. It documents exact public configuration keys,
+supported sources, flags and compatibility boundaries.
 
-- [Command-line reference](command-line.md)
-- [Configuration](configuration.md)
-- [Providers](providers.md)
-- [Fields](fields.md)
-- [Compatibility](compatibility.md)
-- [How Noqlen interacts with beets](beets-interaction.md)
+- [Configuration options, defaults and types](configuration.md)
+- [Fields: provider, importer, library and file targets](fields.md)
+- [Providers and prerequisites](providers.md)
+- [Command-line options](command-line.md)
+- [beets interaction and importer behavior](beets-interaction.md)
+- [Compatibility matrix](compatibility.md)
 
-The reference is reviewed against production defaults and
-command options. Public documentation checks fail when a new long option or
-configuration leaf is omitted.
+For instructions that end in a concrete result, use
+[Choose a Task](../recipes/index.md).
+For plain-language definitions, see the
+[Glossary](../concepts/glossary.md).
+
+The reference is checked against production defaults and command options in CI.
+It is intentionally exhaustive, while the [quickstart](../start-here/quickstart.md)
+and [configuration profiles](../recipes/configuration-profiles.md) are intentionally small.
