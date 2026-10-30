@@ -1,18 +1,28 @@
 # Lyrics & Languages
 
-Plain lyrics and synchronized lyrics are separate fields:
+Plain lyrics, synchronized lyrics and language labels are different fields.
+Copy a complete example under your existing `noqlenmeta:` mapping:
 
 ```yaml
-fields:
-  lyrics: true
-  synced_lyrics: false
-  lyrics_languages: true
-providers:
-  lrclib:
-    enabled: true
-  musicbrainz:
-    enabled: true
+noqlenmeta:
+  fields:
+    lyrics: true
+    synced_lyrics: true
+    lyrics_languages: true
+  providers:
+    lrclib:
+      enabled: true
+    musicbrainz:
+      enabled: true
 ```
+
+This is an *opt-in* example, not a change to defaults. Plain lyrics and
+synchronized lyrics require LRCLIB; Work-derived language codes require
+sufficiently exact MusicBrainz relationships. Always test with
+`beet nm title:"Example Track"` first.
+
+For a focused recipe including sidecar behavior, see
+[Add synchronized lyrics](../recipes/lyrics-synced.md).
 
 LRCLIB supplies plain and synchronized lyrics for selected tracks and
 existing-library Items. Plain lyrics have a writable target. Synchronized
