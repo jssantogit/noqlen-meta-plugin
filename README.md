@@ -46,11 +46,11 @@ Replace `Discovery` with an album you actually have. This last command only
 **previews** proposed changes. Inspect `KEEP`, `PROPOSE`, `REVIEW`, and
 `BLOCKED` results before applying anything.
 
-```bash
-# Only after inspecting a preview:
-beet nm --apply album:"Discovery"
+Only after inspecting a preview, you may explicitly apply supported
+changes to the beets database, then optionally synchronize supported audio tags:
 
-# Optional: also write supported metadata into the audio files:
+```bash
+beet nm --apply album:"Discovery"
 beet nm --apply --write album:"Discovery"
 ```
 
