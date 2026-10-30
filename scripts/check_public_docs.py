@@ -31,7 +31,7 @@ RELEASE_PAGE = DOCS / "project" / "release.md"
 READTHEDOCS_URL = "https://noqlen-meta.readthedocs.io/en/stable/"
 PYPI_URL = "https://pypi.org/project/beets-noqlenmeta/"
 GITHUB_RELEASE_URL = (
-    "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v2.0.1"
+    "https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v3.0.0"
 )
 
 FORBIDDEN_README_TERMS = (
@@ -78,6 +78,8 @@ STALE_RELEASE_STATE_PHRASES = (
     "repository release candidate: `2.0.0`",
     "currently published release: `1.0.0` (2026-08-02)",
     "main merge, tag, publication, and versioned documentation remain pending",
+    "3.0.0 release candidate (source only, not published yet)",
+    "the last confirmed published distribution remains `2.0.1`",
 )
 STALE_READTHEDOCS_HOST = "noqlen-meta-plugin.readthedocs.io"
 
@@ -154,17 +156,17 @@ def check() -> list[str]:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
         "project"
     ]
-    # The public stable release is 2.0.1 until the V3 tag is published.
-    # Source 3.0.0 is a release candidate, not proof of PyPI publication.
-    if project["version"] not in {"2.0.1", "3.0.0"}:
-        failures.append("source package version is not a known prepared release")
-    if project["version"] == "3.0.0":
-        if "## 3.0.0 - 2026-10-30" not in changelog_text:
-            failures.append("V3 release candidate lacks its dated changelog section")
-        if "3.0.0 release candidate" not in public_words:
-            failures.append("V3 release candidate state is missing from public docs")
-        if "vocal_languages" not in public_words or "danceability" not in public_words:
-            failures.append("public documentation omits V3 optional features")
+    # Source metadata and documented public release must agree.
+    if project["version"] != "3.0.0":
+        failures.append("source package version is not the published V3 release")
+    if "## 3.0.0 - 2026-10-30" not in changelog_text:
+        failures.append("published V3 release lacks its dated changelog section")
+    if "current published package release: `3.0.0` (2026-10-30)" not in public_words:
+        failures.append("published V3 release is not identified accurately")
+    if "vocal_languages" not in public_words or "danceability" not in public_words:
+        failures.append("public documentation omits V3 optional features")
+    if "v3-enrichment.md" not in {str(page.relative_to(DOCS)) for page in public_pages}:
+        failures.append("V3 upgrade guide is missing")
 
     command = NoqlenMetaPlugin().commands()[0]
     long_options = sorted(
@@ -312,7 +314,7 @@ def check() -> list[str]:
     if PYPI_URL not in public_text:
         failures.append("public docs do not link to the published PyPI project")
     if GITHUB_RELEASE_URL not in public_text:
-        failures.append("public release text does not link to the v2.0.1 GitHub Release")
+        failures.append("public release text does not link to the v3.0.0 GitHub Release")
     if "## Unreleased" not in changelog_text:
         failures.append("CHANGELOG.md does not contain an Unreleased section")
     if "## 2.0.1 - 2026-08-12" not in changelog_text:
@@ -326,8 +328,7 @@ def check() -> list[str]:
         failures.append("CHANGELOG.md must order Unreleased, 2.0.1, 2.0.0, then 1.0.0")
 
     required_release_state = (
-        "current stable release: `2.0.1` (2026-08-12)",
-        "noqlen meta 2.0.1 is published on",
+        "current published package release: `3.0.0` (2026-10-30)",
         "the read the docs project slug is `noqlen-meta`",
     )
     for phrase in required_release_state:
