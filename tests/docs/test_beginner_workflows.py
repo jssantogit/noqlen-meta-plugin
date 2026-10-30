@@ -134,3 +134,49 @@ def test_reference_distinguishes_lrc_from_unsupported_sylt() -> None:
     )
     assert "no-clobber `.lrc` sidecar" in reference
     assert "No lossless synchronized-lyrics target is delivered" not in reference
+
+
+def test_guided_combination_yields_one_mergeable_noqlenmeta_config() -> None:
+    guide = (DOCS / "recipes" / "combine-features.md").read_text(encoding="utf-8")
+    assert "merge" in guide.lower()
+    assert "one `noqlenmeta:`" in guide
+    assert "beet config noqlenmeta" in guide
+    assert "does not authorize writes" in guide
+    examples = _blocks("recipes/combine-features.md")
+    assert len(examples) == 1
+    candidate = examples[0]
+    _validate_example(candidate, "recipes/combine-features.md")
+    assert candidate["noqlenmeta"]["fields"] == {
+        "lyrics": True,
+        "synced_lyrics": True,
+        "key": True,
+    }
+    assert candidate["noqlenmeta"]["providers"]["lrclib"]["enabled"] is True
+    assert candidate["noqlenmeta"]["local_analysis"]["key"]["enabled"] is True
+    disk = yaml.safe_load(
+        (DOCS / "examples" / "combined-lyrics-key.yaml").read_text(encoding="utf-8")
+    )
+    assert disk == candidate
+
+
+def test_reading_preview_guide_separates_example_from_real_cli_output() -> None:
+    page = (DOCS / "start-here" / "reading-preview.md").read_text(
+        encoding="utf-8"
+    )
+    assert "illustrative" in page.lower()
+    for status in ("KEEP", "PROPOSE", "REVIEW", "BLOCKED"):
+        assert status in page
+    assert "not" in page.lower() and "terminal" in page.lower()
+    assert "beet nm" in page
+    assert "Do not" in page or "Never" in page
+
+
+def test_home_is_mobile_friendly_and_tasks_are_discoverable() -> None:
+    home = (DOCS / "index.md").read_text(encoding="utf-8")
+    config = (DOCS.parent / "mkdocs.yml").read_text(encoding="utf-8")
+    navigation = (DOCS / "recipes" / "index.md").read_text(encoding="utf-8")
+    assert '<div class="grid cards" markdown>' in home
+    assert "md_in_html" in config
+    assert "recipes/combine-features.md" in config
+    assert "reading-preview.md" in config
+    assert "(combine-features.md)" in navigation
