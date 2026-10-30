@@ -3,6 +3,7 @@
 Recipes combine only the configuration and commands needed to complete one
 goal. Use them after [Start Here](../start-here/index.md).
 
+- [Upgrade to V3 and Optional Features](v3-enrichment.md)
 - [Enrich an Existing Library](existing-library.md)
 - [Enrich During Import](import-enrichment.md)
 - [Add or Replace Album Covers](artwork.md)
