@@ -16,9 +16,17 @@ than happening implicitly.
 - Retrieve supported plain lyrics from LRCLIB.
 - Enrich importer-selected music and albums or standalone items already managed
   by a beets library.
-- Select and apply verified Cover Art Archive artwork, including deterministic
-  `cover.jpg` sidecars and optional embedding.
-- Analyze local BPM with the optional `[audio]` extra and lazy Librosa support.
+- Select verified Cover Art Archive front and exact-release back artwork,
+  including guarded `cover.jpg` and `back.jpg` sidecars. Per-disc surface
+  artwork is not included.
+- Analyze local BPM and conservative native Key with the optional `[audio]`
+  extra and lazy Librosa support.
+- Optionally derive RMS intensity and beat/onset regularity proxy indices
+  (`energy`, `danceability`) with documented methodology; these are not
+  human-perceptual or Spotify-equivalent scores.
+- Enrich exact Recording/Work credits, IDs, instrumental state, explicitness,
+  vocal languages, typed alternate titles and versions, and synchronized
+  `.lrc` lyrics with conservative evidence and explicit opt-ins.
 - Audit and repair MusicBrainz identity and use AcoustID fingerprints or
   recording evidence in explicit existing-library workflows.
 - Synchronize supported ordinary metadata and BPM to audio files through the
@@ -38,7 +46,7 @@ Discogs support uses the optional Discogs client:
 pip install "beets-noqlenmeta[discogs]"
 ```
 
-Optional local BPM analysis uses the audio extra:
+Optional local BPM, Key and audio-proxy analysis uses the audio extra:
 
 ```bash
 pip install "beets-noqlenmeta[audio]"
