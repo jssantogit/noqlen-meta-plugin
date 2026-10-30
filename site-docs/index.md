@@ -1,6 +1,6 @@
 # Noqlen Meta
 
-**Noqlen Meta 3.0.0** is a music-metadata enrichment plugin for
+**Noqlen Meta 3.x** is a music-metadata enrichment plugin for
 [beets](https://beets.io/). It supplements beets' own matching and library
 management rather than choosing replacement album or recording matches.
 
@@ -45,7 +45,7 @@ for precise storage and limitations.
 
 ## Releases and project
 
-- [Latest published release](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v3.0.0)
+- [GitHub releases](https://github.com/jssantogit/noqlen-meta-plugin/releases)
 - [Install from PyPI](https://pypi.org/project/beets-noqlenmeta/)
 - [Release history and documentation versions](project/release.md)
 - [GitHub repository](https://github.com/jssantogit/noqlen-meta-plugin)
@@ -53,6 +53,7 @@ for precise storage and limitations.
 
 The canonical documentation is
 [noqlen-meta.readthedocs.io/en/stable/](https://noqlen-meta.readthedocs.io/en/stable/).
-Published version 3.0.0 was released on October 30, 2026. The versioned
-documentation is built from its corresponding Git tag and may not include
-later documentation-only improvements until a subsequent release.
+The initial V3 release (`3.0.0`) shipped on October 30, 2026. The `3.0.1`
+documentation-only patch incorporates the updated manual. Read the Docs
+versioned pages are built from their respective Git tags; use the selector
+to read the documentation for the version you installed.
