@@ -116,3 +116,21 @@ def test_first_use_explains_safety_and_linked_paths() -> None:
         assert term in mental
     for term in ("cover.jpg", "back.jpg", ".lrc", "database-only"):
         assert term in storage
+
+
+def test_all_friendly_configuration_yaml_snippets_have_correct_root() -> None:
+    """A user must never be told to paste an orphan top-level fields: key."""
+    for page in sorted((DOCS / "configuration").glob("*.md")):
+        blocks = _blocks(str(page.relative_to(DOCS)))
+        for example in blocks:
+            assert isinstance(example, dict), str(page)
+            assert set(example) <= {"noqlenmeta", "plugins"}, str(page)
+            assert "noqlenmeta" in example, str(page)
+
+
+def test_reference_distinguishes_lrc_from_unsupported_sylt() -> None:
+    reference = (DOCS / "technical-reference" / "configuration.md").read_text(
+        encoding="utf-8"
+    )
+    assert "no-clobber `.lrc` sidecar" in reference
+    assert "No lossless synchronized-lyrics target is delivered" not in reference
