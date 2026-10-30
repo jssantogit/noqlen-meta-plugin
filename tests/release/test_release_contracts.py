@@ -304,7 +304,7 @@ def test_v3_docs_patch_version_is_exact() -> None:
         "project"
     ]
 
-    assert project["version"] == "3.0.0"
+    assert project["version"] == "3.0.1"
 
 
 def test_v3_release_scope_and_verified_publication_are_documented() -> None:
