@@ -81,7 +81,7 @@ def check_site(site: Path, artifacts: Path) -> list[dict[str, object]]:
                                     bounds = [cards.nth(i).bounding_box() for i in range(4)]
                                     assert all(b is not None for b in bounds)
                                     first_x = [round(b["x"]) for b in bounds if b]
-                                    # On mobile the responsive Material cards should form one column.
+                                    # Mobile Material cards should form one column.
                                     if name == "mobile":
                                         assert len(set(first_x)) == 1, (
                                             "mobile cards are not a single column", first_x
