@@ -74,7 +74,7 @@ jobs:
           python-version: "3.13"
           cache: pip
       - run: python -m pip install -e ".[audio,dev]"
-      - run: pytest -q tests/test_tempo.py tests/test_tempo_librosa.py
+      - run: pytest -q tests/test_tempo.py tests/test_tempo_librosa.py tests/test_v3_audio_librosa.py
 
   documentation:
     runs-on: ubuntu-24.04
