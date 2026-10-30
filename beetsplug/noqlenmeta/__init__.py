@@ -1290,19 +1290,22 @@ class NoqlenMetaPlugin(BeetsPlugin):
                 item: Item,
                 changes: Sequence[LibraryTargetChange | TrackTargetChange],
             ) -> None:
+                file_changes = tuple(
+                    value for value in changes
+                    if value.source.field not in {
+                        "energy", "danceability", "energy_method", "danceability_method"
+                    }
+                )
+                # No file preflight, access, or reservation for DB-only metrics.
+                if not file_changes:
+                    return
                 if not isinstance(item.id, int):
                     raise ui.UserError("noqlenmeta: ordinary file target is not persisted")
                 target_item, collected = changes_by_item.setdefault(item.id, (item, {}))
                 if target_item.path != item.path:
                     raise ui.UserError("noqlenmeta: conflicting ordinary file targets")
-                for value in changes:
+                for value in file_changes:
                     source = value.source
-                    # These V3 metrics and their methods belong only to the
-                    # typed database; there are no interoperable media tags.
-                    if source.field in {
-                        "energy", "danceability", "energy_method", "danceability_method"
-                    }:
-                        continue
                     previous = collected.get(source.field)
                     if previous is not None and previous.after != source.after:
                         raise ui.UserError(
