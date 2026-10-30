@@ -165,7 +165,9 @@ def check() -> list[str]:
         failures.append("published V3 release is not identified accurately")
     if "vocal_languages" not in public_words or "danceability" not in public_words:
         failures.append("public documentation omits V3 optional features")
-    if "v3-enrichment.md" not in {str(page.relative_to(DOCS)) for page in public_pages}:
+    if "recipes/v3-enrichment.md" not in {
+        str(page.relative_to(DOCS)) for page in public_pages
+    }:
         failures.append("V3 upgrade guide is missing")
 
     command = NoqlenMetaPlugin().commands()[0]
