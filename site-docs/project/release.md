@@ -46,7 +46,7 @@ compatibility boundaries passed before release.
 
 ## Documentation versions and deployment
 
-The canonical documentation site is
+The canonical public documentation is live at
 [https://noqlen-meta.readthedocs.io/en/stable/](https://noqlen-meta.readthedocs.io/en/stable/).
 The Read the Docs project slug is `noqlen-meta`.
 
@@ -73,7 +73,7 @@ not verify the live Read the Docs alias.
 
 ## Licensing and publication integrity
 
-The canonical license is [MIT](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE).
+The canonical MIT License text is [MIT](https://github.com/jssantogit/noqlen-meta-plugin/blob/main/LICENSE).
 MIT licensing does not imply endorsement by any provider or beets itself.
 
 The tagged release workflow verifies `main` ancestry and tag/package
