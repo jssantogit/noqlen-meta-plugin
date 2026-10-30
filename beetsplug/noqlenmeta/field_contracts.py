@@ -453,6 +453,8 @@ _CONTRACTS = (
     _field("disc_artwork", EntityKind.MEDIUM, _MANY, ResolverKind.ARTWORK, TargetClass.ASSET),
     _field("key", EntityKind.RECORDING, _ONE, ResolverKind.AUDIO, _NATIVE),
     _field("energy", EntityKind.RECORDING, _ONE, ResolverKind.AUDIO, _DB),
+    _field("energy_method", EntityKind.RECORDING, _ONE, ResolverKind.AUDIO, _DB),
+    _field("danceability_method", EntityKind.RECORDING, _ONE, ResolverKind.AUDIO, _DB),
     _field("danceability", EntityKind.RECORDING, _ONE, ResolverKind.AUDIO, _DB),
     _field("energy_level", EntityKind.RECORDING, _ONE, ResolverKind.AUDIO, _INTERNAL),
     _field("danceability_level", EntityKind.RECORDING, _ONE, ResolverKind.AUDIO, _INTERNAL),
