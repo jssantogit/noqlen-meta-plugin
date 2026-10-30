@@ -147,3 +147,26 @@
 - Main CI: https://github.com/jssantogit/noqlen-meta-plugin/actions/runs/41043455769
 - Publish Release: https://github.com/jssantogit/noqlen-meta-plugin/actions/runs/41045690976
 - GitHub Release: https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v3.0.0
+
+## Version 3.0.1 documentation-only maintenance release
+
+### Candidate gates
+
+- [x] Existing 3.0.0 tag, GitHub Release, main CI and PyPI OIDC publication
+      verified independently; no existing tag is moved.
+- [x] Updated Read the Docs home, release information, opt-in V3 recipe,
+      provider/field compatibility and public-documentation gates.
+- [x] Runtime package code is unchanged from the published 3.0.0 source.
+- [ ] Source version and dated changelog declare `3.0.1` and docs-only intent;
+      full CI passes on the final release candidate and merged `main` commit.
+
+### External publishing and Read the Docs
+
+- [ ] Create a new `v3.0.1` tag at the final, CI-green `main` commit.
+      Never move or recreate the published `v3.0.0` tag.
+- [ ] Confirm the new tag's Publish Release workflow succeeds (build + PyPI OIDC).
+- [ ] Create and verify GitHub Release `v3.0.1` and public PyPI artifacts.
+- [ ] Read the Docs project **Versions**: activate `v3.0.1` if inactive,
+      build its docs, and confirm `/en/stable/` displays the V3 guide.
+- [ ] Verify public clean wheel installation and updated Read the Docs
+      `stable`/versioned content. Do not claim these external checks early.
