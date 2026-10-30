@@ -7,17 +7,19 @@ confidence, and preservation defaults are designed for normal use.
 provider or add a capability:
 
 ```yaml
-resolution:
-  authority:
-    genres: [musicbrainz, discogs, lastfm, itunes]
+noqlenmeta:
+  resolution:
+    authority:
+      genres: [musicbrainz, discogs, lastfm, itunes]
 ```
 
 `min_confidence` can require stronger evidence:
 
 ```yaml
-resolution:
-  min_confidence:
-    genres: 0.85
+noqlenmeta:
+  resolution:
+    min_confidence:
+      genres: 0.85
 ```
 
 `preserve_existing` defaults true. Setting it false allows qualified evidence
