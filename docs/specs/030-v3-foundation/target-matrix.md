@@ -348,3 +348,61 @@ track path, after matching (never as matching/identity evidence). Importer
 preview is side-effect-free; opt-in application updates the selected TrackInfo
 only, with beets remaining responsible for the subsequent import lifecycle.
 The audio backend is loaded lazily and the default remains disabled.
+
+
+## V3 Energy and Danceability: versioned, opt-in local proxy indices (2026-10-30)
+
+**Semantics and limitations:** These values are *not* Spotify, Echo Nest, or
+validated perceptual feature scores. They are two explicitly labeled signal
+analysis proxies on a fixed 0..1 scale. They are only comparable when the
+methodology and decoder assumptions match, and must not be shown as generic
+ground-truth danceability or emotional energy.
+
+- `energy` uses median frame-wise root-mean-square signal amplitude of the
+  decoded, full-scale float audio. The `rms-dbfs-v1` transform maps a measured
+  level in [-50, -8] dBFS linearly to [0,1] and clamps extremes. It is an
+  *amplitude intensity proxy*, not loudness normalization or a model of musical
+  activity. Silence and invalid/out-of-range measurements abstain.
+- `danceability` uses estimated beat times and spectral onset-strength peaks
+  from Librosa. `beat-onset-regularity-v1` requires at least nine strictly
+  ordered beats, plausible intervals, inter-beat coefficient of variation
+  <= 0.15, and on-beat onset prominence >= 1.25x mean strength. A fixed,
+  documented combination of regularity (65%) and prominence (35%) yields a
+  *rhythm-stability proxy*, not a validated prediction of suitability to dance.
+  Instrumental silence, missing beats, unstable rhythm and weak supporting
+  onsets produce unknown instead of 0. The score deliberately excludes BPM.
+- `energy_method` and `danceability_method` are separate typed DB strings.
+  Values are nullable floats; missing is unknown, not 0. Each method identifier
+  is recorded alongside any new score and is not silently relabeled on conflict.
+  All four fields are Item/TrackInfo DB-only: **no new embedded media tags**.
+- Pure computed, nonpersisted `score_level` (low <=.33, medium <=.67, high)
+  and `tempo_range` (slow <90, medium <140, fast) helpers are optional
+  presentation buckets, not independent provider evidence.
+
+Enable *both* the specific fields and the local backend; defaults remain frozen:
+
+```yaml
+noqlenmeta:
+  fields:
+    energy: true
+    danceability: true
+  local_analysis:
+    audio_features:
+      enabled: true
+      analysis_mode: window   # full or centered window
+      window_seconds: 90
+```
+
+Only a missing field is eligible. Analysis runs once for all requested missing
+features of an eligible track, with optional Librosa imported lazily.
+Library CLI preview does not write; `--apply` stores to the beets DB.
+The importer may enrich only the already selected TrackInfo, after matching,
+and does not use this evidence for identity selection. `--write` never embeds
+these DB-only values.
+
+Reference algorithm definitions: [Librosa RMS](https://librosa.org/doc/latest/generated/librosa.feature.rms.html),
+[Librosa onset strength](https://librosa.org/doc/latest/generated/librosa.onset.onset_strength.html),
+[Librosa beat tracking](https://librosa.org/doc/latest/generated/librosa.beat.beat_track.html).
+Thresholds are product-specific heuristics, not independently calibrated
+classification thresholds. Human-labeled evaluation on diverse real audio is
+still required before claiming perceptual validity.
