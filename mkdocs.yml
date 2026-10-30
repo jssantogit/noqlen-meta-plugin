@@ -15,6 +15,9 @@ theme:
     - content.code.copy
     - navigation.indexes
     - navigation.sections
+    - navigation.tracking
+    - navigation.top
+    - content.tabs.link
     - search.highlight
     - search.suggest
   palette:
@@ -49,61 +52,70 @@ validation:
 nav:
   - Home: index.md
   - Start Here:
-      - What is Noqlen Meta?: start-here/index.md
+      - Start Here: start-here/index.md
+      - Quickstart — One Album: start-here/quickstart.md
       - Installation: start-here/installation.md
       - Basic Configuration: start-here/basic-configuration.md
       - Your First Preview: start-here/first-preview.md
-      - Understanding the Results: start-here/understanding-results.md
-      - Apply Your First Changes: start-here/apply-changes.md
-      - Write Changes to Your Files: start-here/write-files.md
-  - Configuration:
-      - Configuration Overview: configuration/index.md
-      - Fields: configuration/fields.md
-      - Providers: configuration/providers.md
-      - Genres & Styles: configuration/genres-styles.md
-      - Moods: configuration/moods.md
-      - Artwork: configuration/artwork.md
-      - BPM: configuration/bpm.md
-      - Lyrics & Languages: configuration/lyrics-languages.md
-      - AcoustID: configuration/acoustid.md
-      - Advanced Resolution: configuration/advanced-resolution.md
-      - Full Configuration Example: configuration/full-example.md
-  - Commands:
-      - Command Overview: commands/index.md
-      - Preview Metadata: commands/preview.md
-      - Apply Metadata: commands/apply.md
-      - Write Metadata to Files: commands/write-files.md
-      - Process the Whole Library: commands/whole-library.md
-      - Repair MusicBrainz Identity: commands/identity.md
-      - Use AcoustID: commands/acoustid.md
-      - Sync Identity Tags: commands/identity-tags.md
-  - Recipes:
-      - Recipes: recipes/index.md
-      - Upgrade to V3 and Optional Features: recipes/v3-enrichment.md
+      - Understanding Results: start-here/understanding-results.md
+      - Apply Changes: start-here/apply-changes.md
+      - Write File Tags: start-here/write-files.md
+  - Customize:
+      - Choose a Task: recipes/index.md
+      - Configuration Profiles: recipes/configuration-profiles.md
       - Enrich an Existing Library: recipes/existing-library.md
       - Enrich During Import: recipes/import-enrichment.md
-      - Add or Replace Album Covers: recipes/artwork.md
-      - Analyze BPM Locally: recipes/local-bpm.md
-      - Add Lyrics and Language Metadata: recipes/lyrics-languages.md
+      - Artwork: recipes/artwork.md
+      - Lyrics and LRC Sidecars: recipes/lyrics-synced.md
+      - Recording and Work Credits: recipes/recording-credits.md
+      - Local Audio Analysis: recipes/audio-analysis.md
+      - BPM Only: recipes/local-bpm.md
+      - Language Metadata: recipes/lyrics-languages.md
+      - Upgrade From V2: recipes/v3-enrichment.md
       - Repair MusicBrainz IDs: recipes/repair-musicbrainz-ids.md
-      - Safely Update an Entire Library: recipes/whole-library.md
+      - Whole-Library Changes: recipes/whole-library.md
+      - Configure Features:
+          - Configuration Overview: configuration/index.md
+          - Fields: configuration/fields.md
+          - Providers: configuration/providers.md
+          - Genres & Styles: configuration/genres-styles.md
+          - Moods: configuration/moods.md
+          - Artwork: configuration/artwork.md
+          - BPM, Key & Audio Proxies: configuration/bpm.md
+          - Lyrics & Languages: configuration/lyrics-languages.md
+          - AcoustID: configuration/acoustid.md
+          - Advanced Resolution: configuration/advanced-resolution.md
+          - Default Configuration Snapshot: configuration/full-example.md
+  - How It Works:
+      - Configuration Mental Model: concepts/mental-model.md
+      - Database, Sidecars & File Tags: concepts/data-destinations.md
+      - Glossary: concepts/glossary.md
   - Troubleshooting:
-      - Common Problems: troubleshooting/index.md
+      - Find a Solution: troubleshooting/index.md
       - Nothing Was Changed: troubleshooting/nothing-changed.md
       - REVIEW and BLOCKED Results: troubleshooting/review-blocked.md
       - Provider Problems: troubleshooting/providers.md
       - File Writing Problems: troubleshooting/file-writing.md
       - AcoustID Problems: troubleshooting/acoustid.md
-  - Technical Reference:
-      - technical-reference/index.md
-      - Configuration Reference: technical-reference/configuration.md
-      - Command-line Reference: technical-reference/command-line.md
-      - Fields Reference: technical-reference/fields.md
-      - Providers Reference: technical-reference/providers.md
-      - beets Interaction: technical-reference/beets-interaction.md
-      - Compatibility: technical-reference/compatibility.md
+  - Reference:
+      - Technical Reference: technical-reference/index.md
+      - Configuration Options: technical-reference/configuration.md
+      - Fields and Storage: technical-reference/fields.md
+      - Provider Capabilities: technical-reference/providers.md
+      - beets Compatibility: technical-reference/beets-interaction.md
+      - Compatibility Matrix: technical-reference/compatibility.md
+      - Commands:
+          - Command Overview: commands/index.md
+          - Preview: commands/preview.md
+          - Apply: commands/apply.md
+          - Write Files: commands/write-files.md
+          - Process Whole Library: commands/whole-library.md
+          - MusicBrainz Identity: commands/identity.md
+          - AcoustID: commands/acoustid.md
+          - Identity Tag Sync: commands/identity-tags.md
+          - All Command Options: technical-reference/command-line.md
   - Advanced:
-      - advanced/index.md
+      - Advanced Topics: advanced/index.md
       - Database vs File Tags: advanced/database-vs-file-tags.md
       - Preview, Apply and Write: advanced/preview-apply-write.md
       - Strict vs Partial: advanced/strict-vs-partial.md
