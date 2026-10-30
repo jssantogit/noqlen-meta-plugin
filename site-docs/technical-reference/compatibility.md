@@ -64,7 +64,7 @@ call Navidrome, certify a Navidrome version, or control its cache/scan timing.
 
 ## V3 regression coverage and limitations
 
-V3 release-candidate CI tests reopening an existing V2-typed beets library,
+V3 release CI tested reopening an existing V2-typed beets library,
 preserving native/typed multivalues, and extending the Item schema without
 destroying earlier values. The audio-proxy `--apply --write` path is tested
 against synthetic FLAC, MP3, M4A, Ogg and Opus fixtures, asserting **byte-for-byte
