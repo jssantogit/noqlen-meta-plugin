@@ -19,6 +19,7 @@ BEGINNER_PAGES = (
     "recipes/audio-analysis.md",
     "recipes/recording-credits.md",
     "recipes/configuration-profiles.md",
+    "recipes/combine-features.md",
 )
 
 PROFILE_FILES = (
@@ -141,7 +142,7 @@ def test_guided_combination_yields_one_mergeable_noqlenmeta_config() -> None:
     assert "merge" in guide.lower()
     assert "one `noqlenmeta:`" in guide
     assert "beet config noqlenmeta" in guide
-    assert "does not authorize writes" in guide
+    assert "do not authorize writes" in guide
     examples = _blocks("recipes/combine-features.md")
     assert len(examples) == 1
     candidate = examples[0]
