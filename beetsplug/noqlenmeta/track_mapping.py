@@ -153,6 +153,20 @@ class TrackTargetPlan:
         return self.source.requires_review or self.has_mapping_blockers
 
 
+def is_valid_scalar_float(field: str, value: object) -> bool:
+    """Validate field-specific numeric semantics, preserving V2 BPM rules.
+
+    Audio proxy scores are inclusive 0..1. BPM remains strictly positive.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    if not isfinite(value):
+        return False
+    if field in {"energy", "danceability"}:
+        return 0 <= value <= 1
+    return value > 0
+
+
 def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
     """Analyze canonical changes against the supported TrackInfo contract."""
     if not isinstance(plan, ChangePlan):
@@ -301,14 +315,9 @@ def map_change_plan_to_track_info(plan: ChangePlan) -> TrackTargetPlan:
                     f"{change.field!r} requires an explicit boolean value"
                 )
         elif target.shape is TrackTargetShape.SCALAR_FLOAT:
-            if (
-                isinstance(value, bool)
-                or not isinstance(value, (int, float))
-                or not isfinite(value)
-                or value <= 0
-            ):
+            if not is_valid_scalar_float(change.field, value):
                 raise TrackMappingError(
-                    f"{change.field!r} requires a finite positive number"
+                    f"{change.field!r} has an invalid numeric range or value"
                 )
             value = float(value)
         elif target.shape is TrackTargetShape.SCALAR_STRING:
