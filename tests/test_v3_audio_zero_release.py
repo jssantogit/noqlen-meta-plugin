@@ -1,5 +1,7 @@
 """V3 release gate: zero is a real measured score, never an absent value."""
 
+import math
+
 import pytest
 from beets import plugins
 from beets.autotag.hooks import TrackInfo
@@ -31,7 +33,10 @@ def test_bounded_audio_score_maps_losslessly(field: str, score: float) -> None:
 @pytest.mark.parametrize("field", ("energy", "danceability"))
 @pytest.mark.parametrize("score", (-0.01, 1.01, float("nan"), float("inf")))
 def test_out_of_range_audio_score_never_maps(field: str, score: float) -> None:
-    with pytest.raises(TrackMappingError):
+    # Non-finite values fail at candidate construction; finite out-of-range
+    # values must fail at target mapping.
+    expected_error = ValueError if not math.isfinite(score) else TrackMappingError
+    with pytest.raises(expected_error):
         map_change_plan_to_track_info(ChangePlan(changes=(change(field, score),)))
 
 
