@@ -88,6 +88,16 @@ TRACK_FIELD_TARGETS: Mapping[str, TrackFieldTarget] = MappingProxyType(
 V3_TRACK_FIELD_TARGETS: Mapping[str, TrackFieldTarget] = MappingProxyType(
     {
         "key": TrackFieldTarget("key", "initial_key", TrackTargetShape.SCALAR_STRING),
+        "energy": TrackFieldTarget("energy", "energy", TrackTargetShape.SCALAR_FLOAT),
+        "danceability": TrackFieldTarget(
+            "danceability", "danceability", TrackTargetShape.SCALAR_FLOAT
+        ),
+        "energy_method": TrackFieldTarget(
+            "energy_method", "energy_method", TrackTargetShape.SCALAR_STRING
+        ),
+        "danceability_method": TrackFieldTarget(
+            "danceability_method", "danceability_method", TrackTargetShape.SCALAR_STRING
+        ),
         "vocal_languages": TrackFieldTarget(
             "vocal_languages", "vocal_languages", TrackTargetShape.STRING_LIST
         ),
