@@ -231,7 +231,6 @@ def test_preview_walkthrough_explains_real_cli_application_gates() -> None:
     ).read_text(encoding="utf-8")
     for signal in (
         "Noqlen Meta / library target preview:",
-        "application: disabled (preview only)",
         "planned changes:",
         "mapping blockers:",
         "resolution review:",
@@ -239,6 +238,10 @@ def test_preview_walkthrough_explains_real_cli_application_gates() -> None:
     ):
         assert signal in page, signal
         assert signal in renderer, signal
+    # The actual renderer composes the application label from a status value.
+    assert "application: disabled (preview only)" in page
+    assert "disabled (preview only)" in renderer
+    assert "application: {application_status}" in renderer
     assert "strict" in page.lower()
     assert "all" in page.lower() and "withheld" in page.lower()
     assert "--apply --partial" in page
