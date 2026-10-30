@@ -173,11 +173,11 @@ def validate_local_bpm_config(value: object) -> None:
 
 
 def validate_local_analysis_config(value: object) -> None:
-    """Validate frozen V2 settings plus an optional, explicitly enabled V3 key."""
+    """Validate frozen V2 settings and explicitly configured optional V3 audio."""
     if (
         not isinstance(value, Mapping)
         or not {"bpm", "mood"} <= set(value)
-        or set(value) - {"bpm", "mood", "key"}
+        or set(value) - {"bpm", "mood", "key", "audio_features"}
     ):
         raise ValueError("local_analysis must contain bpm and mood sections")
     bpm = value["bpm"]
@@ -191,3 +191,7 @@ def validate_local_analysis_config(value: object) -> None:
         from beetsplug.noqlenmeta.key_analysis import key_settings_from_config
 
         key_settings_from_config(value["key"])
+    if "audio_features" in value:
+        from beetsplug.noqlenmeta.audio_features import audio_feature_settings_from_config
+
+        audio_feature_settings_from_config(value["audio_features"])
