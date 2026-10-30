@@ -2,6 +2,8 @@
 
 Choose the symptom closest to what you see:
 
+- **Noqlen installed but `beet nm` is unknown?** Check
+  [installation and Python environment](../start-here/installation.md).
 - [Nothing Was Changed](nothing-changed.md)
 - [REVIEW and BLOCKED Results](review-blocked.md)
 - [Provider Problems](providers.md)
