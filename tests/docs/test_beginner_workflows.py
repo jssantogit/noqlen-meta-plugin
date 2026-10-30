@@ -202,3 +202,18 @@ def test_installer_helps_each_beets_environment_without_isolating_plugin() -> No
     assert "start-here/installation/" in (
         (DOCS.parent / "README.md").read_text(encoding="utf-8")
     )
+
+
+def test_v3_provider_and_artwork_pages_do_not_conflict_with_sidecars() -> None:
+    providers = (DOCS / "technical-reference" / "providers.md").read_text(
+        encoding="utf-8"
+    )
+    artwork = (DOCS / "recipes" / "artwork.md").read_text(encoding="utf-8")
+    assert "synchronized lyrics have no lossless writable target" not in providers
+    assert "one approved main front" not in providers
+    assert "`.lrc`" in providers
+    assert "`back.jpg`" in providers
+    assert "explicitness" in providers
+    assert "back_artwork: true" in artwork
+    assert "`back.jpg`" in artwork
+    assert "not" in artwork.lower() and "disc" in artwork.lower()
