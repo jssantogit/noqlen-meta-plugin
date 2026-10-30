@@ -1,6 +1,20 @@
 # Release status
 
-**Current published package release: `3.0.0` (2026-10-30).**
+**Initial V3 package release: `3.0.0` (published 2026-10-30).**
+
+### Documentation refresh: 3.0.1
+
+Version `3.0.1` is a documentation-only maintenance patch: an updated
+homepage, V3 upgrade recipe and navigation, accurate provider and field
+descriptions, and release-version guidance. **No plugin runtime behavior
+changed** from 3.0.0. Read the Docs builds each version from its Git tag;
+`/en/stable/` can show these updates only when the `v3.0.1` tag is
+published, activated, and built successfully.
+
+To check the latest *actually published* package, consult
+[GitHub Releases](https://github.com/jssantogit/noqlen-meta-plugin/releases)
+and [PyPI](https://pypi.org/project/beets-noqlenmeta/) instead of inferring
+publication solely from a version in the repository.
 
 [Noqlen Meta v3.0.0](https://github.com/jssantogit/noqlen-meta-plugin/releases/tag/v3.0.0)
 is a published GitHub Release. The `v3.0.0` tag points to the exact approved
