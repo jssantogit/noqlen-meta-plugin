@@ -181,3 +181,24 @@ def test_home_is_mobile_friendly_and_tasks_are_discoverable() -> None:
     assert "recipes/combine-features.md" in config
     assert "reading-preview.md" in config
     assert "(combine-features.md)" in navigation
+
+
+def test_installer_helps_each_beets_environment_without_isolating_plugin() -> None:
+    installation = (DOCS / "start-here" / "installation.md").read_text(
+        encoding="utf-8"
+    )
+    quickstart = (DOCS / "start-here" / "quickstart.md").read_text(
+        encoding="utf-8"
+    )
+    for snippet in (
+        "python -m pip install beets-noqlenmeta",
+        "pipx inject beets beets-noqlenmeta",
+        "uv tool install --with beets-noqlenmeta beets",
+        "beet nm --help",
+    ):
+        assert snippet in installation
+    assert "same environment" in installation.lower()
+    assert "uv tool" in quickstart and "pipx" in quickstart
+    assert "start-here/installation/" in (
+        (DOCS.parent / "README.md").read_text(encoding="utf-8")
+    )
