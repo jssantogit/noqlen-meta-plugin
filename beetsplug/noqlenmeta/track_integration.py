@@ -371,6 +371,19 @@ def _current_track_values(getter: Callable[[str], object]) -> dict[str, Canonica
     if existing_key is not None:
         values["key"] = existing_key
 
+    for field in ("energy", "danceability"):
+        candidate = getter(field)
+        if (
+            type(candidate) in (int, float)
+            and isfinite(candidate)
+            and 0 <= candidate <= 1
+        ):
+            values[field] = float(candidate)
+    for field in ("energy_method", "danceability_method"):
+        method = _optional_text(getter(field))
+        if method is not None:
+            values[field] = method
+
     bpm = getter("bpm")
     if (
         not isinstance(bpm, bool)

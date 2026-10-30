@@ -165,6 +165,8 @@ _DEFAULT_AUTHORITY: dict[str, tuple[str, ...]] = {
     "bpm": (),
     # V3 local-analysis only; no external provider is granted authority.
     "key": (),
+    "energy": (),
+    "danceability": (),
     "lyrics_languages": ("musicbrainz",),
     # V3 structural semantics resolve through AuthorityMatrix, not V2 ranks.
     "alternate_titles": (),
