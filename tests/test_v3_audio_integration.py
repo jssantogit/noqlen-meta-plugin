@@ -27,6 +27,7 @@ def _stub(_self, _path, _settings):
 def test_library_audio_proxies_preview_apply_and_method_are_typed(tmp_path, monkeypatch):
     config["timeout"].get()
     sources = list(config.sources)
+    item_types = dict(Item._types)
     try:
         library = Library(str(tmp_path / "library.db"), set_music_dir=False)
         item = Item(
@@ -36,6 +37,8 @@ def test_library_audio_proxies_preview_apply_and_method_are_typed(tmp_path, monk
         )
         library.add(item)
         plugin = NoqlenMetaPlugin()
+        # Direct plugin invocation bypasses beet CLI's normal plugin type setup.
+        Item._types.update(plugin.item_types)
         plugin.config["fields"].set({
             **{key: False for key in plugin.config["fields"].keys()},
             "energy": True, "danceability": True,
@@ -66,6 +69,8 @@ def test_library_audio_proxies_preview_apply_and_method_are_typed(tmp_path, monk
         assert reloaded.get("energy") == 0.61
         assert reloaded.get("danceability") == 0.78
     finally:
+        Item._types.clear()
+        Item._types.update(item_types)
         config.sources[:] = sources
 
 
